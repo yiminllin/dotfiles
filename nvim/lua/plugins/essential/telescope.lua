@@ -2,7 +2,6 @@ return {
 	-- Fuzzy Finder (files, lsp, etc)
 	"nvim-telescope/telescope.nvim",
 	event = "VimEnter",
-	branch = "0.1.x",
 	dependencies = {
 		"nvim-lua/plenary.nvim",
 		{
@@ -23,10 +22,11 @@ return {
 				},
 			},
 			defaults = {
-				path_display = function(opts, path)
-					local tail = require("telescope.utils").path_tail(path)
-					return string.format("%s (%s)", tail, path)
-				end,
+				path_display = {
+					filename_first = {
+						reverse_directories = false,
+					},
+				},
 			},
 		})
 
