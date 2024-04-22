@@ -5,7 +5,6 @@ end
 . ~/.config/fish/themes/solarized.fish
 
 # Abbreviations
-abbr -a ls ls -G
 abbr -a cp cp -ir
 abbr -a mv mv -ir
 abbr -a rm rm -ir
@@ -13,6 +12,10 @@ abbr -a ... cd ../..
 abbr -a .... cd ../../..
 abbr -a v nvim
 abbr -a ninja ninja-build
+abbr -a ls exa --long --icons --all
+abbr -a exa exa --long --icons --all
+abbr -a cat batcat
+abbr -a du ncdu
 abbr -a vdesk ssh -L 8888:localhost:8888 yilin@yilin.vdesk.cloud.aurora.tech
 
 # # >>> juliaup initialize >>>
@@ -29,3 +32,5 @@ abbr -a vdesk ssh -L 8888:localhost:8888 yilin@yilin.vdesk.cloud.aurora.tech
 # esac
 #
 # # <<< juliaup initialize <<<
+
+fzf --fish | source
