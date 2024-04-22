@@ -1,6 +1,6 @@
 Under construction...
 
-CLI tools: tmux, fzf, rg (ripgrep), fdfind, batcat, tldr, scc, exa, git-delta, xsel, ncdu
+CLI tools: tmux, fzf, rg (ripgrep), fdfind, batcat, tldr, scc, lsd, git-delta, xsel, ncdu
 
 ```
 cd dotfiles
