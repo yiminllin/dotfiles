@@ -10,4 +10,5 @@ ln -s /home/yiminlin/dotfiles/fish /home/yiminlin/.config/fish
 ln -s /home/yiminlin/dotfiles/bat /home/yiminlin/.config/bat 
 ln -s /home/yiminlin/dotfiles/.bashrc /home/yiminlin/.bashrc 
 ln -s /home/yiminlin/dotfiles/.gitconfig /home/yiminlin/.gitconfig
+ln -s /home/yiminlin/dotfiles/.tmux.conf /home/yiminlin/.tmux.conf
 ```
