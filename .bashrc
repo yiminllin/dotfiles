@@ -1,3 +1,5 @@
+[[ $- == *i* ]] || return
+
 # Set -o
 set -o vi 
 set -o ignoreeof
