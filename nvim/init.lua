@@ -1,5 +1,5 @@
-require("keymaps")
 require("settings")
+require("keymaps")
 require("autocmds")
 
 -- Install plugin manager
