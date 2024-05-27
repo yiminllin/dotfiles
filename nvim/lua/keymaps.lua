@@ -12,11 +12,10 @@ vim.keymap.set("n", "<leader>e", vim.diagnostic.open_float, { desc = "Show diagn
 vim.keymap.set("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Open diagnostic [Q]uickfix list" })
 local diagnostics_active = true
 vim.keymap.set("n", "<leader>d<Tab>", function()
-	diagnostics_active = not diagnostics_active
 	if diagnostics_active then
-		vim.diagnostic.show()
+		vim.diagnostic.enable(false)
 	else
-		vim.diagnostic.hide()
+		vim.diagnostic.enable()
 	end
 end, { desc = "[D]iagnostic [T]oggle" })
 

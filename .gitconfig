@@ -3,6 +3,9 @@
 	name = Yimin Lin
 [core]
     pager = delta
+    editor = nvim
+[fetch]
+    prune = true
 [interactive]
     diffFilter = delta --color-only
 [delta]

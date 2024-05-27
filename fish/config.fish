@@ -6,7 +6,7 @@ end
 
 # Abbreviations
 abbr -a cp cp -ir
-abbr -a mv mv -ir
+abbr -a mv mv -i
 abbr -a rm rm -ir
 abbr -a ... cd ../..
 abbr -a .... cd ../../..
