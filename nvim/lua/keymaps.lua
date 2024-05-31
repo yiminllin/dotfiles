@@ -17,6 +17,7 @@ vim.keymap.set("n", "<leader>d<Tab>", function()
 	else
 		vim.diagnostic.enable()
 	end
+	diagnostics_active = not diagnostics_active
 end, { desc = "[D]iagnostic [T]oggle" })
 
 vim.keymap.set("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Exit terminal mode" })
