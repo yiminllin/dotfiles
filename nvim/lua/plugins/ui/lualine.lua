@@ -6,8 +6,7 @@ return {
 			options = { theme = "gruvbox" },
 			sections = {
 				lualine_c = {
-					"filename",
-					{ require("gitblame").get_current_blame_text, cond = require("gitblame").is_blame_text_available },
+					{ "filename", path = 1 },
 				},
 				lualine_x = { "filetype" },
 				lualine_y = { "progress" },

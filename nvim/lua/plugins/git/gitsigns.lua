@@ -1,24 +1,16 @@
 return {
 	-- Adds git related signs
 	"lewis6991/gitsigns.nvim",
-	opts = {
-		signs = {
-			add = { text = "│" },
-			change = { text = "│" },
-			delete = { text = "_" },
-			topdelete = { text = "‾" },
-			changedelete = { text = "│" },
-			untracked = { text = "┆" },
-		},
-		signcolumn = true,
-		numhl = true,
-		current_line_blame = true,
-		current_line_blame_opts = {
-			virt_text_pos = "right_align",
-		},
-	},
 	config = function()
 		require("gitsigns").setup({
+			signcolumn = true,
+			numhl = true,
+			current_line_blame = true,
+			current_line_blame_opts = {
+				virt_text = true,
+				virt_text_pos = "right_align",
+				delay = 500,
+			},
 			on_attach = function(bufnr)
 				local gs = package.loaded.gitsigns
 
