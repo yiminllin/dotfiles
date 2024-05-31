@@ -71,7 +71,7 @@ function parse_git_dirty {
 }
 
 export PS1="\[\e[30;47m\]\u\[\e[m\]\[\e[30;47m\]<\[\e[m\]\[\e[32;47m\]\w\[\e[m\]\[\e[30;47m\]>\[\e[m\]\[\e[33;47m\]\`parse_git_branch\`\[\e[m\] "
-export PATH="$PATH:/opt/nvim-linux64/bin:/usr/lib64/openmpi/bin:/home/yiminlin/paraview_build/bin:/opt/homebrew/bin:/home/yiminlin/.local/bin:/home/yiminlin/.cargo/bin"
+export PATH="$PATH:/opt/nvim-linux64/bin:/usr/lib64/openmpi/bin:/home/yiminlin/paraview_build/bin:/opt/homebrew/bin:/home/yiminlin/.local/bin:/home/yiminlin/.cargo/bin:/home/yilin/.cargo/bin"
 export VISUAL="nvim"
 export EDITOR="nvim"
 export LS_COLORS=$(vivid generate solarized-light)
@@ -90,6 +90,8 @@ case ":$PATH:" in
 esac
 
 # <<< juliaup initialize <<<
+
+cd /home/yilin/av
 
 # Execute fish shell
 if [ -z "$STARTEDFISH" ];
