@@ -50,6 +50,7 @@ return {
 				{ name = "nvim_lsp" },
 				{ name = "luasnip" },
 				{ name = "path" },
+				{ name = "otter" },
 			},
 			view = {
 				entries = { name = "custom", selection_order = "near_cursor" },
