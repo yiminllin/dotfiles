@@ -27,6 +27,11 @@ return {
 						reverse_directories = false,
 					},
 				},
+				mappings = {
+					i = {
+						["<C-Space>"] = require("telescope.actions").to_fuzzy_refine,
+					},
+				},
 			},
 		})
 
