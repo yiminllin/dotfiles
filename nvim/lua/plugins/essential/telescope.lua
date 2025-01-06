@@ -16,10 +16,14 @@ return {
 	},
 	config = function()
 		require("telescope").setup({
+			defaults = require("telescope.themes").get_ivy(),
+		})
+		require("telescope").setup({
 			extensions = {
 				["ui-select"] = {
 					require("telescope.themes").get_dropdown(),
 				},
+				fzf = {},
 			},
 			defaults = {
 				path_display = {
