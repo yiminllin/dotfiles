@@ -29,10 +29,10 @@ vim.keymap.set("n", "<C-j>", "<C-w><C-j>", { desc = "Move focus to the lower win
 vim.keymap.set("n", "<C-k>", "<C-w><C-k>", { desc = "Move focus to the upper window" })
 
 -- Use Alt+<arrow> to set size of splits
-vim.keymap.set("n", "<M-left>", "<c-w>5<")
-vim.keymap.set("n", "<M-right>", "<c-w>5>")
-vim.keymap.set("n", "<M-up>", "<C-W>+")
-vim.keymap.set("n", "<M-down>", "<C-W>-")
+vim.keymap.set("n", "<C-S-left>", "<c-w>5<")
+vim.keymap.set("n", "<C-S-right>", "<c-w>5>")
+vim.keymap.set("n", "<C-S-up>", "<C-W>+")
+vim.keymap.set("n", "<C-S-down>", "<C-W>-")
 
 -- Use Alt+<jk> to go through quickfix list
 vim.keymap.set("n", "<M-j>", "<cmd>cnext<CR>")
