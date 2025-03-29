@@ -19,6 +19,7 @@ abbr -a ninja ninja-build
 abbr -a ls lsd -lah
 abbr -a cat batcat
 abbr -a du ncdu
+abbr -a top btop
 abbr -a vdesk ssh -L 8888:localhost:8888 yilin@yilin.vdesk.cloud.aurora.tech
 abbr -a sb tmux_scrollback_pager
 
