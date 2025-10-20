@@ -1,0 +1,12 @@
+# CLI improvement
+ripgrep       # grep
+fd-find       # find
+bat           # cat
+eza           # ls
+git-delta     # git diff
+du-dust       # du
+tokei         # scc (line counter)
+zoxide        # cd
+
+# Tool
+vivid

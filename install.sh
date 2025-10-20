@@ -1,0 +1,68 @@
+#!/bin/bash
+
+set -e
+set -o pipefail
+
+################################################################################
+# Install System Packages
+################################################################################
+
+echo "Installing system packages"
+apt-get update
+apt-get install -y software-properties-common
+sed 's/#.*//;/^$/d' Aptfile | xargs apt-get install -y
+
+################################################################################
+# Install Kitty
+################################################################################
+
+echo "Installing Kitty"
+curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin
+
+################################################################################
+# Install Languages
+################################################################################
+
+echo "Installing languages"
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+curl -fsSL https://install.julialang.org | sh -s -- --yes
+curl -fsSL https://fnm.vercel.app/install | bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+source $HOME/.cargo/env
+export PATH="$HOME/.juliaup/bin:$PATH"
+export PATH="$HOME/.local/share/fnm:$PATH"
+eval "$(fnm env --use-on-cd)"
+export PATH="$HOME/.local/bin:$PATH"
+
+fnm install --lts
+uv python install
+
+################################################################################
+# Install Cargo and UV Packages
+################################################################################
+
+echo "Installing Cargo and UV packages"
+sed 's/#.*//;/^$/d' Cargofile | xargs -n1 cargo install
+sed 's/#.*//;/^$/d' Uvfile | xargs -n1 uv tool install
+
+################################################################################
+# Stow Configs
+################################################################################
+
+echo "Stowing configurations"
+CONFIGS=(
+    bash
+    bat
+    fish
+    git
+    kitty
+    nvim
+    tmux
+)
+mv ~/.bashrc ~/.bashrc.backup
+for config in "${CONFIGS[@]}"; do
+    stow "$config"
+done
+
+echo "Complete!"
