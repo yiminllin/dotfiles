@@ -3,7 +3,6 @@ build-essential
 tmux
 neovim
 fish
-fzf
 curl
 wget
 stow

@@ -20,6 +20,15 @@ echo "Installing Kitty"
 curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin
 
 ################################################################################
+# Install Fzf
+################################################################################
+
+echo "Installing Fzf"
+rm -rf ~/.fzf/
+git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+~/.fzf/install --all
+
+################################################################################
 # Install Languages
 ################################################################################
 
@@ -51,6 +60,11 @@ sed 's/#.*//;/^$/d' Uvfile | xargs -n1 uv tool install
 ################################################################################
 
 echo "Stowing configurations"
+
+# Cleanups
+mv ~/.bashrc ~/.bashrc.backup
+rm -rf ~/.config/fish
+
 CONFIGS=(
     bash
     bat
@@ -60,7 +74,6 @@ CONFIGS=(
     nvim
     tmux
 )
-mv ~/.bashrc ~/.bashrc.backup
 for config in "${CONFIGS[@]}"; do
     stow "$config"
 done

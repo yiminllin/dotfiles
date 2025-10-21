@@ -70,28 +70,17 @@ function parse_git_dirty {
   fi
 }
 
+source $HOME/.cargo/env
+export PATH="$HOME/.juliaup/bin:$PATH"
+export PATH="$HOME/.local/share/fnm:$PATH"
+eval "$(fnm env --use-on-cd)"
+export PATH="$HOME/.local/bin:$PATH"
+[ -f ~/.fzf.bash ] && source ~/.fzf.bash
+
 export PS1="\[\e[30;47m\]\u\[\e[m\]\[\e[30;47m\]<\[\e[m\]\[\e[32;47m\]\w\[\e[m\]\[\e[30;47m\]>\[\e[m\]\[\e[33;47m\]\`parse_git_branch\`\[\e[m\] "
-export PATH="$PATH:/opt/nvim-linux64/bin:/usr/lib64/openmpi/bin:/home/yiminlin/paraview_build/bin:/opt/homebrew/bin:/home/yiminlin/.local/bin:/home/yiminlin/.cargo/bin:/home/yilin/.cargo/bin"
 export VISUAL="nvim"
 export EDITOR="nvim"
 export LS_COLORS=$(vivid generate solarized-light)
-
-# >>> juliaup initialize >>>
-
-# !! Contents within this block are managed by juliaup !!
-
-case ":$PATH:" in
-    *:/home/yiminlin/.juliaup/bin:*)
-        ;;
-
-    *)
-        export PATH=/home/yiminlin/.juliaup/bin${PATH:+:${PATH}}
-        ;;
-esac
-
-# <<< juliaup initialize <<<
-
-cd /home/yilin/av
 
 # Execute fish shell
 if [ -z "$STARTEDFISH" ];
@@ -100,8 +89,6 @@ then
     exec fish;
     exit;
 fi
-
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
 . "$HOME/.cargo/env"
 
 # fnm
