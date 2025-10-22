@@ -26,7 +26,7 @@ abbr -a rm rm -ir
 abbr -a v nvim
 abbr -a ls eza -lah --git
 abbr -a cat batcat
-abbr -a du ncdu
+abbr -a du dust
 abbr -a top btop
 
 # Convenience
