@@ -11,17 +11,12 @@ alias ls="ls -G"
 alias cp="cp -i"
 alias mv="mv -i"
 alias rm="rm -i"
-alias l.="ls -d .*"
 alias ..="cd .."
 alias ...="cd ../.."
 alias ....="cd ../../.."
 alias .....="cd ../../../.."
 alias hist="history 20"
-alias lsd='ls -la | grep "^d"'
-alias vimprev='vim `ls -t | head -n 1`'
-alias skim='/Applications/Skim.app/Contents/MacOS/Skim'
 alias v='nvim'
-alias ninja='ninja-build'
 
 # get current branch in git repo
 function parse_git_branch() {
