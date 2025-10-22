@@ -7,9 +7,21 @@ curl
 wget
 stow
 unzip
+tldr
 
 # Tools
 xsel
 ncdu
 btop
 nvtop
+
+# Languages
+clangd
+clang-format
+python3.12-venv
+lua5.4
+luarocks
+
+# Dependencies
+imagemagick         # For image.nvim
+libmagickwand-dev
