@@ -13,6 +13,7 @@
     light = true
     linenumbers = true
     side-by-side = true
+    diff-alignment = true
 [merge]
     conflictstyle = diff3
 [diff]
