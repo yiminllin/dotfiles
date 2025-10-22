@@ -3,3 +3,6 @@ ipython       # python
 
 # Tools
 black
+isort
+jupytext
+jupyter-client

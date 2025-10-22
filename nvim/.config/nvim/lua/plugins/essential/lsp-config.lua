@@ -48,6 +48,8 @@ return {
 		local capabilities = vim.lsp.protocol.make_client_capabilities()
 		capabilities = vim.tbl_deep_extend("force", capabilities, require("cmp_nvim_lsp").default_capabilities())
 
+		-- -- If Clangd failed to install with Mason due to unsupported platform, use below line and comment out clangd in servers
+		-- require("lspconfig").clangd.setup({ cmd = { "clangd" } })
 		local servers = {
 			clangd = {
 				cmd = {

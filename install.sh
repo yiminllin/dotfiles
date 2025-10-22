@@ -48,12 +48,13 @@ fnm install --lts
 uv python install
 
 ################################################################################
-# Install Cargo and UV Packages
+# Install Cargo, UV, Luarocks Packages
 ################################################################################
 
 echo "Installing Cargo and UV packages"
 sed 's/#.*//;/^$/d' Cargofile | xargs -n1 cargo install
 sed 's/#.*//;/^$/d' Uvfile | xargs -n1 uv tool install
+sed 's/#.*//;/^$/d' Luarocksfile | xargs -n1 luarocks install
 
 ################################################################################
 # Stow Configs
