@@ -24,7 +24,7 @@ abbr -a rm rm -ir
 
 # Better CLI tools
 abbr -a v nvim
-abbr -a ls lsd -lah
+abbr -a ls eza -lah --git
 abbr -a cat batcat
 abbr -a du ncdu
 abbr -a top btop
