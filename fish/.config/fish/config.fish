@@ -38,6 +38,10 @@ abbr -a gp git push
 abbr -a vdesk ssh -L 8888:localhost:8888 yilin@yilin.vdesk.cloud.aurora.tech
 abbr -a sb tmux_scrollback_pager
 
+function nvim_help --description "View command help in vim"
+    $argv --help 2>&1 | nvim -R -c 'set ft=man' -
+end
+abbr -a h nvim_help
 
 ################################################################################
 # FZF
