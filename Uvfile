@@ -1,7 +1,8 @@
 # CLI improvement
 ipython       # python
+rexi          # Interactive CLI for regex testing
 
-# Tools
+# Languages
 black
 isort
 jupytext
