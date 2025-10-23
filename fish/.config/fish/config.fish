@@ -43,6 +43,11 @@ function nvim_help --description "View command help in vim"
 end
 abbr -a h nvim_help
 
+function rexi_string --description "Test regex on the input string"
+    echo $argv | rexi
+end
+abbr -a rexi rexi_string
+
 ################################################################################
 # FZF
 ################################################################################
