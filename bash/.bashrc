@@ -85,3 +85,5 @@ then
     exit;
 fi
 . "$HOME/.cargo/env"
+
+. "$HOME/.local/bin/env"
