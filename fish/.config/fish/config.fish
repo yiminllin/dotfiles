@@ -11,7 +11,7 @@ end
 # Scrollback pager
 ################################################################################
 function tmux_scrollback_pager
-    tmux capture-pane -S - -p > /tmp/tmux_full_scrollback.txt && /home/yiminlin/.local/share/bob/nvim-bin/nvim -c "normal G" /tmp/tmux_full_scrollback.txt
+    tmux capture-pane -S - -p > /tmp/tmux_full_scrollback.txt && $EDITOR_PATH  -c "normal G" /tmp/tmux_full_scrollback.txt
 end
 
 ################################################################################
