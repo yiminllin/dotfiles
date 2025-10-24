@@ -48,6 +48,12 @@ fnm install --lts
 uv python install
 
 ################################################################################
+# Install Tmux Packages
+################################################################################
+git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm 
+~/.tmux/plugins/tpm/bin/install_plugins
+
+################################################################################
 # Install Cargo, UV, Luarocks Packages
 ################################################################################
 
