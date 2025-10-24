@@ -3,6 +3,7 @@ ipython       # python
 rexi          # Interactive CLI for regex testing
 
 # Languages
+pynvim
 black
 isort
 jupytext
