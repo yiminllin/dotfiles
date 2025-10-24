@@ -70,7 +70,6 @@ export PATH="$HOME/.juliaup/bin:$PATH"
 export PATH="$HOME/.local/share/fnm:$PATH"
 eval "$(fnm env --use-on-cd)"
 export PATH="$HOME/.local/bin:$PATH"
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
 
 export PS1="\[\e[30;47m\]\u\[\e[m\]\[\e[30;47m\]<\[\e[m\]\[\e[32;47m\]\w\[\e[m\]\[\e[30;47m\]>\[\e[m\]\[\e[33;47m\]\`parse_git_branch\`\[\e[m\] "
 export VISUAL="nvim"
