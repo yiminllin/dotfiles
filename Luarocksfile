@@ -1,1 +1,1 @@
-magick # For image.nvim
+# magick # For image.nvim, only works for Lua5.1
