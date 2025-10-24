@@ -8,9 +8,17 @@ set -o pipefail
 ################################################################################
 
 echo "Installing system packages"
-apt-get update
-apt-get install -y software-properties-common
-sed 's/#.*//;/^$/d' Aptfile | xargs apt-get install -y
+
+if grep -Eiq "debian|ubuntu" /etc/os-release; then
+    apt-get update
+    apt-get install -y software-properties-common
+    sed 's/#.*//;/^$/d' Aptfile | xargs apt-get install -y
+fi
+
+if [ "$(uname -s)" = "Darwin" ]; then
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  brew bundle --file="Brewfile"
+fi
 
 ################################################################################
 # Install Kitty
@@ -48,12 +56,6 @@ fnm install --lts
 uv python install
 
 ################################################################################
-# Install Tmux Packages
-################################################################################
-git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm 
-~/.tmux/plugins/tpm/bin/install_plugins
-
-################################################################################
 # Install Cargo, UV, Luarocks Packages
 ################################################################################
 
@@ -84,5 +86,11 @@ CONFIGS=(
 for config in "${CONFIGS[@]}"; do
     stow "$config"
 done
+
+################################################################################
+# Install Tmux Packages
+################################################################################
+git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm 
+~/.tmux/plugins/tpm/bin/install_plugins
 
 echo "Complete!"
