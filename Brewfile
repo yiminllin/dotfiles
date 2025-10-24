@@ -22,3 +22,6 @@ brew "luarocks"
 
 # Dependencies
 brew "imagemagick"
+
+# Font
+cask "font-commit-mono-nerd-font"
