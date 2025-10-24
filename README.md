@@ -6,6 +6,7 @@ Then
 ```
 nvim
 :UpdateRemotePlugins
+:checkhealth
 ```
 
 To test locally:
