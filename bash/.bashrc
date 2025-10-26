@@ -83,6 +83,3 @@ then
     exec fish;
     exit;
 fi
-. "$HOME/.cargo/env"
-
-. "$HOME/.local/bin/env"
