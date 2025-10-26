@@ -37,3 +37,6 @@ vim.opt.incsearch = true -- Preview search live
 vim.opt.inccommand = "split" -- Preview substitutions live
 vim.opt.ignorecase = true -- Case-insensitive searching UNLESS \C or capital in search
 vim.opt.smartcase = true
+
+-- Language
+vim.g.python3_host_prog = vim.fn.exepath("python3")
