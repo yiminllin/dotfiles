@@ -14,6 +14,8 @@ nvim
 :checkhealth
 ```
 
+On Fedora, set "Resize Window" as 'Cmd + Shift + \\'
+
 To test locally:
 ```
 docker run -it -v ~/dotfiles:/root/dotfiles ubuntu bash
