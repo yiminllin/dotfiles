@@ -1,0 +1,25 @@
+# Essential
+gcc
+gcc-c++
+make
+tmux
+neovim
+fish
+curl
+wget
+stow
+unzip
+tldr
+
+# Tools
+xsel
+ncdu
+btop
+nvtop
+
+# Languages / tooling
+python3-neovim
+clang
+clang-format
+lua
+luarocks

@@ -15,6 +15,12 @@ if grep -Eiq "debian|ubuntu" /etc/os-release; then
     sed 's/#.*//;/^$/d' Aptfile | xargs apt-get install -y
 fi
 
+if grep -Eiq "fedora" /etc/os-release; then
+    sudo dnf makecache --refresh
+    sudo dnf install -y dnf-plugins-core
+    sudo dnf install -y $(sed 's/#.*//;/^$/d' Dnffile)
+fi
+
 if [ "$(uname -s)" = "Darwin" ]; then
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   brew bundle --file="Brewfile"
@@ -26,6 +32,20 @@ fi
 
 echo "Installing Kitty"
 curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin
+ln -sf ~/.local/kitty.app/bin/kitty ~/.local/bin/kitty
+# Setup Fedora desktop entries and fonts
+if grep -Eiq "fedora" /etc/os-release; then
+    mkdir -p ~/.local/share/applications/
+    cp ~/.local/kitty.app/share/applications/kitty.desktop ~/.local/share/applications/
+    update-desktop-database ~/.local/share/applications/
+
+    FONTS_DIR="$HOME/.local/share/fonts"
+    mkdir -p $FONTS_DIR
+    curl -fL https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CommitMono.zip -o $FONTS_DIR/CommitMono.zip
+    unzip "$FONTS_DIR/CommitMono.zip" -d "$FONTS_DIR/CommitMono"
+    rm -f "$FONTS_DIR/CommitMono.zip"
+    fc-cache -fv
+fi
 
 ################################################################################
 # Install Fzf
@@ -62,7 +82,7 @@ uv python install
 echo "Installing Cargo and UV packages"
 sed 's/#.*//;/^$/d' Cargofile | xargs -n1 cargo install
 sed 's/#.*//;/^$/d' Uvfile | xargs -n1 uv tool install
-sed 's/#.*//;/^$/d' Luarocksfile | xargs -n1 luarocks install
+# sed 's/#.*//;/^$/d' Luarocksfile | xargs -n1 luarocks install
 
 ################################################################################
 # Stow Configs
@@ -71,6 +91,7 @@ sed 's/#.*//;/^$/d' Luarocksfile | xargs -n1 luarocks install
 echo "Stowing configurations"
 
 # Cleanups
+mv ~/.bash_profile ~/.bash_profile.backup
 mv ~/.bashrc ~/.bashrc.backup
 rm -rf ~/.config/fish
 
