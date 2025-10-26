@@ -75,6 +75,8 @@ export PS1="\[\e[30;47m\]\u\[\e[m\]\[\e[30;47m\]<\[\e[m\]\[\e[32;47m\]\w\[\e[m\]
 export VISUAL="nvim"
 export EDITOR="nvim"
 export LS_COLORS=$(vivid generate solarized-light)
+export SHELL_PATH=$(which fish)
+export EDITOR_PATH=$(which nvim)
 
 # Execute fish shell
 if [ -z "$STARTEDFISH" ];
