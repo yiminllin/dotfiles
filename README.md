@@ -19,6 +19,11 @@ AIChat: create `aichat/.config/aichat/.env`, where
 CLAUDE_API_KEY=...
 ```
 
+Github-CLI, we need
+```
+gh auth login
+```
+
 On Fedora, set "Resize Window" as 'Cmd + Shift + \\'
 
 To test locally:
