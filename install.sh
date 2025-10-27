@@ -106,6 +106,7 @@ CONFIGS=(
     kitty
     nvim
     tmux
+    visidata
 )
 for config in "${CONFIGS[@]}"; do
     stow "$config"

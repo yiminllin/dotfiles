@@ -2,6 +2,9 @@
 ipython       # python
 rexi          # Interactive CLI for regex testing
 
+# Tools
+visidata      # Visualizing & Editing CSVs
+
 # Languages
 pynvim
 black

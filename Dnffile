@@ -13,6 +13,8 @@ tldr
 
 # Tools
 xsel
+xclip
+wl-clipboard
 ncdu
 btop
 nvtop

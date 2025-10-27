@@ -1,0 +1,3 @@
+options.clipboard_copy_cmd = 'xclip -selection clipboard'
+options.clipboard_paste_cmd = 'xclip -selection clipboard -o'
+options.theme = 'asciimono'
