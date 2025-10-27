@@ -96,6 +96,7 @@ mv ~/.bashrc ~/.bashrc.backup
 rm -rf ~/.config/fish
 
 CONFIGS=(
+    aichat
     bash
     bat
     fish

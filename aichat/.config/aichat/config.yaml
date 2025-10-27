@@ -1,0 +1,8 @@
+# see https://github.com/sigoden/aichat/blob/main/config.example.yaml
+
+model: claude:claude-sonnet-4-20250514
+clients:
+- type: claude
+keybindings: vi
+editor: nvim
+save_session: true
