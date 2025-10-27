@@ -12,11 +12,13 @@ echo "Installing system packages"
 if grep -Eiq "debian|ubuntu" /etc/os-release; then
     apt-get update
     apt-get install -y software-properties-common
+    add-apt-repository ppa:lazygit-team/release
     sed 's/#.*//;/^$/d' Aptfile | xargs apt-get install -y
 fi
 
 if grep -Eiq "fedora" /etc/os-release; then
     sudo dnf makecache --refresh
+    sudo dnf copr enable dejan/lazygit
     sudo dnf install -y dnf-plugins-core
     sudo dnf install -y $(sed 's/#.*//;/^$/d' Dnffile)
 fi

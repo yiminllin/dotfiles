@@ -16,6 +16,8 @@ xsel
 ncdu
 btop
 nvtop
+lazygit
+gh
 
 # Languages / tooling
 python3-neovim
