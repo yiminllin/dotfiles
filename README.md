@@ -14,6 +14,11 @@ nvim
 :checkhealth
 ```
 
+AIChat: create `aichat/.config/aichat/.env`, where
+```
+CLAUDE_API_KEY=...
+```
+
 On Fedora, set "Resize Window" as 'Cmd + Shift + \\'
 
 To test locally:
