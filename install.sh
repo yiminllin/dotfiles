@@ -106,6 +106,7 @@ CONFIGS=(
     kitty
     nvim
     tmux
+    tmux-powerline
     visidata
 )
 for config in "${CONFIGS[@]}"; do
