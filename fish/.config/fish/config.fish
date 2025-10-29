@@ -50,6 +50,9 @@ function rexi_string --description "Test regex on the input string"
 end
 abbr -a rexi rexi_string
 
+# Show hidden files in completion
+set -U fish_complete_hidden 1
+
 ################################################################################
 # FZF
 ################################################################################
