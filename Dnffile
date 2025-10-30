@@ -20,6 +20,7 @@ btop
 nvtop
 lazygit
 gh
+task
 
 # Languages / tooling
 python3-neovim

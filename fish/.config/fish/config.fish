@@ -40,6 +40,18 @@ abbr -a gp git push
 abbr -a vdesk ssh -L 8888:localhost:8888 yilin@yilin.vdesk.cloud.aurora.tech
 abbr -a sb tmux_scrollback_pager
 
+# Task
+abbr -a t task
+abbr -a ta task add
+abbr -a td task done
+abbr -a tr task delete
+abbr -a tph "task modify priority:H"
+abbr -a tpm "task modify priority:M"
+abbr -a tpl "task modify priority:L"
+abbr -a tpn "task modify project:note"
+abbr -a tpi "task modify project:improve"
+abbr -a tpc "task modify project:code"
+
 function nvim_help --description "View command help in vim"
     $argv --help 2>&1 | nvim -R -c 'set ft=man' -
 end

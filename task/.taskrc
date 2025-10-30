@@ -1,0 +1,8 @@
+data.location=~/.task
+
+default.command=list
+
+# Theme
+include /usr/share/task/solarized-light-256.theme
+
+news.version=3.4.1

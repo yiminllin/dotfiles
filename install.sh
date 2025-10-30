@@ -105,6 +105,7 @@ CONFIGS=(
     git
     kitty
     nvim
+    task
     tmux
     tmux-powerline
     visidata
