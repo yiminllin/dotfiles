@@ -1,6 +1,6 @@
 # see https://github.com/sigoden/aichat/blob/main/config.example.yaml
 
-model: claude:claude-sonnet-4-20250514
+model: claude:claude-3-5-haiku-20241022
 clients:
 - type: claude
 keybindings: vi
