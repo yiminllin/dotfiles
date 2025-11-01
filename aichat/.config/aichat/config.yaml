@@ -6,4 +6,5 @@ clients:
 keybindings: vi
 editor: nvim
 save_session: true
-left_prompt: '>> {color.green}{?session {?agent {agent}>}{session}{?role /}}{!session {?agent {agent}>}}{role}{?rag @{rag}}{color.cyan}{?session )}{!session >}{color.reset} '
+highlight: true
+left_prompt: '{color.magenta}======>> {?session {?agent {agent}>}{session}{?role /}}{!session {?agent {agent}>}}{role}{?rag @{rag}}{color.cyan}{?session )}{!session >}{color.reset} '

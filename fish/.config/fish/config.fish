@@ -32,13 +32,18 @@ abbr -a top btop
 # Convenience
 abbr -a ... cd ../..
 abbr -a .... cd ../../..
+abbr -a vdesk ssh -L 8888:localhost:8888 yilin@yilin.vdesk.cloud.aurora.tech
+abbr -a sb tmux_scrollback_pager
+
+# Git
 abbr -a gs git status
 abbr -a gd git diff
 abbr -a ga git add
 abbr -a gc git commit -m
 abbr -a gp git push
-abbr -a vdesk ssh -L 8888:localhost:8888 yilin@yilin.vdesk.cloud.aurora.tech
-abbr -a sb tmux_scrollback_pager
+
+# AIchat
+abbr -a ai "aichat --role concise-bot"
 
 # Task
 abbr -a t task
