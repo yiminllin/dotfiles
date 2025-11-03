@@ -24,6 +24,11 @@ Github-CLI, we need
 gh auth login
 ```
 
+Nvim's copilot, after installing the plugin, we need to run
+```
+:Copilot setup
+```
+
 On Fedora, set "Resize Window" as 'Cmd + Shift + \\'
 
 To test locally:

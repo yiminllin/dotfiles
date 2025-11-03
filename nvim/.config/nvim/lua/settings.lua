@@ -38,5 +38,8 @@ vim.opt.inccommand = "split" -- Preview substitutions live
 vim.opt.ignorecase = true -- Case-insensitive searching UNLESS \C or capital in search
 vim.opt.smartcase = true
 
+-- Disable copilot autocomplete
+vim.g.copilot_enabled = false
+
 -- Language
 vim.g.python3_host_prog = vim.fn.exepath("python3")
