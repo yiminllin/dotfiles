@@ -18,6 +18,11 @@ return {
 					border = "rounded",
 					title = "CopilotChat",
 				},
+				prompts = {
+					ConciseBot = {
+						system_prompt = "Please keep the following answers short, concise, and accurate. Unless followed up by me afterwards, do not need to provide code or example. If possible, make sure the anwser is easy to ready and well-organized, and use bullet points or table if there is a chance. To reiterate, keep the answers short so the reader can digest the main points quickly. The details can be left for follow ups.",
+					},
+				},
 			})
 		end,
 		vim.keymap.set(
