@@ -35,3 +35,12 @@ To test locally:
 ```
 docker run -it -v ~/dotfiles:/root/dotfiles ubuntu bash
 ```
+
+Map CAPS to {ESC, CTRL}:
+On Linux:
+```
+sudo systemctl daemon-reload
+sudo systemctl enable keyd
+sudo systemctl start keyd
+sudo keyd reload
+```

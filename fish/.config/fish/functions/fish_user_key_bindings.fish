@@ -7,8 +7,6 @@ function fish_user_key_bindings
     # resetting all bindings.
     # The argument specifies the initial mode (insert, "default" or visual).
     fish_vi_key_bindings --no-erase insert
-
-    bind -M insert jj "if commandline -P; commandline -f cancel; else; set fish_bind_mode default; commandline -f backward-char force-repaint; end"
 end
 
 fzf --fish | source

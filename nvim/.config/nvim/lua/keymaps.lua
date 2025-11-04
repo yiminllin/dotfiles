@@ -1,7 +1,4 @@
 -- [[ Basic Keymaps ]]
--- Set jj
-vim.keymap.set("i", "jj", "<Esc>")
-
 -- Set highlight on search, but clear on pressing <Esc> in normal mode
 vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>")
 

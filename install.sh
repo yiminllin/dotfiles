@@ -87,6 +87,18 @@ sed 's/#.*//;/^$/d' Uvfile | xargs -n1 uv tool install
 # sed 's/#.*//;/^$/d' Luarocksfile | xargs -n1 luarocks install
 
 ################################################################################
+# Install Keymapping Packages
+################################################################################
+
+echo "Installing Keymapping packages"
+if grep -Eiq "fedora" /etc/os-release; then
+    git clone https://github.com/rvaiya/keyd
+    cd keyd
+    make && sudo make install
+    cd .. && rm -rf keyd
+fi
+
+################################################################################
 # Stow Configs
 ################################################################################
 
@@ -113,6 +125,8 @@ CONFIGS=(
 for config in "${CONFIGS[@]}"; do
     stow "$config"
 done
+
+sudo ln -s ~/dotfiles/keyd/default.conf /etc/keyd/default.conf
 
 ################################################################################
 # Install Tmux Packages

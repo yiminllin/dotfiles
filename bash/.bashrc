@@ -6,7 +6,6 @@ set -o ignoreeof
 set -o notify
 
 # Keybinding and Aliases
-bind '"jj":"\e"'
 alias ls="ls -G"
 alias cp="cp -i"
 alias mv="mv -i"
