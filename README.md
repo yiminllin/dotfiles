@@ -44,3 +44,10 @@ sudo systemctl enable keyd
 sudo systemctl start keyd
 sudo keyd reload
 ```
+
+
+Poll and pull latest changes with:
+```
+fish dotfiles_polling.fish& disown
+fish dotfiles_auto_update.fish
+```
