@@ -13,8 +13,9 @@ return {
 					auto_insert_mode = true,
 				},
 				window = {
-					layout = "vertical",
-					width = 0.3,
+					layout = "float",
+					width = 0.75,
+					height = 0.75,
 					border = "rounded",
 					title = "CopilotChat",
 				},
