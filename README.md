@@ -44,6 +44,8 @@ sudo systemctl enable keyd
 sudo systemctl start keyd
 sudo keyd reload
 ```
+On MacOS:
+Download https://karabiner-elements.pqrs.org/, and use the plugin https://ke-complex-modifications.pqrs.org/?q=caps#tap4caps_hold4ctrl.
 
 
 Poll and pull latest changes with:
