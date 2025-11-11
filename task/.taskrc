@@ -3,6 +3,6 @@ data.location=~/notes/.task
 default.command=list
 
 # Theme
-include /usr/share/task/solarized-light-256.theme
+include ~/.task/themes/solarized-light-256.theme
 
 news.version=3.4.1

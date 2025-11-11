@@ -9,14 +9,14 @@ set -o pipefail
 
 echo "Installing system packages"
 
-if grep -Eiq "debian|ubuntu" /etc/os-release; then
+if [ -f /etc/os-release ] && grep -Eiq "debian|ubuntu" /etc/os-release; then
     apt-get update
     apt-get install -y software-properties-common
     add-apt-repository ppa:lazygit-team/release
     sed 's/#.*//;/^$/d' Aptfile | xargs apt-get install -y
 fi
 
-if grep -Eiq "fedora" /etc/os-release; then
+if [ -f /etc/os-release ] && grep -Eiq "fedora" /etc/os-release; then
     sudo dnf makecache --refresh
     sudo dnf copr enable dejan/lazygit
     sudo dnf install -y dnf-plugins-core
@@ -36,7 +36,7 @@ echo "Installing Kitty"
 curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin
 ln -sf ~/.local/kitty.app/bin/kitty ~/.local/bin/kitty
 # Setup Fedora desktop entries and fonts
-if grep -Eiq "fedora" /etc/os-release; then
+if [ -f /etc/os-release ] && grep -Eiq "fedora" /etc/os-release; then
     mkdir -p ~/.local/share/applications/
     cp ~/.local/kitty.app/share/applications/kitty.desktop ~/.local/share/applications/
     update-desktop-database ~/.local/share/applications/
@@ -91,11 +91,20 @@ sed 's/#.*//;/^$/d' Uvfile | xargs -n1 uv tool install
 ################################################################################
 
 echo "Installing Keymapping packages"
-if grep -Eiq "fedora" /etc/os-release; then
+if [ -f /etc/os-release ] && grep -Eiq "fedora" /etc/os-release; then
     git clone https://github.com/rvaiya/keyd
     cd keyd
     make && sudo make install
     cd .. && rm -rf keyd
+fi
+
+################################################################################
+# Install Task
+################################################################################
+
+if [ "$(uname -s)" = "Darwin" ]; then
+    mkdir -p ~/.task/themes/
+    curl -o ~/.task/themes/solarized-light-256.theme https://raw.githubusercontent.com/ktf/taskwarrior-solarized/master/solarized-light-256.theme
 fi
 
 ################################################################################
