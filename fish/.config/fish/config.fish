@@ -39,7 +39,7 @@ abbr -a sb tmux_scrollback_pager
 abbr -a gs git status
 abbr -a gd git diff
 abbr -a ga git add
-abbr -a gc git commit -m
+abbr -a gc --set-cursor 'git commit -m "%"'
 abbr -a gp git push
 
 # AIchat
@@ -47,7 +47,7 @@ abbr -a ai "aichat --role concise-bot"
 
 # Task
 abbr -a t task
-abbr -a ta task add
+abbr -a ta --set-cursor 'task add "%"'
 abbr -a td task done
 abbr -a tr task delete
 abbr -a te task edit 
