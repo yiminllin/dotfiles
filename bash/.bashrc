@@ -77,6 +77,7 @@ export LS_COLORS=$(vivid generate solarized-light)
 export SHELL_PATH=$(which fish)
 export EDITOR_PATH=$(which nvim)
 export AICHAT_CONFIG_DIR="$HOME/.config/aichat"
+export XDG_CONFIG_HOME="$HOME/.config"
 
 # Execute fish shell
 if [ -z "$STARTEDFISH" ];
