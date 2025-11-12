@@ -34,7 +34,7 @@ return {
 
 		vim.keymap.set(
 			"n",
-			"<leader>v",
+			"<leader>v<space>",
 			":lua toggle_venn()<CR>",
 			{ noremap = true, silent = true, desc = "Go to [V]enn (Box diagram) mode" }
 		)

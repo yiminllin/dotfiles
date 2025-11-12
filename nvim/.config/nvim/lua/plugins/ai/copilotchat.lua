@@ -28,7 +28,7 @@ return {
 		end,
 		vim.keymap.set(
 			{ "n", "v" },
-			"<leader>c",
+			"<leader>c<space>",
 			"<cmd>CopilotChatToggle<cr>",
 			{ noremap = true, silent = true, desc = "[C]opilotChat Toggle" }
 		),
