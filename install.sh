@@ -104,7 +104,14 @@ fi
 
 if [ "$(uname -s)" = "Darwin" ]; then
     mkdir -p ~/.task/themes/
-    curl -o ~/.task/themes/solarized-light-256.theme https://raw.githubusercontent.com/ktf/taskwarrior-solarized/master/solarized-light-256.theme
+    # solarized-light does not work on macOS...
+    curl -o ~/.task/themes/solarized-256.theme https://raw.githubusercontent.com/GothenburgBitFactory/taskwarrior/develop/doc/rc/solarized-dark-256.theme
+    sed -i '' 's/color.alternate=on color0/color.alternate=/g' ~/.task/themes/solarized-dark-256.theme
+fi
+
+if [ -f /etc/os-release ] && grep -Eiq "fedora" /etc/os-release; then
+    mkdir -p ~/.task/themes/
+    curl -o ~/.task/themes/solarized-256.theme https://raw.githubusercontent.com/GothenburgBitFactory/taskwarrior/develop/doc/rc/solarized-light-256.theme
 fi
 
 ################################################################################
