@@ -15,6 +15,7 @@ return { -- Highlight, edit, and navigate code
 				"vim",
 				"vimdoc",
 				"diff",
+				"git_config",
 			},
 			auto_install = true,
 			highlight = { enable = true },
