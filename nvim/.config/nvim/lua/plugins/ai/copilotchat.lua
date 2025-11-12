@@ -12,6 +12,11 @@ return {
 					temperature = 0.8,
 					auto_insert_mode = true,
 				},
+				mappings = {
+					yank_diff = {
+						register = "+", -- Default to unnamed register "
+					},
+				},
 				window = {
 					layout = "float",
 					width = 0.75,
