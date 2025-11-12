@@ -50,12 +50,15 @@ abbr -a t task
 abbr -a ta task add
 abbr -a td task done
 abbr -a tr task delete
+abbr -a te task edit 
 abbr -a tph "task modify priority:H"
 abbr -a tpm "task modify priority:M"
 abbr -a tpl "task modify priority:L"
 abbr -a tpn "task modify project:note"
 abbr -a tpi "task modify project:improve"
 abbr -a tpc "task modify project:code"
+abbr -a tpr "task modify project:read"
+abbr -a tps "task modify project:study"
 
 function nvim_help --description "View command help in vim"
     $argv --help 2>&1 | nvim -R -c 'set ft=man' -
