@@ -139,15 +139,19 @@ CONFIGS=(
     visidata
 )
 for config in "${CONFIGS[@]}"; do
-    stow "$config"
+    stow --adopt "$config"
 done
 
-sudo ln -s ~/dotfiles/keyd/default.conf /etc/keyd/default.conf
+if grep -Eiq "fedora" /etc/os-release; then
+    sudo ln -s ~/dotfiles/keyd/default.conf /etc/keyd/default.conf
+fi
 
 ################################################################################
 # Install Tmux Packages
 ################################################################################
-git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm 
-~/.tmux/plugins/tpm/bin/install_plugins
+if [ ! -d ~/.tmux/plugins/tpm ]; then
+    git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm 
+    ~/.tmux/plugins/tpm/bin/install_plugins
+fi
 
 echo "Complete!"

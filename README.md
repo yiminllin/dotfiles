@@ -7,6 +7,7 @@ Then set up git (also need to add SSH key in GitHub page) and pull repo
 ssh-keygen -t ed25519 -C "yiminlllin@gmail.com" -f ~/.ssh/id_ed25519 && cat ~/.ssh/id_ed25519.pub
 cd ~ && git clone git@github.com:yiminllin/dotfiles.git && cd dotfiles && bash ./install.sh
 ```
+Stowing have `--adopt` flag enabled, where `dotfiles/` contents are overwritten with local's contents. We need to manually run `git --reset HARD` to use the most updated change.
 Then
 ```
 nvim
