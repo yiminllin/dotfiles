@@ -6,3 +6,5 @@ default.command=list
 include ~/.task/themes/solarized-256.theme
 
 news.version=3.4.1
+
+report.list.sort = urgency+

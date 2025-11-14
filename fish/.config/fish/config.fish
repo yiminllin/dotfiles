@@ -47,6 +47,7 @@ abbr -a ai "aichat --role concise-bot"
 
 # Task
 abbr -a t task
+abbr -a t0 task project: list
 abbr -a ta --set-cursor 'task add "%"'
 abbr -a td task done
 abbr -a tr task delete
