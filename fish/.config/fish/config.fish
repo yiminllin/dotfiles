@@ -52,6 +52,7 @@ abbr -a ta --set-cursor 'task add "%"'
 abbr -a td task done
 abbr -a tr task delete
 abbr -a te task edit 
+abbr -a ts --set-cursor 'task description.has:%'
 abbr -a tph "task modify priority:H"
 abbr -a tpm "task modify priority:M"
 abbr -a tpl "task modify priority:L"
