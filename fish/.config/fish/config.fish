@@ -66,6 +66,9 @@ function nvim_help --description "View command help in vim"
 end
 abbr -a h nvim_help
 
+# Man pager
+set -x MANPAGER 'nvim +Man!'
+
 function rexi_string --description "Test regex on the input string"
     echo $argv | rexi
 end
