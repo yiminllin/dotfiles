@@ -103,7 +103,7 @@ sed 's/#.*//;/^$/d' Uvfile | xargs -n1 uv tool install
 ################################################################################
 
 echo "Installing Keymapping packages"
-if is_fedora then
+if is_fedora; then
     git clone https://github.com/rvaiya/keyd
     cd keyd
     make && sudo make install
@@ -125,6 +125,11 @@ if is_fedora; then
     mkdir -p ~/.task/themes/
     curl -o ~/.task/themes/solarized-256.theme https://raw.githubusercontent.com/GothenburgBitFactory/taskwarrior/develop/doc/rc/solarized-light-256.theme
 fi
+
+################################################################################
+# Install OpenCode
+################################################################################
+curl -fsSL https://opencode.ai/install | bash
 
 ################################################################################
 # Stow Configs
