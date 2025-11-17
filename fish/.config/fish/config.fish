@@ -82,3 +82,6 @@ set -U fish_complete_hidden 1
 # FZF
 ################################################################################
 fzf --fish | source
+
+# opencode
+fish_add_path ~/.opencode/bin

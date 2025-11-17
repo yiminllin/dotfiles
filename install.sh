@@ -150,6 +150,7 @@ CONFIGS=(
     git
     kitty
     nvim
+    opencode
     task
     tmux
     tmux-powerline

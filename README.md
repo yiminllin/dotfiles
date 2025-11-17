@@ -20,6 +20,11 @@ AIChat: create `aichat/.config/aichat/.env`, where
 CLAUDE_API_KEY=...
 ```
 
+OpenCode: run
+```
+opencode auth login
+```
+
 Github-CLI, we need
 ```
 gh auth login
