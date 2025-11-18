@@ -3,6 +3,8 @@
 # Sensitive Information
 # Personal API keys and tokens
 aichat/.config/aichat/.env
+# AIChat sessions
+aichat/.config/aichat/sessions/
 # SSH and private authentication keys
 **/id_*
 # Cryptographic key files
