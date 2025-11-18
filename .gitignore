@@ -1,3 +1,56 @@
-aichat/.config/aichat/.env
-nvim/.config/nvim/lazy-lock.json
-fish/.config/fish/fish_variables
+# Dotfiles .gitignore
+
+# Sensitive Information
+aichat/.config/aichat/.env  # Personal API keys and tokens
+**/id_*                     # SSH and private authentication keys
+**/*.key                    # Cryptographic key files
+**/*.pem                    # SSL/encryption certificates
+
+# Neovim Runtime Files
+nvim/.config/nvim/lazy-lock.json  # Plugin dependency lock file
+nvim/.config/nvim/.netrwhist      # Vim file history
+**/*.log                          # Application and error logs
+
+# Fish Shell Runtime Data 
+fish/.config/fish/fish_variables   # Fish shell runtime variables
+fish/.config/fish/fish_history     # Shell command history
+fish/.config/fish/fishd.*          # Fish daemon configuration files
+
+# macOS System Files 
+.DS_Store                   # macOS Finder metadata
+**/.DS_Store                # Recursive macOS metadata ignore
+
+# Temporary and Backup Files (Editor and system temp files)
+**/*.backup                # Generic backup files
+**/*.bak                   # Backup file extension
+**/*.swp                   # Vim swap files
+**/*.swo                   # Alternate Vim swap files
+
+# Local Configuration Overrides
+**/*.local                  # Local configuration file extension
+**/.local/                  # Local configuration directories
+
+# Plugin and Cache Directories
+**/.cache/                  # Generic cache directory
+**/.plugin_cache/           # Plugin-specific cache
+**/__pycache__/             # Python bytecode cache
+**/*.pyc                    # Compiled Python files
+
+# Environment and Runtime Files
+.env                        # Environment variable files
+.venv/                      # Python virtual environments
+venv/
+**/.python-version          # Python version management files
+
+# Compiled and Binary Files
+**/*.o                      # Object files
+**/*.out                    # Compiled output files
+**/*.exe                    # Windows executable files
+**/*.dll                    # Dynamic libraries
+**/*.so                     # Shared libraries
+
+# Miscellaneous System Files
+.Trash/                     # macOS trash directory
+.Spotlight-V100             # macOS search index
+.Trashes                    # macOS trash files
+
