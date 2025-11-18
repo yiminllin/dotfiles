@@ -1,0 +1,36 @@
+return {
+	"NickvanDyke/opencode.nvim",
+	dependencies = {
+		{ "folke/snacks.nvim", opts = { input = {}, picker = {}, terminal = {} } },
+	},
+	config = function()
+		vim.g.opencode_opts = {
+			provider = {
+				enabled = "tmux",
+				tmux = {
+					options = "-h", -- options to pass to `tmux split-window`, horizontal split
+				},
+			},
+		}
+
+		vim.o.autoread = true
+
+		-- Recommended/example keymaps.
+		local opencode = require("opencode")
+		vim.keymap.set({ "n" }, "<leader>c<leader>", function()
+			opencode.select()
+		end, { desc = "Open[C]ode Toggle" })
+		vim.keymap.set({ "n", "x" }, "<leader>cp", function()
+			opencode.ask("@this: ", { submit = true })
+		end, { desc = "Open[C]ode [P]rompt" })
+		vim.keymap.set({ "x" }, "<leader>ca", function()
+			require("opencode").prompt("@this")
+		end, { desc = "Open[C]ode [A]dd Context" })
+		vim.keymap.set({ "n", "x" }, "<leader>cb", function()
+			require("opencode").prompt("@buffers")
+		end, { desc = "Open[C]ode Add [B]uffers" })
+		vim.keymap.set({ "n", "x" }, "<leader>cg", function()
+			require("opencode").prompt("@diff")
+		end, { desc = "Open[C]ode Add [G]it Diff" })
+	end,
+}
