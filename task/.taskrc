@@ -8,3 +8,15 @@ include ~/.task/themes/solarized-256.theme
 news.version=3.4.1
 
 report.list.sort = urgency+
+report.list.columns = id,priority,estimate,project,description.count,urgency
+report.list.labels = ID,P,E,Project,Description,Urg
+
+uda.estimate.type = string
+uda.estimate.label = Est
+uda.estimate.values = H,D,W,M
+
+# Prioritize some quick tasks that can be done within hours, even its priority is not H
+urgency.uda.estimate.H.coefficient = 5.0
+urgency.uda.estimate.D.coefficient = 2.0
+urgency.uda.estimate.W.coefficient = 0.5
+urgency.uda.estimate.M.coefficient = 0.1

@@ -53,6 +53,10 @@ abbr -a td task done
 abbr -a tr task delete
 abbr -a te task edit 
 abbr -a ts --set-cursor 'task description.has:%'
+abbr -a teh "task modify estimate:H"
+abbr -a ted "task modify estimate:D"
+abbr -a tew "task modify estimate:W"
+abbr -a tem "task modify estimate:M"
 abbr -a tph "task modify priority:H"
 abbr -a tpm "task modify priority:M"
 abbr -a tpl "task modify priority:L"
