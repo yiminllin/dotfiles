@@ -1,56 +1,88 @@
 # Dotfiles .gitignore
 
 # Sensitive Information
-aichat/.config/aichat/.env  # Personal API keys and tokens
-**/id_*                     # SSH and private authentication keys
-**/*.key                    # Cryptographic key files
-**/*.pem                    # SSL/encryption certificates
+# Personal API keys and tokens
+aichat/.config/aichat/.env
+# SSH and private authentication keys
+**/id_*
+# Cryptographic key files
+**/*.key
+# SSL/encryption certificates
+**/*.pem
 
 # Neovim Runtime Files
-nvim/.config/nvim/lazy-lock.json  # Plugin dependency lock file
-nvim/.config/nvim/.netrwhist      # Vim file history
-**/*.log                          # Application and error logs
+# Plugin dependency lock file
+nvim/.config/nvim/lazy-lock.json
+# Vim file history
+nvim/.config/nvim/.netrwhist
+# Application and error logs
+**/*.log
 
 # Fish Shell Runtime Data 
-fish/.config/fish/fish_variables   # Fish shell runtime variables
-fish/.config/fish/fish_history     # Shell command history
-fish/.config/fish/fishd.*          # Fish daemon configuration files
+# Fish shell runtime variables
+fish/.config/fish/fish_variables
+# Shell command history
+fish/.config/fish/fish_history
+# Fish daemon configuration files
+fish/.config/fish/fishd.*
 
 # macOS System Files 
-.DS_Store                   # macOS Finder metadata
-**/.DS_Store                # Recursive macOS metadata ignore
+# macOS Finder metadata
+.DS_Store
+# Recursive macOS metadata ignore
+**/.DS_Store
 
 # Temporary and Backup Files (Editor and system temp files)
-**/*.backup                # Generic backup files
-**/*.bak                   # Backup file extension
-**/*.swp                   # Vim swap files
-**/*.swo                   # Alternate Vim swap files
+# Generic backup files
+**/*.backup
+# Backup file extension
+**/*.bak
+# Vim swap files
+**/*.swp
+# Alternate Vim swap files
+**/*.swo
 
 # Local Configuration Overrides
-**/*.local                  # Local configuration file extension
-**/.local/                  # Local configuration directories
+# Local configuration file extension
+**/*.local
+# Local configuration directories
+**/.local/
 
 # Plugin and Cache Directories
-**/.cache/                  # Generic cache directory
-**/.plugin_cache/           # Plugin-specific cache
-**/__pycache__/             # Python bytecode cache
-**/*.pyc                    # Compiled Python files
+# Generic cache directory
+**/.cache/
+# Plugin-specific cache
+**/.plugin_cache/
+# Python bytecode cache
+**/__pycache__/
+# Compiled Python files
+**/*.pyc
 
 # Environment and Runtime Files
-.env                        # Environment variable files
-.venv/                      # Python virtual environments
+# Environment variable files
+.env
+# Python virtual environments
+.venv/
 venv/
-**/.python-version          # Python version management files
+# Python version management files
+**/.python-version
 
 # Compiled and Binary Files
-**/*.o                      # Object files
-**/*.out                    # Compiled output files
-**/*.exe                    # Windows executable files
-**/*.dll                    # Dynamic libraries
-**/*.so                     # Shared libraries
+# Object files
+**/*.o
+# Compiled output files
+**/*.out
+# Windows executable files
+**/*.exe
+# Dynamic libraries
+**/*.dll
+# Shared libraries
+**/*.so
 
 # Miscellaneous System Files
-.Trash/                     # macOS trash directory
-.Spotlight-V100             # macOS search index
-.Trashes                    # macOS trash files
-
+# macOS trash directory
+.Trash/
+# macOS search index
+.Spotlight-V100
+# macOS trash files
+.Trashes
