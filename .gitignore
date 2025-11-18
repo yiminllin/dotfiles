@@ -25,6 +25,16 @@ fish/.config/fish/fish_variables
 fish/.config/fish/fish_history
 # Fish daemon configuration files
 fish/.config/fish/fishd.*
+# Temporary or generated plugin files
+fish/.config/fish/fish_plugins.lock
+# Local plugin installations
+fish/.config/fish/plugins/
+# Completions cache
+fish/.config/fish/completions/*.cache
+# Generated function caches
+fish/.config/fish/functions/*.cache
+# Local environment-specific configurations
+fish/.config/fish/*.local
 
 # macOS System Files 
 # macOS Finder metadata
