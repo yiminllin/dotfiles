@@ -79,6 +79,8 @@
     "leader": "alt+space",
     "command_list": "<leader>h",
     "messages_toggle_conceal": "",
+    "messages_half_page_up": "ctrl+u",
+    "messages_half_page_down": "ctrl+d",
   },
   "instructions": ["README.md"],
   "model": "anthropic/claude-haiku-4-5",
