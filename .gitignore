@@ -35,6 +35,8 @@ fish/.config/fish/completions/*.cache
 fish/.config/fish/functions/*.cache
 # Local environment-specific configurations
 fish/.config/fish/*.local
+# FZF generated Fish functions
+fish/.config/fish/functions/_fzf_*.fish
 
 # macOS System Files 
 # macOS Finder metadata
