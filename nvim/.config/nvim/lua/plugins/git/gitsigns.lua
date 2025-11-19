@@ -5,7 +5,6 @@ return {
 		require("gitsigns").setup({
 			signcolumn = true,
 			numhl = true,
-			current_line_blame = true,
 			current_line_blame_opts = {
 				virt_text = true,
 				virt_text_pos = "right_align",
@@ -41,13 +40,7 @@ return {
 					return "<Ignore>"
 				end, { expr = true, desc = "Prev [H]unk" })
 
-				-- Actions
-				map("n", "<leader>gs", gs.stage_buffer, { desc = "[G]it [S]tage buffer" })
-				map("n", "<leader>gr", gs.reset_buffer, { desc = "[G]it [R]eset buffer" })
-				map("n", "<leader>gd", gs.diffthis, { desc = "[G]it [D]iff buffer" })
-				map("n", "<leader>gD", function()
-					gs.diffthis("~")
-				end, { desc = "[G]it [D]iff All" })
+				map("n", "<leader>gb", gs.blame_line, { desc = "[G]it [B]lame Line" })
 			end,
 		})
 	end,
