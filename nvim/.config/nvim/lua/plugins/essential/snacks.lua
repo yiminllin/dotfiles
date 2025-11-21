@@ -117,6 +117,20 @@ return {
 		},
 		-- LSP
 		{
+			"<leader>ss",
+			function()
+				Snacks.picker.lsp_symbols()
+			end,
+			desc = "[S]earch LSP [S]ymbols",
+		},
+		{
+			"<leader>sS",
+			function()
+				Snacks.picker.lsp_workspace_symbols()
+			end,
+			desc = "[S]earch LSP Workspace [S]ymbols",
+		},
+		{
 			"gd",
 			function()
 				Snacks.picker.lsp_definitions()
