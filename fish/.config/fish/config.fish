@@ -87,5 +87,27 @@ set -U fish_complete_hidden 1
 ################################################################################
 fzf --fish | source
 
+################################################################################
+# Vi-Mode System Clipboard
+################################################################################
+function fish_user_key_bindings
+    fish_vi_key_bindings
+    
+    # Copy to system clipboard, only works for visual mode. yy does not work.
+    bind -M visual y "fish_clipboard_copy"
+end
+
+function fish_clipboard_copy --description "Copy selection to system clipboard"
+    if command -v pbcopy &> /dev/null
+        # macOS
+        commandline -b | pbcopy
+    else if command -v xclip &> /dev/null
+        # Linux (Fedora, Ubuntu)
+        commandline -b | xclip -selection clipboard
+    else
+        echo "No clipboard utility found"
+    end
+end
+
 # opencode
 fish_add_path ~/.opencode/bin
