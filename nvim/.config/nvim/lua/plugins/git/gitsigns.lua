@@ -11,7 +11,7 @@ return {
 				delay = 500,
 			},
 			on_attach = function(bufnr)
-				local gs = package.loaded.gitsigns
+				local gitsigns = require("gitsigns")
 
 				local function map(mode, l, r, opts)
 					opts = opts or {}
@@ -20,27 +20,42 @@ return {
 				end
 
 				-- Navigation
-				map("n", "]h", function()
+				map("n", "]c", function()
 					if vim.wo.diff then
-						return "]h"
+						vim.cmd.normal({ "]c", bang = true })
+					else
+						gitsigns.nav_hunk("next")
 					end
-					vim.schedule(function()
-						gs.next_hunk()
-					end)
-					return "<Ignore>"
-				end, { expr = true, desc = "Next [H]unk" })
+				end, { desc = "Git [H]unk Next ]" })
 
-				map("n", "[h", function()
+				map("n", "[c", function()
 					if vim.wo.diff then
-						return "[h"
+						vim.cmd.normal({ "[c", bang = true })
+					else
+						gitsigns.nav_hunk("prev")
 					end
-					vim.schedule(function()
-						gs.prev_hunk()
-					end)
-					return "<Ignore>"
-				end, { expr = true, desc = "Prev [H]unk" })
+				end, { desc = "Git [H]unk Previous [" })
 
-				map("n", "<leader>gb", gs.blame_line, { desc = "[G]it [B]lame Line" })
+				-- Actions
+				map("n", "<leader>hs", gitsigns.stage_hunk, { desc = "Git [H]unk [S]tage" })
+				map("n", "<leader>hr", gitsigns.reset_hunk, { desc = "Git [H]unk [R]eset" })
+
+				map("v", "<leader>hs", function()
+					gitsigns.stage_hunk({ vim.fn.line("."), vim.fn.line("v") })
+				end, { desc = "Git [H]unk [S]tage" })
+
+				map("v", "<leader>hr", function()
+					gitsigns.reset_hunk({ vim.fn.line("."), vim.fn.line("v") })
+				end, { desc = "Git [H]unk [R]eset" })
+
+				map("n", "<leader>hS", gitsigns.stage_buffer, { desc = "Git [H]unk [S]tage all" })
+				map("n", "<leader>hR", gitsigns.reset_buffer, { desc = "Git [H]unk [R]eset all" })
+				map("n", "<leader>hp", gitsigns.preview_hunk, { desc = "Git [H]unk [P]review" })
+				map("n", "<leader>hi", gitsigns.preview_hunk_inline, { desc = "Git [H]unk Preview [I]nline" })
+				map("n", "<leader>gb", gitsigns.blame_line, { desc = "[G]it [B]lame Line" })
+
+				-- Text object
+				map({ "o", "x" }, "ih", gitsigns.select_hunk)
 			end,
 		})
 	end,
