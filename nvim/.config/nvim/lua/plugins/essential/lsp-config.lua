@@ -74,6 +74,7 @@ return {
 					},
 				},
 			},
+			julials = {},
 		}
 
 		require("mason").setup()
