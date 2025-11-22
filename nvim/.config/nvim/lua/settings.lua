@@ -23,6 +23,7 @@ vim.opt.signcolumn = "yes" -- Keep signcolumn on
 vim.opt.scrolloff = 10 -- Minimal number of screen lines to keep above and below the cursor
 vim.opt.termguicolors = true -- Enable 24 bit colors
 vim.g.gitblame_display_virtual_text = 0 -- Disable gitblame virtual text
+vim.opt.showbreak = "↪ " -- Showbreak symbol
 
 -- Indentation
 vim.opt.autoindent = true
