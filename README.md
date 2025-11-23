@@ -1,60 +1,60 @@
 (Only if on ubuntu docker)
-```
+```bash
 apt update -y && apt upgrade -y && apt install -y git
 ```
 Then set up git (also need to add SSH key in GitHub page) and pull repo
-```
+```bash
 ssh-keygen -t ed25519 -C "yiminlllin@gmail.com" -f ~/.ssh/id_ed25519 && cat ~/.ssh/id_ed25519.pub
 cd ~ && git clone git@github.com:yiminllin/dotfiles.git && cd dotfiles && bash ./install.sh
 ```
 Stowing have `--adopt` flag enabled, where `dotfiles/` contents are overwritten with local's contents. We need to manually run `git --reset HARD` to use the most updated change.
 Then
-```
+```bash
 nvim
 :UpdateRemotePlugins
 :checkhealth
 ```
 For the first time starting tmux, use tmuxinator:
-```
+```bash
 tmuxinator start main
 ```
 
 Julia: To install
-```
+```bash
 juliaup add <julia_version>
 julia -e 'using Pkg; Pkg.add("LanguageServer")'
 ```
 
 AIChat: create `aichat/.config/aichat/.env`, where
-```
+```bash
 CLAUDE_API_KEY=...
 ```
 
 OpenCode: run
-```
+```bash
 opencode auth login
 ```
 
 Github-CLI, we need
-```
+```bash
 gh auth login
 ```
 
 Nvim's copilot, after installing the plugin, we need to run
-```
+```bash
 :Copilot setup
 ```
 
 On Fedora, set "Resize Window" as 'Cmd + Shift + \\'
 
 To test locally:
-```
+```bash
 docker run -it -v ~/dotfiles:/root/dotfiles ubuntu bash
 ```
 
 Map CAPS to {ESC, CTRL}:
 On Linux:
-```
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable keyd
 sudo systemctl start keyd
@@ -65,7 +65,7 @@ Download https://karabiner-elements.pqrs.org/, and use the plugin https://ke-com
 
 
 Poll and pull latest changes with:
-```
+```bash
 fish dotfiles_polling.fish& disown
 fish dotfiles_auto_update.fish
 ```
