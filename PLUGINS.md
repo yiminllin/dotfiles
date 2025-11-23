@@ -28,6 +28,7 @@
 | Essential/Core | nvim-web-devicons | File icons | Multiple plugins |
 | Essential/Core | luarocks.nvim | Lua package manager integration | [.lua](nvim/.config/nvim/lua/plugins/essential/luarocks.lua) |
 | Essential/Core | wilder.nvim | Enhanced command/search UI | [.lua](nvim/.config/nvim/lua/plugins/essential/wilder.lua) |
+| Essential/Core | vim-tmux-navigator | Seamless tmux/vim navigation | [.lua](nvim/.config/nvim/lua/plugins/essential/vim-tmux-navigator.lua) |
 | Editing | conform.nvim | Code formatter | [.lua](nvim/.config/nvim/lua/plugins/editing/conform.lua) |
 | Editing | Comment.nvim | Toggle comments | [.lua](nvim/.config/nvim/lua/plugins/editing/comment.lua) |
 | Editing | nvim-autopairs | Auto-close brackets | [.lua](nvim/.config/nvim/lua/plugins/editing/nvim-autopairs.lua) |
