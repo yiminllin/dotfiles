@@ -62,6 +62,7 @@ return {
 			julials = {},
 			rust_analyzer = {},
 			pyright = {},
+			marksman = {},
 		}
 
 		require("mason").setup()
