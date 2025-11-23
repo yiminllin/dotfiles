@@ -154,6 +154,7 @@ CONFIGS=(
     task
     tmux
     tmux-powerline
+    tmuxinator
     visidata
 )
 for config in "${CONFIGS[@]}"; do

@@ -22,6 +22,8 @@ brew "clang-format"
 brew "python@3.12"
 brew "lua"
 brew "luarocks"
+brew "ruby"
+brew "tmuxinator"
 
 # Dependencies
 brew "imagemagick"

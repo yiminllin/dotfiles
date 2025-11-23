@@ -1,0 +1,29 @@
+# Main tmux session configuration
+name: main
+root: ~/
+
+windows:
+  - task:
+      layout: main-vertical
+      panes:
+        - task
+  - cli:
+      layout: main-vertical
+      panes:
+        - 
+  - git:
+      layout: main-vertical
+      panes:
+        - 
+  - nvim:
+      layout: main-vertical
+      panes:
+        - nvim
+  - notebook:
+      layout: main-vertical
+      panes:
+        - 
+  - running:
+      layout: main-vertical
+      panes:
+        - 

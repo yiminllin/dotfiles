@@ -14,6 +14,10 @@ nvim
 :UpdateRemotePlugins
 :checkhealth
 ```
+For the first time starting tmux, use tmuxinator:
+```
+tmuxinator start main
+```
 
 Julia: To install
 ```

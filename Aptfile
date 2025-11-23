@@ -25,6 +25,8 @@ clang-format
 python3.12-venv
 lua5.4
 luarocks
+ruby
+tmuxinator
 
 # Dependencies
 imagemagick         # For image.nvim
