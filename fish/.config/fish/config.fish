@@ -53,18 +53,19 @@ abbr -a td task done
 abbr -a tr task delete
 abbr -a te task edit 
 abbr -a ts --set-cursor 'task description.has:%'
-abbr -a teh "task modify estimate:H"
-abbr -a ted "task modify estimate:D"
-abbr -a tew "task modify estimate:W"
-abbr -a tem "task modify estimate:M"
-abbr -a tph "task modify priority:H"
-abbr -a tpm "task modify priority:M"
-abbr -a tpl "task modify priority:L"
-abbr -a tpn "task modify project:note"
-abbr -a tpi "task modify project:improve"
-abbr -a tpc "task modify project:code"
-abbr -a tpr "task modify project:read"
-abbr -a tps "task modify project:study"
+abbr -a tm task modify
+abbr -a teh --position anywhere "estimate:H"
+abbr -a ted --position anywhere "estimate:D"
+abbr -a tew --position anywhere "estimate:W"
+abbr -a tem --position anywhere "estimate:M"
+abbr -a tph --position anywhere "priority:H"
+abbr -a tpm --position anywhere "priority:M"
+abbr -a tpl --position anywhere "priority:L"
+abbr -a tpn --position anywhere "project:note"
+abbr -a tpi --position anywhere "project:improve"
+abbr -a tpc --position anywhere "project:code"
+abbr -a tpr --position anywhere "project:read"
+abbr -a tps --position anywhere "project:study"
 
 function nvim_help --description "View command help in vim"
     $argv --help 2>&1 | nvim -R -c 'set ft=man' -
