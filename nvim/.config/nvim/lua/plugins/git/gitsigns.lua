@@ -3,6 +3,7 @@ return {
 	"lewis6991/gitsigns.nvim",
 	config = function()
 		require("gitsigns").setup({
+			-- Cannot correctly display line wrapping https://github.com/lewis6991/gitsigns.nvim/discussions/1403
 			signcolumn = true,
 			numhl = true,
 			current_line_blame_opts = {
