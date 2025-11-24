@@ -188,6 +188,13 @@ return {
 			end,
 			desc = "[S]earch [M]arks",
 		},
+		{
+			"<leader>sp",
+			function()
+				Snacks.picker.projects()
+			end,
+			desc = "[S]earch [P]rojects",
+		},
 		-- LSP
 		{
 			"<leader>ss",
