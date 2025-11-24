@@ -67,6 +67,20 @@ abbr -a tpc --position anywhere "project:code"
 abbr -a tpr --position anywhere "project:read"
 abbr -a tps --position anywhere "project:study"
 
+# Git Worktree Helper
+function git_worktree_util --description "Git Worktree Helper"
+    set branch (git branch -r | fzf --prompt="Select Branch > " | string trim | string replace 'origin/' '')
+    if test -n "$branch"
+        set repo (basename (git rev-parse --show-toplevel))
+        set repo_name (string replace -a '.' '-' $repo)
+        set branch_name (string replace -a '/' '-' $branch)
+        set folder_name "$repo_name-$branch_name"
+        echo "Creating worktree for $branch in ../$folder_name"
+        git worktree add "../$folder_name" "$branch"
+    end
+end
+abbr -a gw git_worktree_util
+
 function nvim_help --description "View command help in vim"
     $argv --help 2>&1 | nvim -R -c 'set ft=man' -
 end

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+# min-depth is 1, assuming dumping all repo in ~/
+workspace=$(fd . $HOME --min-depth 1 --max-depth 1 --type d --exclude Library | fzf)
+
+if [[ -z $workspace ]]; then
+    exit 0
+fi
+
+workspace_name=$(basename "$workspace" | tr . _)
+
+if ! tmux has-session -t=$workspace_name 2> /dev/null; then
+    # -d detach when running inside tmux
+    tmux new-session -ds $workspace_name -c $workspace
+
+    # Default tempalte for a workspace
+    tmux rename-window -t $workspace_name:1 'task'
+    tmux send-keys -t $workspace_name:1 'task' C-m
+
+    tmux new-window -t $workspace_name -n 'cli' -c $workspace
+
+    tmux new-window -t $workspace_name -n 'git' -c $workspace
+    tmux send-keys -t $workspace_name:3 'lazygit' C-m
+
+    tmux new-window -t $workspace_name -n 'nvim' -c $workspace
+    tmux send-keys -t $workspace_name:3 'nvim' C-m
+
+    tmux select-window -t $workspace_name:3
+fi
+
+tmux switch-client -t $workspace_name
