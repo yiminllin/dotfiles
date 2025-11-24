@@ -1,25 +1,24 @@
 #!/bin/bash
-# Cycle through left-large, right-large, and equal-size layouts for left/right panes
+# Cycle through layouts for left/right panes
 
-CURRENT_STATE=$(tmux show-window-option -v @pane_layout_state 2>/dev/null || echo "equal")
+# Assume zeroth pane is the leftmost pane
+tmux select-pane -t 0
+window_width=$(tmux display-message -p "#{window_width}")
+pane_width=$(tmux display-message -p "#{pane_width}")
 
-case "$CURRENT_STATE" in
-  "equal")
-    # Left large
-    tmux select-pane -L
-    tmux resize-pane -R 30
-    tmux set-window-option @pane_layout_state "left-large"
-    ;;
-  "left-large")
-    # Right large
-    tmux select-pane -L
-    tmux resize-pane -L 60
-    tmux set-window-option @pane_layout_state "right-large"
-    ;;
-  "right-large")
-    # Back to equal
-    tmux select-pane -L
-    tmux resize-pane -R 30
-    tmux set-window-option @pane_layout_state "equal"
-    ;;
-esac
+# Categorize the window width as
+#     w0  w1  w2
+# |   |   |   |   |
+w0=$(( window_width / 4 ))
+w1=$(( window_width / 2 ))
+w2=$(( 3 * window_width / 4 ))
+pane_center_distance=$(( pane_width - w1 ))
+pane_center_abs_distance=${pane_center_distance#-}  # Absoluate value by str manipulation
+
+if (( pane_center_abs_distance <= 1 )); then
+  tmux resize-pane -x $w2
+elif (( $pane_width <= $w1 )); then
+  tmux resize-pane -x $w1
+else
+  tmux resize-pane -x $w0
+fi
