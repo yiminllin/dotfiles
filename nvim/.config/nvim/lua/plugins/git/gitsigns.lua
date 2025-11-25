@@ -54,6 +54,7 @@ return {
 				map("n", "<leader>hp", gitsigns.preview_hunk, { desc = "Git [H]unk [P]review" })
 				map("n", "<leader>hi", gitsigns.preview_hunk_inline, { desc = "Git [H]unk Preview [I]nline" })
 				map("n", "<leader>gb", gitsigns.blame_line, { desc = "[G]it [B]lame Line" })
+				map("n", "<leader>gB", gitsigns.blame_line, { desc = "[G]it [B]lame All" })
 
 				-- Text object
 				map({ "o", "x" }, "ih", gitsigns.select_hunk)
