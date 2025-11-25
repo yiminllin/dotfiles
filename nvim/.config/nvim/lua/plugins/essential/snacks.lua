@@ -202,6 +202,11 @@ return {
 			end,
 			desc = "[S]earch [P]rojects",
 		},
+		{
+			"<leader>sd",
+			"<cmd>Debugprint search<CR>",
+			desc = "[S]earch [D]ebugprint",
+		},
 		-- LSP
 		{
 			"<leader>ss",
