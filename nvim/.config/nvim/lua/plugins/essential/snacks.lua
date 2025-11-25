@@ -182,6 +182,13 @@ return {
 			desc = "Git Status",
 		},
 		{
+			"<leader>gp",
+			function()
+				Snacks.picker.gh_pr()
+			end,
+			desc = "[G]it [P]R",
+		},
+		{
 			"<leader>sm",
 			function()
 				Snacks.picker.marks()
