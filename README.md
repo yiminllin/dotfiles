@@ -64,8 +64,24 @@ On MacOS:
 Download https://karabiner-elements.pqrs.org/, and use the plugin https://ke-complex-modifications.pqrs.org/?q=caps#tap4caps_hold4ctrl.
 
 
-Poll and pull latest changes with:
+## Auto-Update
+
+### Background Auto-Update (Dotfiles + Plugins)
+Automatically checks for dotfiles updates every 30 minutes and updates Neovim/Fish/Tmux plugins:
 ```bash
-fish dotfiles_polling.fish& disown
-fish dotfiles_auto_update.fish
+fish ~/dotfiles/scripts/dotfiles_polling.fish & disown
 ```
+
+### Manual Dotfiles Update
+Pull latest dotfiles and update plugins:
+```bash
+fish ~/dotfiles/scripts/dotfiles_auto_update.fish
+```
+
+### Manual System Update
+Update OS packages, Cargo tools, UV tools, Node, and OpenCode:
+```bash
+fish ~/dotfiles/scripts/system_update.fish
+```
+
+**Note:** Auto-update aborts on merge conflicts and requires manual resolution.

@@ -1,22 +1,18 @@
-################################################################################
-# Dotfiles polling
-################################################################################
+#!/usr/bin/env fish
+
 function dotfiles_check_update --description "Check if dotfiles has updates"
     cd ~/dotfiles
-    git fetch
+    git fetch >/dev/null 2>&1
     set branch (git rev-parse --abbrev-ref HEAD)
     if not git diff --quiet HEAD origin/$branch
-        echo "Dotfiles update available! Run `fish ~/dotfiles/dotfiles_auto_update.fish` to sync."
+        fish ~/dotfiles/scripts/dotfiles_auto_update.fish
     end
     cd -
 end
 
-# Background polling function 
 function dotfiles_auto_poll --description "Poll dotfiles repo every 30 minutes"
-    echo "Poll dotfiles repo every 30 minutes"
     set lockfile /tmp/dotfiles_auto_poll.lock
     if test -e $lockfile
-        echo "/tmp/dotfiles_auto_poll.lock exists!"
         return
     end
     touch $lockfile
@@ -27,5 +23,3 @@ function dotfiles_auto_poll --description "Poll dotfiles repo every 30 minutes"
     end
     rm -f $lockfile
 end
-
-dotfiles_auto_poll
