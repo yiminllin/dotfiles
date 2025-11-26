@@ -25,6 +25,18 @@ vim.keymap.set("n", "<C-S-right>", "<c-w>5>")
 vim.keymap.set("n", "<C-S-up>", "<C-W>+")
 vim.keymap.set("n", "<C-S-down>", "<C-W>-")
 
--- Use Alt+<jk> to go through quickfix list
-vim.keymap.set("n", "<M-j>", "<cmd>cnext<CR>")
-vim.keymap.set("n", "<M-k>", "<cmd>cprev<CR>")
+-- Use Alt+<jk> to go through loclist if exists, or quickfix list
+local function nav_loc_or_qf_list(direction)
+	local loclist = vim.fn.getloclist(0, { size = 0 })
+	if loclist.size > 0 then
+		pcall(vim.cmd, direction == "next" and "lnext" or "lprev")
+	else
+		pcall(vim.cmd, direction == "next" and "cnext" or "cprev")
+	end
+end
+vim.keymap.set("n", "<M-j>", function()
+	nav_loc_or_qf_list("next")
+end)
+vim.keymap.set("n", "<M-k>", function()
+	nav_loc_or_qf_list("prev")
+end)
