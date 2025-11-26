@@ -127,7 +127,8 @@ return {
 		{
 			"<leader>sf",
 			function()
-				Snacks.picker.files()
+				local curr_dir_name = vim.fn.fnamemodify(vim.fn.getcwd(), ":t")
+				Snacks.picker.files({ hidden = (curr_dir_name == "dotfiles") })
 			end,
 			desc = "[S]earch [F]iles",
 		},
