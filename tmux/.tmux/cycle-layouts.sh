@@ -9,9 +9,9 @@ pane_width=$(tmux display-message -p "#{pane_width}")
 # Categorize the window width as
 #     w0  w1  w2
 # |   |   |   |   |
-w0=$(( window_width / 4 ))
-w1=$(( window_width / 2 ))
-w2=$(( 3 * window_width / 4 ))
+w0=$(( 3*window_width / 10 ))
+w1=$(( 5*window_width / 10 ))
+w2=$(( 7*window_width / 10 ))
 pane_center_distance=$(( pane_width - w1 ))
 pane_center_abs_distance=${pane_center_distance#-}  # Absoluate value by str manipulation
 
