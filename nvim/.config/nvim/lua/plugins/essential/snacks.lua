@@ -178,6 +178,13 @@ return {
 			desc = "[S]earch [N]eovim Config File",
 		},
 		{
+			"<leader>st",
+			function()
+				Snacks.picker.todo_comments({ keywords = { "TODO" } })
+			end,
+			desc = "[S]earch [T]ODO Comments",
+		},
+		{
 			"<leader><leader>",
 			function()
 				Snacks.picker.git_status()
