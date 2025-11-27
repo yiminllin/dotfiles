@@ -1,0 +1,3 @@
+#!/bin/bash
+
+opencode run "Based on dotfiles/nvim/.config/nvim/lua/plugins/, dotfiles/tmux/.tmux.conf dotfiles/fish/.config/fish/config.fish, dotfiles/install.sh, can you update the documentation file PLUGINS.md?" --agent builder
