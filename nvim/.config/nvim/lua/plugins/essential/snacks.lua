@@ -159,7 +159,8 @@ return {
 		{
 			"<leader>e",
 			function()
-				Snacks.explorer()
+				local curr_dir_name = vim.fn.fnamemodify(vim.fn.getcwd(), ":t")
+				Snacks.picker.explorer({ hidden = (curr_dir_name == "dotfiles") })
 			end,
 			desc = "File [E]xplorer",
 		},
