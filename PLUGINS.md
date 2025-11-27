@@ -50,7 +50,7 @@
 | UI/Visual | zen-mode.nvim | Distraction-free mode | [zenmode.lua](nvim/.config/nvim/lua/plugins/ui/zenmode.lua) |
 | Languages | markview.nvim | Markdown preview | [markview.lua](nvim/.config/nvim/lua/plugins/languages/markview.lua) |
 | Languages | bazel.nvim | Bazel build system support | [bazel.lua](nvim/.config/nvim/lua/plugins/languages/bazel.lua) |
-| AI/Coding | opencode.nvim | AI code assistant integration | [opencode.lua](nvim/.config/nvim/lua/plugins/ai/opencode.lua) |
+| AI | opencode.nvim | AI code assistant integration | [opencode.lua](nvim/.config/nvim/lua/plugins/ai/opencode.lua) |
 | Misc | telekasten.nvim | Zettelkasten note-taking | [telekasten.lua](nvim/.config/nvim/lua/plugins/misc/telekasten.lua) |
 | Misc | leetcode.nvim | LeetCode integration | [leetcode.lua](nvim/.config/nvim/lua/plugins/misc/leetcode.lua) |
 
@@ -129,14 +129,17 @@
 | Julia | julials | Julia language server |
 | Rust | rust_analyzer | Rust language server |
 | Python | pyright | Python language server |
+| Markdown | marksman | Markdown language server |
 
 ### Formatters & Linters
 | Tool | Purpose | Install Method |
 |------|---------|----------------|
 | stylua | Lua formatter | Via Mason |
-| clang-format | C/C++ formatter | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
-| black | Python formatter | [Uvfile](Uvfile) |
-| isort | Python import sorter | [Uvfile](Uvfile) |
+| clang-format | C/C++ formatter | Via Mason, [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
+| black | Python formatter | Via Mason, [Uvfile](Uvfile) |
+| isort | Python import sorter | Via Mason, [Uvfile](Uvfile) |
+| rustfmt | Rust formatter | Via Mason |
+| prettier | Multi-language formatter | Via Mason |
 
 ### Build Tools & Compilers
 | Tool | Purpose | Install Method |
