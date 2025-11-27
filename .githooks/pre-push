@@ -1,4 +1,4 @@
 #!/bin/bash
 
 opencode run "Based on dotfiles/nvim/.config/nvim/lua/plugins/, dotfiles/tmux/.tmux.conf dotfiles/fish/.config/fish/config.fish, dotfiles/install.sh, can you update the documentation file PLUGINS.md? If there are no changes, don't update anything, keep the change as minimal as possible." --agent builder
-git add ~/dotfiles/PLUGINS.md && git commit -m "Auto Update - PLUGINS.md"
+git add ~/dotfiles/PLUGINS.md && git commit -m "Auto Update - PLUGINS.md" --allow-empty
