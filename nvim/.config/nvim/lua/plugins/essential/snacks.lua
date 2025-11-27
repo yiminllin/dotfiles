@@ -135,7 +135,8 @@ return {
 		{
 			"<leader>sw",
 			function()
-				Snacks.picker.grep_word()
+				local curr_dir_name = vim.fn.fnamemodify(vim.fn.getcwd(), ":t")
+				Snacks.picker.grep_word({ hidden = (curr_dir_name == "dotfiles") })
 			end,
 			desc = "[S]earch current [W]ord",
 			mode = { "n", "x" },
@@ -150,7 +151,8 @@ return {
 		{
 			"<leader>sg",
 			function()
-				Snacks.picker.grep()
+				local curr_dir_name = vim.fn.fnamemodify(vim.fn.getcwd(), ":t")
+				Snacks.picker.grep({ hidden = (curr_dir_name == "dotfiles") })
 			end,
 			desc = "[S]earch by [G]rep",
 		},
