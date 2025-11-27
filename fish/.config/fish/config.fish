@@ -68,7 +68,7 @@ abbr -a tpr --position anywhere "project:read"
 abbr -a tps --position anywhere "project:study"
 
 # Git Worktree Helper
-function git_worktree_util --description "Git Worktree Helper"
+function git_worktree_add --description "Interactive Adding Git Worktree"
     set branch (git branch -r | fzf --prompt="Select Branch > " | string trim | string replace 'origin/' '')
     if test -n "$branch"
         set repo (basename (git rev-parse --show-toplevel))
@@ -79,7 +79,16 @@ function git_worktree_util --description "Git Worktree Helper"
         git worktree add "../$folder_name" "$branch"
     end
 end
-abbr -a gw git_worktree_util
+abbr -a gwa git_worktree_add
+
+function git_worktree_remove --description "Interactive Removing Git Worktree"
+    set worktree_out (git worktree list | fzf --prompt="Select Worktree to Remove > ")
+    if test -n "$worktree_out"
+        set worktree_path (echo "$worktree_out" | awk '{print $1}')
+        git worktree remove "$worktree_path"
+    end
+end
+abbr -a gwr git_worktree_remove
 
 function nvim_help --description "View command help in vim"
     $argv --help 2>&1 | nvim -R -c 'set ft=man' -
