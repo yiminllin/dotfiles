@@ -21,5 +21,6 @@ return {
 				variable_above = "<leader>dV",
 			},
 		},
+		print_tag = "===== DEBUG =====",
 	},
 }
