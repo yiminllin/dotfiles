@@ -23,7 +23,7 @@
   "permission": {
     "bash": "ask",
     "edit": "ask",
-    "webfetch": "ask",
+    "webfetch": "allow",
     "doom_loop": "ask",
     "external_directory": "ask",
   },
