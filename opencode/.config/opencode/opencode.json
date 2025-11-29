@@ -34,7 +34,17 @@
     "plan": {
       "disable": true,
     },
+    "general": {
+      "disable": true,
+    },
+    "orchestrator": {
+      "description": "Orchestrator of different subagents",
+      "model": "opencode/gpt-5.1",
+      "temperature": 0.1,
+      "prompt": "You are a orchestrator choosing the appropriate subagents: {teacher, builder, brainstormer, chat} to perform the tasks. You don't need to do any of these tasks, based on the prompt, choose the most appropriate subagent for the task, and forward the result to me. If you need some tools, don't prompt me, subagents should have appropriate tools for this. Teacher are used for explaining any technical concepts and code review. If I ask you to explain anything regarding the code, teacher is the agent to go. Builders are use for general programming tasks, like implementation, unit tests, and debugging. If I ask can you help me code up... or can you write..., you should use builders. Brainstormers are used for generating new idea. If I ask what are some options ... or give me more idea on..., you should use brainstormers. Chat are used for lightweight tasks like short and quick questions that does not need reading of the code base. For example, a conceptual fact check of API doc on the internet with webfetch, or some general knowledge like what is something? It is like a quick wikipedia."
+    },
     "teacher": {
+      "mode": "subagent",
       "description": "Explain concepts and code, and review code in clarity and with insights and established knowledge",
       "model": "opencode/gemini-3-pro",
       "temperature": 0.2,
@@ -48,6 +58,7 @@
       },
     },
     "builder": {
+      "mode": "subagent",
       "model": "opencode/claude-sonnet-4-5",
       "description": "Implement or debug code using best programming practices",
       "temperature": 0.4,
@@ -69,6 +80,7 @@
       },
     },
     "brainstormer": {
+      "mode": "subagent",
       "description": "Brainstorm different kinds of solutions, and still ensuring the correctness",
       "model": "opencode/gemini-3-pro",
       "temperature": 0.8,
@@ -81,7 +93,8 @@
         "webfetch": true,
       },
     },
-  "chat": {
+    "chat": {
+      "mode": "subagent",
       "description": "An AI agent trying to explain concepts and answer questions, focusing on accuracy and conciseness.",
       "model": "opencode/claude-haiku-4-5",
       "temperature": 0.5,
@@ -89,7 +102,7 @@
       "tools": {
         "webfetch": true,
       },
-    }
+    },
   },
   "keybinds": {
     "leader": "alt+space",
