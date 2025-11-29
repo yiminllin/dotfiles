@@ -14,6 +14,7 @@ return {
 				input = {
 					keys = {
 						["<a-c>"] = { "cycle_preview", mode = { "i", "n" } },
+						["<a-t>"] = { "focus_preview", mode = { "i", "n" } },
 					},
 				},
 			},
