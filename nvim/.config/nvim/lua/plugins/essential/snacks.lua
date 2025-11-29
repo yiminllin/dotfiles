@@ -10,7 +10,13 @@ return {
 		-- Picker
 		picker = {
 			enabled = true,
-			win = { input = { keys = { ["<a-c>"] = { "cycle_preview", mode = { "i", "n" } } } } },
+			win = {
+				input = {
+					keys = {
+						["<a-c>"] = { "cycle_preview", mode = { "i", "n" } },
+					},
+				},
+			},
 			-- From https://github.com/folke/snacks.nvim/discussions/458
 			actions = {
 				cycle_preview = function(picker)
