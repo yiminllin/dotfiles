@@ -2,7 +2,7 @@ return {
 	"folke/snacks.nvim",
 	priority = 1000,
 	lazy = false,
-	---@type snacks.Config
+	--@type snacks.Config
 	opts = {
 		---------------
 		-- Essential --
@@ -116,21 +116,10 @@ return {
 			},
 		},
 	},
+	-- stylua: ignore start
 	keys = {
-		{
-			"<leader>sh",
-			function()
-				Snacks.picker.help()
-			end,
-			desc = "[S]earch [H]elp",
-		},
-		{
-			"<leader>sk",
-			function()
-				Snacks.picker.keymaps()
-			end,
-			desc = "[S]earch [K]eymaps",
-		},
+		{ "<leader>sh", function() Snacks.picker.help() end, desc = "[S]earch [H]elp" },
+		{ "<leader>sk", function() Snacks.picker.keymaps() end, desc = "[S]earch [K]eymaps" },
 		{
 			"<leader>sf",
 			function()
@@ -148,13 +137,7 @@ return {
 			desc = "[S]earch current [W]ord",
 			mode = { "n", "x" },
 		},
-		{
-			"<leader>sb",
-			function()
-				Snacks.picker.buffers()
-			end,
-			desc = "[S]earch Open [B]uffers",
-		},
+		{ "<leader>sb", function() Snacks.picker.buffers() end, desc = "[S]earch Open [B]uffers" },
 		{
 			"<leader>sg",
 			function()
@@ -171,13 +154,7 @@ return {
 			end,
 			desc = "File [E]xplorer",
 		},
-		{
-			"<leader>/",
-			function()
-				Snacks.picker.lines()
-			end,
-			desc = "[/] Fuzzily search in current buffer",
-		},
+		{ "<leader>/", function() Snacks.picker.lines() end, desc = "[/] Fuzzily search in current buffer" },
 		{
 			"<leader>sc",
 			function()
@@ -185,117 +162,23 @@ return {
 			end,
 			desc = "[S]earch Neovim [C]onfig File",
 		},
-		{
-			"<leader>sn",
-			function()
-				Snacks.picker.notifications()
-			end,
-			desc = "[S]earch [N]otification",
-		},
-		{
-			"<leader>st",
-			function()
-				Snacks.picker.todo_comments({ keywords = { "TODO" } })
-			end,
-			desc = "[S]earch [T]ODO Comments",
-		},
-		{
-			"<leader><leader>",
-			function()
-				Snacks.picker.git_status()
-			end,
-			desc = "Git Status",
-		},
-		{
-			"<leader>gp",
-			function()
-				Snacks.picker.gh_pr()
-			end,
-			desc = "[G]it [P]R",
-		},
-		{
-			"<leader>sm",
-			function()
-				Snacks.picker.marks()
-			end,
-			desc = "[S]earch [M]arks",
-		},
-		{
-			"<leader>sp",
-			function()
-				Snacks.picker.projects()
-			end,
-			desc = "[S]earch [P]rojects",
-		},
-		{
-			"<leader>sd",
-			"<cmd>Debugprint search<CR>",
-			desc = "[S]earch [D]ebugprint",
-		},
+		{ "<leader>sn", function() Snacks.picker.notifications() end, desc = "[S]earch [N]otification" },
+		{ "<leader>st", function() Snacks.picker.todo_comments({ keywords = { "TODO" } }) end, desc = "[S]earch [T]ODO Comments" },
+		{ "<leader><leader>", function() Snacks.picker.git_status() end, desc = "Git Status" },
+		{ "<leader>gp", function() Snacks.picker.gh_pr() end, desc = "[G]it [P]R" },
+		{ "<leader>sm", function() Snacks.picker.marks() end, desc = "[S]earch [M]arks" },
+		{ "<leader>sp", function() Snacks.picker.projects() end, desc = "[S]earch [P]rojects" },
+		{ "<leader>sd", "<cmd>Debugprint search<CR>", desc = "[S]earch [D]ebugprint", },
 		-- LSP
-		{
-			"<leader>ss",
-			function()
-				Snacks.picker.lsp_symbols()
-			end,
-			desc = "[S]earch LSP [S]ymbols",
-		},
-		{
-			"<leader>sS",
-			function()
-				Snacks.picker.lsp_workspace_symbols()
-			end,
-			desc = "[S]earch LSP Workspace [S]ymbols",
-		},
-		{
-			"gd",
-			function()
-				Snacks.picker.lsp_definitions()
-			end,
-			desc = "[G]oto [D]efinition",
-		},
-		{
-			"gD",
-			function()
-				Snacks.picker.lsp_declarations()
-			end,
-			desc = "[G]oto [D]eclaration",
-		},
-		{
-			"gr",
-			function()
-				Snacks.picker.lsp_references()
-			end,
-			nowait = true,
-			desc = "[G]oto [R]eferences",
-		},
-		{
-			"gI",
-			function()
-				Snacks.picker.lsp_implementations()
-			end,
-			desc = "[G]oto [I]mplementation",
-		},
-		{
-			"gt",
-			function()
-				Snacks.picker.lsp_type_definitions()
-			end,
-			desc = "[G]oto [T]ype Definition",
-		},
-		{
-			"gai",
-			function()
-				Snacks.picker.lsp_incoming_calls()
-			end,
-			desc = "[G]oto C[a]lls [I]ncoming",
-		},
-		{
-			"gao",
-			function()
-				Snacks.picker.lsp_outgoing_calls()
-			end,
-			desc = "[G]oto C[a]lls [O]utgoing",
-		},
+		{ "<leader>ss", function() Snacks.picker.lsp_symbols() end, desc = "[S]earch LSP [S]ymbols" },
+		{ "<leader>sS", function() Snacks.picker.lsp_workspace_symbols() end, desc = "[S]earch LSP Workspace [S]ymbols" },
+		{ "gd", function() Snacks.picker.lsp_definitions() end, desc = "[G]oto [D]efinition" },
+		{ "gD", function() Snacks.picker.lsp_declarations() end, desc = "[G]oto [D]eclaration" },
+		{ "gr", function() Snacks.picker.lsp_references() end, nowait = true, desc = "[G]oto [R]eferences" },
+		{ "gI", function() Snacks.picker.lsp_implementations() end, desc = "[G]oto [I]mplementation" },
+		{ "gt", function() Snacks.picker.lsp_type_definitions() end, desc = "[G]oto [T]ype Definition" },
+		{ "gai", function() Snacks.picker.lsp_incoming_calls() end, desc = "[G]oto C[a]lls [I]ncoming" },
+		{ "gao", function() Snacks.picker.lsp_outgoing_calls() end, desc = "[G]oto C[a]lls [O]utgoing" },
 	},
+	-- stylua: ignore start
 }
