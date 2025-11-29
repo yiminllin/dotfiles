@@ -1,6 +1,8 @@
 #!/bin/bash
 # Cycle through layouts for left/right panes
 
+original_pane_index=$(tmux display-message -p "#{pane_index}")
+
 # Assume zeroth pane is the leftmost pane
 tmux select-pane -t 0
 window_width=$(tmux display-message -p "#{window_width}")
@@ -22,3 +24,5 @@ elif (( $pane_width <= $w1 )); then
 else
   tmux resize-pane -x $w0
 fi
+
+tmux select-pane -t $original_pane_index
