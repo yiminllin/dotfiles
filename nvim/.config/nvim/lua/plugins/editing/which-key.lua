@@ -5,11 +5,24 @@ return {
 	config = function()
 		require("which-key").setup()
 
+		local wk = require("which-key")
 		-- Document existing key chains
-		require("which-key").register({
-			["<leader>s"] = { name = "[S]earch", _ = "which_key_ignore" },
-			["<leader>g"] = { name = "[G]it", _ = "which_key_ignore" },
-			["<leader>gy"] = { name = "[G]itlink [Y]ank", _ = "which_key_ignore" },
+		wk.add({
+			{ "<leader>c", group = "Open[C]ode AI assistant" },
+			{ "<leader>d", group = "[D]ebugPrint" },
+			{ "<leader>ds", group = "[D]ebugPrint [S]urround" },
+			{ "<leader>g", group = "[G]it" },
+			{ "<leader>gy", group = "[G]it [Y]ank" },
+			{ "<leader>gd", group = "[G]it [D]iff" },
+			{ "<leader>gl", group = "[G]it [L]ink" },
+			{ "<leader>h", group = "Git [H]unk" },
+			{ "<leader>l", group = "[L]oad" },
+			{ "<leader>m", group = "[M]arkview" },
+			{ "<leader>o", group = "[O]il / [O]pen" },
+			{ "<leader>s", group = "[S]earch" },
+			{ "<leader>t", group = "[T]rouble" },
+			{ "<leader>v", group = "[V]enn / Diagram" },
+			{ "<leader>z", group = "[Z]ettlekasten / [Z]en" },
 		})
 	end,
 }
