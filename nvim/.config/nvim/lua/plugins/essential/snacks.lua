@@ -178,11 +178,18 @@ return {
 			desc = "[/] Fuzzily search in current buffer",
 		},
 		{
-			"<leader>sn",
+			"<leader>sc",
 			function()
 				Snacks.picker.files({ cwd = vim.fn.stdpath("config") })
 			end,
-			desc = "[S]earch [N]eovim Config File",
+			desc = "[S]earch Neovim [C]onfig File",
+		},
+		{
+			"<leader>sn",
+			function()
+				Snacks.picker.notifications()
+			end,
+			desc = "[S]earch [N]otification",
 		},
 		{
 			"<leader>st",
