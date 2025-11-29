@@ -2,6 +2,7 @@ return {
 	"andrewferrier/debugprint.nvim",
 	dependencies = {
 		"folke/snacks.nvim",
+		"nvim-mini/mini.hipatterns",
 	},
 	lazy = false, -- Required to make line highlighting work before debugprint is first used
 	opts = {
