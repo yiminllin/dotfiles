@@ -15,10 +15,10 @@ return {
 		require("gruvbox").setup({
 			contrast = "hard",
 			overrides = {
-				DiffDelete = { bg = "#f9a89d" },
-				DiffAdd = { bg = "#cecb94" },
-				DiffChange = { bg = "#e6e9c1" },
-				DiffText = { bg = "#a9c4b5", fg = "#323024", bold = true },
+				DiffDelete = { bg = "#f4c2a2" },
+				DiffAdd = { bg = "#e6e9c1" },
+				DiffChange = { bg = "#cecba1" },
+				DiffText = { bg = "#c5e0dc", fg = "#323024", bold = true },
 			},
 		})
 		vim.o.background = "light"
