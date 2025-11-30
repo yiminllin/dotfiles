@@ -7,7 +7,7 @@ return {
 	},
 	opts = {
 		storage = {
-			home = "/home/yiminlin/interviews/leetcode",
+			home = "~/interviews/leetcode",
 		},
 	},
 }
