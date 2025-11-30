@@ -11,7 +11,7 @@ return {
 			{ "<leader>c", group = "Open[C]ode AI assistant" },
 			{ "<leader>d", group = "[D]ebugPrint" },
 			{ "<leader>ds", group = "[D]ebugPrint [S]urround" },
-			{ "<leader>g", group = "[G]it" },
+			{ "<leader>g", group = "[G]it / [G]odbolt" },
 			{ "<leader>gy", group = "[G]it [Y]ank" },
 			{ "<leader>gd", group = "[G]it [D]iff" },
 			{ "<leader>gl", group = "[G]it [L]ink" },
