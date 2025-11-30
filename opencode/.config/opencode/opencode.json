@@ -103,6 +103,16 @@
         "webfetch": true,
       },
     },
+    "dotfile-documenter": {
+      "mode": "subagent",
+      "description": "A lightweight AI agent try to update the PLUGINS.md in dotfiles/",
+      "model": "opencode/claude-haiku-4-5",
+      "temperature": 0.5,
+      "prompt": "You are an AI agent whose only purpose is to update dotfiles/PLUGINS.md. You will look at the file changes comparing to the main branch on remote, based on dotfiles/nvim/.config/nvim/lua/plugins/, dotfiles/tmux/.tmux.conf dotfiles/fish/.config/fish/config.fish, dotfiles/install.sh, if there is any additional or removal of plugins in these files, update the PLUGINS.md following the format already existed. If there are no changes, don't update anything, keep the change as minimal as possible.",
+      "tools": {
+        "webfetch": true,
+      },
+    },
   },
   "keybinds": {
     "leader": "alt+space",
