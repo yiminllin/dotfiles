@@ -8,9 +8,16 @@ include ~/.task/themes/solarized-256.theme
 news.version=3.4.1
 
 report.list.sort = urgency+
-report.list.columns = id,priority,estimate,project,description.count,urgency
-report.list.labels = ID,P,E,Project,Description,Urg
+report.list.columns = id,priority,estimate,blocked,project,description.count,urgency
+report.list.labels = ID,P,E,B,Project,Description,Urg
 
+# Urgency of projects
+urgency.uda.project.improve.coefficient = 5.0
+urgency.uda.project.code.coefficient = 3.0
+urgency.uda.project.W.coefficient = 0.5
+urgency.uda.project.M.coefficient = 0.1
+
+# UDA: Estimate
 uda.estimate.type = string
 uda.estimate.label = Est
 uda.estimate.values = H,D,W,M
@@ -20,3 +27,11 @@ urgency.uda.estimate.H.coefficient = 5.0
 urgency.uda.estimate.D.coefficient = 2.0
 urgency.uda.estimate.W.coefficient = 0.5
 urgency.uda.estimate.M.coefficient = 0.1
+
+# UDA: Blocked
+uda.blocked.type = string
+uda.blocked.label = BLOCKED
+uda.blocked.values = T
+
+# Blocked task is on the bottom of the priority list
+urgency.uda.blocked.T.coefficient = -100.0

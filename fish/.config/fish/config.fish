@@ -48,6 +48,7 @@ abbr -a ai "aichat --role concise-bot"
 # Task
 abbr -a t task
 abbr -a t0 task project: or estimate: or priority: list
+abbr -a tb task blocked:T
 abbr -a ta --set-cursor 'task add "%"'
 abbr -a td task done
 abbr -a tr task delete
@@ -63,9 +64,10 @@ abbr -a tpm --position anywhere "priority:M"
 abbr -a tpl --position anywhere "priority:L"
 abbr -a tpn --position anywhere "project:note"
 abbr -a tpi --position anywhere "project:improve"
+abbr -a tpo --position anywhere "project:opensource"
 abbr -a tpc --position anywhere "project:code"
 abbr -a tpr --position anywhere "project:read"
-abbr -a tps --position anywhere "project:study"
+abbr -a tbt --position anywhere "blocked:T"
 
 # Git Worktree Helper
 function git_worktree_add --description "Interactive Adding Git Worktree"
