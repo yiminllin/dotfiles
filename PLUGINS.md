@@ -52,7 +52,6 @@
 | Languages | markview.nvim | Markdown preview | [markview.lua](nvim/.config/nvim/lua/plugins/languages/markview.lua) |
 | Languages | bazel.nvim | Bazel build system support | [bazel.lua](nvim/.config/nvim/lua/plugins/languages/bazel.lua) |
 | AI | opencode.nvim | AI code assistant integration | [opencode.lua](nvim/.config/nvim/lua/plugins/ai/opencode.lua) |
-| Misc | telekasten.nvim | Zettelkasten note-taking | [telekasten.lua](nvim/.config/nvim/lua/plugins/misc/telekasten.lua) |
 | Misc | leetcode.nvim | LeetCode integration | [leetcode.lua](nvim/.config/nvim/lua/plugins/misc/leetcode.lua) |
 
 ---
