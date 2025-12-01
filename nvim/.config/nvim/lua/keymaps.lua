@@ -76,3 +76,23 @@ local function cycle_layout()
 end
 
 vim.keymap.set("n", "<M-c>", cycle_layout, { desc = "Cycle Split Layout" })
+
+-- For Zettlekasten
+vim.keymap.set("n", "<leader>zn", function()
+	local curr_dir = vim.fn.getcwd()
+	if vim.fs.normalize(curr_dir) ~= vim.fs.normalize(vim.fn.expand("~/notes/")) then
+		return
+	end
+	local template_file = vim.fs.joinpath(curr_dir, "template.md")
+	local target_dir = vim.fs.joinpath(curr_dir, "main/")
+	vim.ui.input({ prompt = "New note name (No .md needed): " }, function(note_name)
+		if not note_name or note_name == "" then
+			return
+		end
+		note_name = vim.fn.strftime("%Y-%m-%d-%H-%M-%S-") .. note_name:gsub("[_ ]", "-") .. ".md"
+		local new_note_path = vim.fs.joinpath(target_dir, note_name)
+
+		vim.fn.writefile(vim.fn.readfile(template_file), new_note_path)
+		vim.cmd.edit(new_note_path)
+	end)
+end, { desc = "[Z]ettlekasten [N]ew Note" })
