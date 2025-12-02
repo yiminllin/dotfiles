@@ -17,6 +17,12 @@ On mac, set the bash as the default shell
 chsh -s /bin/bash
 ```
 
+Run
+
+```bash
+chmod -x ~/.tmux/cycle-layouts.sh
+```
+
 Stowing have `--adopt` flag enabled, where `dotfiles/` contents are overwritten with local's contents. We need to manually run `git --reset HARD` to use the most updated change.
 Then
 
