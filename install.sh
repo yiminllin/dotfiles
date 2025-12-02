@@ -46,7 +46,9 @@ fi
 
 echo "Installing Kitty"
 curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin
-ln -sf ~/.local/kitty.app/bin/kitty ~/.local/bin/kitty
+if is_fedora || is_debian; then
+    ln -sf ~/.local/kitty.app/bin/kitty ~/.local/bin/kitty
+fi
 # Setup Fedora desktop entries and fonts
 if is_fedora; then
     mkdir -p ~/.local/share/applications/
@@ -118,7 +120,7 @@ if is_macos; then
     mkdir -p ~/.task/themes/
     # solarized-light does not work on macOS...
     curl -o ~/.task/themes/solarized-256.theme https://raw.githubusercontent.com/GothenburgBitFactory/taskwarrior/develop/doc/rc/solarized-dark-256.theme
-    sed -i '' 's/color.alternate=on color0/color.alternate=/g' ~/.task/themes/solarized-dark-256.theme
+    sed -i '' 's/color.alternate=on color0/color.alternate=/g' ~/.task/themes/solarized-256.theme
 fi
 
 if is_fedora || is_debian; then
@@ -138,8 +140,12 @@ curl -fsSL https://opencode.ai/install | bash
 echo "Stowing configurations"
 
 # Cleanups
-mv ~/.bash_profile ~/.bash_profile.backup
-mv ~/.bashrc ~/.bashrc.backup
+if [ -e ~/.bash_profile ]; then
+    mv ~/.bash_profile ~/.bash_profile.backup
+fi
+if [ -e ~/.bashrc ]; then
+    mv ~/.bashrc ~/.bashrc.backup
+fi
 rm -rf ~/.config/fish
 
 CONFIGS=(
