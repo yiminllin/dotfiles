@@ -11,6 +11,12 @@ ssh-keygen -t ed25519 -C "yiminlllin@gmail.com" -f ~/.ssh/id_ed25519 && cat ~/.s
 cd ~ && git clone git@github.com:yiminllin/dotfiles.git && cd dotfiles && bash ./install.sh
 ```
 
+On mac, set the bash as the default shell
+
+```bash
+chsh -s /bin/bash
+```
+
 Stowing have `--adopt` flag enabled, where `dotfiles/` contents are overwritten with local's contents. We need to manually run `git --reset HARD` to use the most updated change.
 Then
 
