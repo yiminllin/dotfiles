@@ -43,4 +43,4 @@ vim.opt.smartcase = true
 vim.g.copilot_enabled = false
 
 -- Language
-vim.g.python3_host_prog = vim.fn.exepath("python3")
+vim.g.python3_host_prog = "~/.venv/neovim/bin/python3"
