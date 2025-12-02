@@ -40,6 +40,9 @@ fish/.config/fish/*.local
 # FZF generated Fish functions
 fish/.config/fish/functions/_fzf_*.fish
 
+# Tmux plugins
+tmux/.tmux/plugins/
+
 # macOS System Files 
 # macOS Finder metadata
 .DS_Store
