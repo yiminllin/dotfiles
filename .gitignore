@@ -43,6 +43,8 @@ fish/.config/fish/functions/_fzf_*.fish
 fish/.config/fish/functions/fisher.fish
 fish/.config/fish/functions/fzf_configure_bindings.fish
 fish/.config/fish/conf.d/fzf.fish
+fish/.config/fish/completions/fisher.fish
+fish/.config/fish/completions/fzf_configure_bindings.fish
 
 # Tmux plugins
 tmux/.tmux/plugins/
