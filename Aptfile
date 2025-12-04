@@ -1,7 +1,6 @@
 # Essential
 build-essential
 tmux
-neovim
 fish
 curl
 wget
@@ -15,14 +14,12 @@ xclip
 ncdu
 btop
 nvtop
-lazygit
 gh
 taskwarrior
 
 # Languages
 clangd
 clang-format
-python3.12-venv
 lua5.4
 luarocks
 ruby

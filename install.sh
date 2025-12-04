@@ -21,11 +21,20 @@ is_macos() {
     [ "$(uname -s)" = "Darwin" ]
 }
 
+################################################################################
+# Install latest Nvim on Debian
+################################################################################
 if is_debian; then
-    apt-get update
-    apt-get install -y software-properties-common
-    add-apt-repository ppa:lazygit-team/release
-    sed 's/#.*//;/^$/d' Aptfile | xargs apt-get install -y
+	curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
+	sudo rm -rf /opt/nvim-linux-x86_64
+	sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz
+fi
+
+if is_debian; then
+    sudo apt-get update
+    sudo apt-get install -y software-properties-common
+    # sudo add-apt-repository ppa:lazygit-team/release
+    sed 's/#.*//;/^$/d' Aptfile | xargs sudo apt-get install -y
 fi
 
 if is_fedora; then
@@ -46,7 +55,7 @@ fi
 
 echo "Installing Kitty"
 curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin
-if is_fedora || is_debian; then
+if is_macos; then
     ln -sf ~/.local/kitty.app/bin/kitty ~/.local/bin/kitty
 fi
 # Setup Fedora desktop entries and fonts
@@ -180,7 +189,7 @@ fi
 ################################################################################
 # Install Fish Plugins
 ################################################################################
-curl -sL https://git.io/fisher | source && fish -c "fisher install"
+curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source && fisher install jorgebucaran/fisher
 
 ################################################################################
 # Install Tmux Packages
