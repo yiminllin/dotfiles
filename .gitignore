@@ -39,6 +39,9 @@ fish/.config/fish/functions/*.cache
 fish/.config/fish/*.local
 # FZF generated Fish functions
 fish/.config/fish/functions/_fzf_*.fish
+# Fish auto generated functions from installation
+fish/.config/fish/functions/fisher.fish
+fish/.config/fish/functions/fzf_configure_bindings.fish
 
 # Tmux plugins
 tmux/.tmux/plugins/
