@@ -13,7 +13,7 @@ xsel
 xclip
 ncdu
 btop
-nvtop
+# nvtop   # Remove temporarily
 gh
 taskwarrior
 
