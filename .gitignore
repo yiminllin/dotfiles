@@ -42,6 +42,7 @@ fish/.config/fish/functions/_fzf_*.fish
 # Fish auto generated functions from installation
 fish/.config/fish/functions/fisher.fish
 fish/.config/fish/functions/fzf_configure_bindings.fish
+fish/.config/fish/conf.d/fzf.fish
 
 # Tmux plugins
 tmux/.tmux/plugins/
