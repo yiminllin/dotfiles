@@ -48,6 +48,7 @@ function find_all_local_zipline_logs
     echo "https://baraza2.platform.flyzipline.com/log_plots?id=$encoded_log_paths"
 end
 abbr -a ldb_url find_all_local_zipline_logs
+abbr -a ldb "log_data_bridge -i '/home/ubuntu/github/FlightSystems/.starling/**/*.{zml,zst}" -i "/home/ubuntu/github/FlightSystems/.phoenix/logs/latest/**/*.{zml,zst}'"
 
 # Git
 abbr -a gs git status
