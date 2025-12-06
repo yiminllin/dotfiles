@@ -25,7 +25,7 @@ abbr -a rm rm -ir
 # Better CLI tools
 abbr -a v nvim
 abbr -a ls eza -lah --git
-abbr -a cat batcat
+test (uname) = Darwin; and abbr -a cat bat; or abbr -a cat batcat 
 abbr -a du dust
 abbr -a top btop
 
