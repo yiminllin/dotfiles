@@ -27,9 +27,6 @@ Stowing have `--adopt` flag enabled, where `dotfiles/` contents are overwritten 
 Then
 
 ```bash
-uv venv ~/.venv/neovim
-~/.venv/neovim/bin/python3 -m ensurepip --upgrade
-~/.venv/neovim/bin/python3 -m pip install pynvim
 nvim
 :UpdateRemotePlugins
 :checkhealth

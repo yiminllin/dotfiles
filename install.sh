@@ -101,6 +101,13 @@ fnm install --lts
 uv python install
 
 ################################################################################
+# Setup python venv for neovim
+################################################################################
+uv venv ~/.venv/neovim
+~/.venv/neovim/bin/python3 -m ensurepip --upgrade
+~/.venv/neovim/bin/python3 -m pip install pynvim
+
+################################################################################
 # Install Cargo, UV, Luarocks Packages
 ################################################################################
 
