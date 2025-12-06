@@ -33,8 +33,12 @@ fi
 if is_debian; then
     sudo apt-get update
     sudo apt-get install -y software-properties-common
-    # sudo add-apt-repository ppa:lazygit-team/release
     sed 's/#.*//;/^$/d' Aptfile | xargs sudo apt-get install -y
+    # Install Lazygit manually
+    LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | \grep -Po '"tag_name": *"v\K[^"]*')
+    curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"
+    tar xf lazygit.tar.gz lazygit
+    sudo install lazygit -D -t /usr/local/bin/
 fi
 
 if is_fedora; then
