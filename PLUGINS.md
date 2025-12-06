@@ -16,6 +16,8 @@
 | Essential/Core | cmp-nvim-lsp | LSP completion source | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
 | Essential/Core | cmp-path | Path completion source | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
 | Essential/Core | lspkind.nvim | Completion icons | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
+| Essential/Core | mini.hipatterns | Highlight patterns in text | [debugprint.lua](nvim/.config/nvim/lua/plugins/editing/debugprint.lua) |
+| Essential/Core | nui.nvim | UI components library | [leetcode.lua](nvim/.config/nvim/lua/plugins/misc/leetcode.lua) |
 | Essential/Core | nvim-treesitter | Syntax highlighting & parsing | [treesitter.lua](nvim/.config/nvim/lua/plugins/essential/treesitter.lua) |
 | Essential/Core | nvim-treesitter-context | Show code context | [treesitter-context.lua](nvim/.config/nvim/lua/plugins/essential/treesitter-context.lua) |
 | Essential/Core | telescope.nvim | Fuzzy finder | [telescope.lua](nvim/.config/nvim/lua/plugins/essential/telescope.lua) |
