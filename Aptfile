@@ -7,6 +7,7 @@ wget
 stow
 unzip
 tldr
+git-lfs
 
 # Tools
 xsel

@@ -7,6 +7,7 @@ brew "wget"
 brew "stow"
 brew "unzip"
 brew "tldr"
+brew "git-lfs"
 
 # Tools
 brew "ncdu"
