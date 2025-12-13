@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # max-depth is 2, assuming dumping all repo in ~/ and its children
-workspace=$(fd . $HOME --min-depth 1 --max-depth 2 --type d --exclude Library | fzf)
+workspace=$(fd . $HOME / --min-depth 1 --max-depth 2 --type d --exclude Library | fzf)
 
 if [[ -z $workspace ]]; then
     exit 0
