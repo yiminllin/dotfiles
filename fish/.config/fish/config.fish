@@ -55,6 +55,7 @@ abbr -a gs git status
 abbr -a gd git diff
 abbr -a ga git add
 abbr -a gc --set-cursor 'git commit -m "%"'
+abbr -a gca --set-cursor 'git commit --amend'
 abbr -a gp git push
 
 # AIchat
