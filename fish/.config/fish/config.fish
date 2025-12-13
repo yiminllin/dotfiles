@@ -82,6 +82,7 @@ abbr -a tpi --position anywhere "project:improve"
 abbr -a tpo --position anywhere "project:opensource"
 abbr -a tpc --position anywhere "project:code"
 abbr -a tpr --position anywhere "project:read"
+abbr -a tpw --position anywhere "project:work"
 abbr -a tbt --position anywhere "blocked:T"
 
 # Git Worktree Helper
