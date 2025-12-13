@@ -35,9 +35,12 @@ abbr -a .... cd ../../..
 abbr -a vdesk ssh -L 8888:localhost:8888 yilin@yilin.vdesk.cloud.aurora.tech
 abbr -a sb tmux_scrollback_pager
 
-abbr -a devbox TERM=xterm-256color command kitten ssh -L 3030:localhost:3030 yimin_dev
+function to_devbox
+    TERM=xterm-256color command kitten ssh -L 3030:localhost:3030 -i ~/.ssh/id_ed25519_zipline ubuntu@devbox_yimin_lin.int.flyzipline.com $argv
+end
+abbr -a devbox to_devbox
 function to_dev_container_flight_software
-    TERM=xterm-256color ssh -L 3030:localhost:3030 -t yimin_dev 'cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems'
+    to_devbox 'cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems'
 end
 abbr -a fs to_dev_container_flight_software 
 
