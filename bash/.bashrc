@@ -80,6 +80,10 @@ export EDITOR_PATH=$(which nvim)
 export AICHAT_CONFIG_DIR="$HOME/.config/aichat"
 export XDG_CONFIG_HOME="$HOME/.config"
 
+if [ -z "$TMUX" ] && [ "$TERM" = "xterm" ]; then
+    export TERM=xterm-256color
+fi
+
 # Execute fish shell
 if [ -z "$STARTEDFISH" ];
 then
