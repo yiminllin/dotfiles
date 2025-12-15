@@ -128,6 +128,11 @@ abbr -a rexi rexi_string
 # Show hidden files in completion
 set -U fish_complete_hidden 1
 
+# Force true color support for Node.js apps (like cursor-agent) in tmux            
+set -gx FORCE_COLOR 3                                                              
+# Tell apps we have a light background (fixes cursor-agent theme detection in tmux)
+set -gx COLORFGBG "0;15"                                                           
+
 ################################################################################
 # FZF
 ################################################################################
