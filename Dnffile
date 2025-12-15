@@ -1,6 +1,8 @@
 # Essential
 gcc
 gcc-c++
+clang-devel
+llvm-devel
 make
 tmux
 neovim

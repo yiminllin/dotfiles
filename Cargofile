@@ -11,3 +11,4 @@ zoxide        # cd
 # Tool
 aichat
 vivid
+tree-sitter-cli
