@@ -8,6 +8,7 @@ stow
 unzip
 tldr
 git-lfs
+fzf
 
 # Tools
 xsel
