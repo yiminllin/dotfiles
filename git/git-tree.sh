@@ -18,6 +18,7 @@ fi
 # Fetch all PR info in one API call (the main speedup)
 declare -A PR_TITLES
 declare -A PR_STATES
+declare -A PR_CI
 fetch_all_prs() {
     # Fetch all PRs (open, closed, merged) for local branches
     while IFS=$'\t' read -r branch title state; do
@@ -27,6 +28,21 @@ fetch_all_prs() {
             PR_STATES["$branch"]="$state"
         fi
     done < <(gh pr list --state all --limit 500 --json headRefName,title,state --jq '.[] | [.headRefName, .title, .state] | @tsv' 2>/dev/null || true)
+}
+
+# Fetch CI status for open PRs (separate call to avoid timeout)
+fetch_ci_status() {
+    local branch="$1"
+    if [[ -n "${PR_CI[$branch]:-}" ]]; then
+        echo "${PR_CI[$branch]}"
+        return
+    fi
+    
+    local ci_status
+    ci_status=$(gh pr view "$branch" --json statusCheckRollup --jq '[.statusCheckRollup[]? | .conclusion // .state] | if length == 0 then "NONE" elif any(. == "FAILURE") then "FAIL" elif any(. == "PENDING") then "PENDING" elif all(. == "SUCCESS" or . == "SKIPPED" or . == "NEUTRAL" or . == "CANCELLED") then "PASS" else "UNKNOWN" end' 2>/dev/null || echo "NONE")
+    
+    PR_CI["$branch"]="$ci_status"
+    echo "$ci_status"
 }
 
 # Cache for git operations
@@ -172,8 +188,18 @@ main() {
         
         # PR state indicator (yellow=open, green=merged, red=closed)
         local state_indicator="  "  # 2 chars placeholder
+        local ci_indicator=""
         case "$pr_state" in
-            "OPEN")   state_indicator="${YELLOW}◯${RESET} " ;;
+            "OPEN")
+                state_indicator="${YELLOW}◯${RESET} "
+                # Get CI status for open PRs
+                local ci_status=$(fetch_ci_status "$branch")
+                case "$ci_status" in
+                    "PASS")    ci_indicator="${GREEN}✓${RESET}" ;;
+                    "FAIL")    ci_indicator="${RED}✗${RESET}" ;;
+                    "PENDING") ci_indicator="${YELLOW}⋯${RESET}" ;;
+                esac
+                ;;
             "MERGED") state_indicator="${GREEN}✓${RESET} " ;;
             "CLOSED") state_indicator="${RED}✗${RESET} " ;;
         esac
@@ -204,10 +230,16 @@ main() {
             pr_col=" - ${pr_title}"
         fi
         
-        # Print aligned: branch [a|b] <padding> - PR title
-        printf "%s%s%s%s%s %s%s%s\n" \
+        # CI indicator suffix
+        local ci_suffix=""
+        if [ -n "$ci_indicator" ]; then
+            ci_suffix=" ${ci_indicator}"
+        fi
+        
+        # Print aligned: branch [a|b] <padding> - PR title [CI]
+        printf "%s%s%s%s%s %s%s%s%s\n" \
             "$indent" "$state_indicator" "$bold_start" "$branch" "$bold_end" \
-            "$ahead_behind" "$pad" "$pr_col"
+            "$ahead_behind" "$pad" "$pr_col" "$ci_suffix"
         
         # Print children
         for child in "${branches[@]}"; do
