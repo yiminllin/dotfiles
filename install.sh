@@ -25,9 +25,10 @@ is_macos() {
 # Install latest Nvim on Debian
 ################################################################################
 if is_debian; then
-	curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
-	sudo rm -rf /opt/nvim-linux-x86_64
-	sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz
+    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
+    sudo rm -rf /opt/nvim-linux-x86_64
+    sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz
+    rm -rf nvim-linux-x86_64.tar.gz
 fi
 
 if is_debian; then
@@ -39,6 +40,7 @@ if is_debian; then
     curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"
     tar xf lazygit.tar.gz lazygit
     sudo install lazygit -D -t /usr/local/bin/
+    rm -rf lazygit lazygit.tar.gz
 fi
 
 if is_fedora; then
