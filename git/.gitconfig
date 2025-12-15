@@ -20,3 +20,5 @@
     colorMoved = default
 [init]
     defaultBranch = main
+[alias]
+	tree = !~/dotfiles/git/git-tree.sh
