@@ -38,8 +38,9 @@ fetch_ci_status() {
         return
     fi
     
+    # Use timeout to avoid hanging on branches without PRs
     local ci_status
-    ci_status=$(gh pr view "$branch" --json statusCheckRollup --jq '[.statusCheckRollup[]? | .conclusion // .state] | if length == 0 then "NONE" elif any(. == "FAILURE") then "FAIL" elif any(. == "PENDING") then "PENDING" elif all(. == "SUCCESS" or . == "SKIPPED" or . == "NEUTRAL" or . == "CANCELLED") then "PASS" else "UNKNOWN" end' 2>/dev/null || echo "NONE")
+    ci_status=$(timeout 10 gh pr view "$branch" --json statusCheckRollup --jq '[.statusCheckRollup[]? | .conclusion // .state] | if length == 0 then "NONE" elif any(. == "FAILURE") then "FAIL" elif any(. == "PENDING") then "PENDING" elif all(. == "SUCCESS" or . == "SKIPPED" or . == "NEUTRAL" or . == "CANCELLED") then "PASS" else "UNKNOWN" end' 2>/dev/null || echo "NONE")
     
     PR_CI["$branch"]="$ci_status"
     echo "$ci_status"
@@ -76,27 +77,34 @@ get_parent_branch() {
     fi
     
     local best_parent="develop"
-    local best_depth=0
+    local best_distance=999999
     
-    # Check each other branch to see if this branch is based on it
-    for parent in "${all_branches[@]}"; do
-        if [ "$parent" = "$branch" ] || [ "$parent" = "develop" ]; then
+    # Find the closest ancestor branch (fewest commits between them)
+    for candidate in "${all_branches[@]}"; do
+        if [ "$candidate" = "$branch" ] || [ "$candidate" = "develop" ]; then
             continue
         fi
         
-        local parent_tip=$(get_rev "$parent")
-        if [ -z "$parent_tip" ]; then
+        local candidate_tip=$(get_rev "$candidate")
+        if [ -z "$candidate_tip" ]; then
             continue
         fi
         
-        # Check if parent is an ancestor of this branch
-        if git merge-base --is-ancestor "$parent_tip" "$branch_tip" 2>/dev/null; then
-            # Use commit count as depth indicator
-            local depth=$(git rev-list --count origin/develop.."$parent" 2>/dev/null || echo "0")
-            if [ "$depth" -gt "$best_depth" ]; then
-                best_parent="$parent"
-                best_depth=$depth
-            fi
+        # Skip if candidate is NOT an ancestor of this branch
+        if ! git merge-base --is-ancestor "$candidate_tip" "$branch_tip" 2>/dev/null; then
+            continue
+        fi
+        
+        # Skip if this branch is an ancestor of candidate (would create cycle)
+        if git merge-base --is-ancestor "$branch_tip" "$candidate_tip" 2>/dev/null; then
+            continue
+        fi
+        
+        # Count commits between candidate and this branch (fewer = closer parent)
+        local distance=$(git rev-list --count "$candidate_tip".."$branch_tip" 2>/dev/null || echo "999999")
+        if [ "$distance" -lt "$best_distance" ]; then
+            best_parent="$candidate"
+            best_distance=$distance
         fi
     done
     
@@ -193,12 +201,14 @@ main() {
             "OPEN")
                 state_indicator="${YELLOW}◯${RESET} "
                 # Get CI status for open PRs
-                local ci_status=$(fetch_ci_status "$branch")
-                case "$ci_status" in
-                    "PASS")    ci_indicator="${GREEN}✓${RESET}" ;;
-                    "FAIL")    ci_indicator="${RED}✗${RESET}" ;;
-                    "PENDING") ci_indicator="${YELLOW}⋯${RESET}" ;;
-                esac
+                if [ -n "$pr_title" ]; then
+                    local ci_status=$(fetch_ci_status "$branch")
+                    case "$ci_status" in
+                        "PASS")    ci_indicator="${GREEN}✓${RESET}" ;;
+                        "FAIL")    ci_indicator="${RED}✗${RESET}" ;;
+                        "PENDING") ci_indicator="${YELLOW}⋯${RESET}" ;;
+                    esac
+                fi
                 ;;
             "MERGED") state_indicator="${GREEN}✓${RESET} " ;;
             "CLOSED") state_indicator="${RED}✗${RESET} " ;;
