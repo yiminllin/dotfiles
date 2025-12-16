@@ -8,7 +8,6 @@ brew "stow"
 brew "unzip"
 brew "tldr"
 brew "git-lfs"
-brew "fzf"
 
 # Tools
 brew "ncdu"
