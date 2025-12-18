@@ -60,6 +60,7 @@ abbr -a ga git add
 abbr -a gc --set-cursor 'git commit -m "%"'
 abbr -a gca --set-cursor 'git commit --amend'
 abbr -a gp git push
+abbr -a gl git log --oneline -n 10
 
 # AIchat
 abbr -a ai "aichat --role concise-bot"
