@@ -75,6 +75,7 @@ abbr -a tr task delete
 abbr -a te task edit 
 abbr -a ts --set-cursor 'task description.has:%'
 abbr -a tm task modify
+abbr -a teq --position anywhere "estimate:Q"
 abbr -a teh --position anywhere "estimate:H"
 abbr -a ted --position anywhere "estimate:D"
 abbr -a tew --position anywhere "estimate:W"

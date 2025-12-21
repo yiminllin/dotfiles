@@ -20,9 +20,10 @@ urgency.uda.project.M.coefficient = 0.1
 # UDA: Estimate
 uda.estimate.type = string
 uda.estimate.label = Est
-uda.estimate.values = H,D,W,M
+uda.estimate.values = Q,H,D,W,M
 
 # Prioritize some quick tasks that can be done within hours, even its priority is not H
+urgency.uda.estimate.Q.coefficient = 10.0
 urgency.uda.estimate.H.coefficient = 5.0
 urgency.uda.estimate.D.coefficient = 2.0
 urgency.uda.estimate.W.coefficient = 0.5
