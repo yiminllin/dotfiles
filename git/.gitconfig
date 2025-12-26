@@ -21,4 +21,6 @@
 [init]
     defaultBranch = main
 [alias]
-	tree = !~/dotfiles/git/git-tree.sh
+    tree = !~/dotfiles/git/git-tree.sh
+[push]
+    autoSetupRemote = true
