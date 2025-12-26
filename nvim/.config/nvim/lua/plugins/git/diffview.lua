@@ -56,7 +56,13 @@ return {
 		},
 		{
 			"<leader>gdm",
-			"<cmd>DiffviewOpen origin/main...HEAD<cr>",
+			function()
+				if string.find(vim.fn.system("git remote get-url origin"), "FlightSystems", 1, true) then
+					vim.cmd("DiffviewOpen origin/develop...HEAD")
+				else
+					vim.cmd("DiffviewOpen origin/main...HEAD")
+				end
+			end,
 			mode = { "n", "v" },
 			desc = "[G]it [D]iffview Open [M]ain branch",
 		},
