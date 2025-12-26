@@ -76,6 +76,8 @@ local function cycle_layout()
 end
 
 vim.keymap.set("n", "<M-c>", cycle_layout, { desc = "Cycle Split Layout" })
+vim.keymap.set("n", "<M-|>", ":vsplit<CR>", { desc = "Vertical split" })
+vim.keymap.set("n", "<M-->", ":split<CR>", { desc = "Horizontal split" })
 
 -- Scroll right tmux pane
 local function tmux_scroll_right_pane_silent(direction)
