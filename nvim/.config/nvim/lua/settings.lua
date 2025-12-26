@@ -5,20 +5,21 @@ vim.g.maplocalleader = " "
 -- Settings
 vim.opt.mouse = "a" -- Enable mouse mode
 vim.opt.clipboard = "unnamedplus" -- Sync clipboard between OS and Neovim
+vim.diagnostic.enable(false) -- Disable diagnostic by default
 
 -- Use OSC 52 for clipboard when in SSH session (allows yank to work over SSH)
 if os.getenv("SSH_TTY") then
-  vim.g.clipboard = {
-    name = "OSC 52",
-    copy = {
-      ["+"] = require("vim.ui.clipboard.osc52").copy("+"),
-      ["*"] = require("vim.ui.clipboard.osc52").copy("*"),
-    },
-    paste = {
-      ["+"] = require("vim.ui.clipboard.osc52").paste("+"),
-      ["*"] = require("vim.ui.clipboard.osc52").paste("*"),
-    },
-  }
+	vim.g.clipboard = {
+		name = "OSC 52",
+		copy = {
+			["+"] = require("vim.ui.clipboard.osc52").copy("+"),
+			["*"] = require("vim.ui.clipboard.osc52").copy("*"),
+		},
+		paste = {
+			["+"] = require("vim.ui.clipboard.osc52").paste("+"),
+			["*"] = require("vim.ui.clipboard.osc52").paste("*"),
+		},
+	}
 end
 vim.opt.undofile = true -- Save undo history
 vim.opt.splitright = true -- Configure new splits orientation
