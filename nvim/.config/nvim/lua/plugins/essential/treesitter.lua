@@ -1,5 +1,6 @@
 return { -- Highlight, edit, and navigate code
 	"nvim-treesitter/nvim-treesitter",
+	branch = "main",
 	build = ":TSUpdate",
 	lazy = false, -- Treesitter doesn't support lazy-loading
 	config = function()
