@@ -36,5 +36,11 @@ return {
 		vim.keymap.set({ "n", "x" }, "<leader>c<tab>", function()
 			opencode.command("agent.cycle")
 		end, { desc = "Open[C]ode Agent Switch" })
+		vim.keymap.set("n", "<M-u>", function()
+			require("opencode").command("session.half.page.up")
+		end, { desc = "OpenCode Half PageUp" })
+		vim.keymap.set("n", "<M-d>", function()
+			require("opencode").command("session.half.page.down")
+		end, { desc = "OpenCode Half PageDown" })
 	end,
 }
