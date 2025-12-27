@@ -26,6 +26,7 @@ lua5.4
 luarocks
 ruby
 tmuxinator
+golang-go
 
 # Dependencies
 imagemagick         # For image.nvim

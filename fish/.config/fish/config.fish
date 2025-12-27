@@ -54,7 +54,7 @@ abbr -a ldb_url find_all_local_zipline_logs
 abbr -a ldb "log_data_bridge -i '/home/ubuntu/github/FlightSystems/.starling/**/*.{zml,zst}" -i "/home/ubuntu/github/FlightSystems/.phoenix/logs/latest/**/*.{zml,zst}'"
 
 # Git
-abbr -a gs git status
+abbr -a gst git status
 abbr -a gd git diff
 abbr -a ga git add
 abbr -a gc --set-cursor 'git commit -m "%"'

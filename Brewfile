@@ -25,6 +25,7 @@ brew "lua"
 brew "luarocks"
 brew "ruby"
 brew "tmuxinator"
+brew "go"
 
 # Dependencies
 brew "imagemagick"

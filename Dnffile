@@ -33,3 +33,4 @@ lua
 luarocks
 ruby
 rubygem-tmuxinator
+golang
