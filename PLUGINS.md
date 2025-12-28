@@ -51,7 +51,6 @@
 | UI/Visual | neoscroll.nvim | Smooth scrolling | [neoscroll.lua](nvim/.config/nvim/lua/plugins/ui/neoscroll.lua) |
 | UI/Visual | oil.nvim | File browser | [oil.lua](nvim/.config/nvim/lua/plugins/ui/oil.lua) |
 | UI/Visual | zen-mode.nvim | Distraction-free mode | [zenmode.lua](nvim/.config/nvim/lua/plugins/ui/zenmode.lua) |
-| Languages | markview.nvim | Markdown preview | [markview.lua](nvim/.config/nvim/lua/plugins/languages/markview.lua) |
 | Languages | godbolt.nvim | Compiler explorer integration | [godbolt.lua](nvim/.config/nvim/lua/plugins/languages/godbolt.lua) |
 | Languages | bazel.nvim | Bazel build system support | [bazel.lua](nvim/.config/nvim/lua/plugins/languages/bazel.lua) |
 | AI | opencode.nvim | AI code assistant integration | [opencode.lua](nvim/.config/nvim/lua/plugins/ai/opencode.lua) |
