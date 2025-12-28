@@ -104,7 +104,6 @@
       },
     },
     "dotfile-documenter": {
-      "mode": "subagent",
       "description": "A lightweight AI agent try to update the PLUGINS.md in dotfiles/",
       "model": "opencode/claude-haiku-4-5",
       "temperature": 0.5,
