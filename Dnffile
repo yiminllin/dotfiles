@@ -24,6 +24,8 @@ nvtop
 lazygit
 gh
 task
+pandoc
+texlive-scheme-full
 
 # Languages / tooling
 python3-neovim

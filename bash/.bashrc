@@ -71,6 +71,7 @@ eval "$(fnm env --use-on-cd)"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="/opt/nvim-linux-x86_64/bin:$PATH"
 export PATH="$HOME/go/bin:$PATH"
+export PATH="/Library/TeX/texbin/:$PATH"
 
 export PS1="\[\e[30;47m\]\u\[\e[m\]\[\e[30;47m\]<\[\e[m\]\[\e[32;47m\]\w\[\e[m\]\[\e[30;47m\]>\[\e[m\]\[\e[33;47m\]\`parse_git_branch\`\[\e[m\] "
 export VISUAL="nvim"

@@ -27,6 +27,8 @@ luarocks
 ruby
 tmuxinator
 golang-go
+pandoc
+texlive-full
 
 # Dependencies
 imagemagick         # For image.nvim

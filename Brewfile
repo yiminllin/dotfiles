@@ -26,6 +26,8 @@ brew "luarocks"
 brew "ruby"
 brew "tmuxinator"
 brew "go"
+brew "pandoc"
+cask "mactex"
 
 # Dependencies
 brew "imagemagick"
