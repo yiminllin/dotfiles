@@ -24,3 +24,5 @@
     tree = !~/dotfiles/git/git-tree.sh
 [push]
     autoSetupRemote = true
+[spice "branchCreate"]
+    commit = false
