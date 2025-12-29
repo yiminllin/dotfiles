@@ -96,6 +96,10 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 curl -fsSL https://install.julialang.org | sh -s -- --yes
 curl -fsSL https://fnm.vercel.app/install | bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
+if is_debian; then
+    wget https://go.dev/dl/go1.25.5.linux-amd64.tar.gz && rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.25.5.linux-amd64.tar.gz
+    export PATH="/usr/local/go/bin:$PATH"
+fi
 
 source $HOME/.cargo/env
 export PATH="$HOME/.juliaup/bin:$PATH"

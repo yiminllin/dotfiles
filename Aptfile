@@ -26,7 +26,6 @@ lua5.4
 luarocks
 ruby
 tmuxinator
-golang-go
 pandoc
 texlive-full
 
