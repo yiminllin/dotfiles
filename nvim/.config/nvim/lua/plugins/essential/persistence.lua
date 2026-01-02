@@ -8,7 +8,7 @@ return {
 			desc = "Restore nvim session in the workspace",
 			group = vim.api.nvim_create_augroup("restore_session", { clear = true }),
 			callback = function()
-				if vim.fn.argc() == 0 then
+				if #vim.v.argv == 0 then
 					require("persistence").load()
 				end
 			end,
