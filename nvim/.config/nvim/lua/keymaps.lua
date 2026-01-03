@@ -85,10 +85,10 @@ local function tmux_scroll_right_pane_silent(direction)
 	vim.fn.system("tmux copy-mode -t '{right}'")
 	vim.fn.system("tmux send-keys -X -t '{right}' " .. scroll_cmd)
 end
-vim.keymap.set({ "n", "x" }, "<M-C-u>", function()
+vim.keymap.set({ "n", "x" }, "<M-u>", function()
 	tmux_scroll_right_pane_silent("up")
 end, { desc = "Right Tmux Scroll Up" })
-vim.keymap.set({ "n", "x" }, "<M-C-d>", function()
+vim.keymap.set({ "n", "x" }, "<M-d>", function()
 	tmux_scroll_right_pane_silent("down")
 end, { desc = "Right Tmux Scroll Down" })
 
