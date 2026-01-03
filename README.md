@@ -28,7 +28,6 @@ Then
 
 ```bash
 nvim
-:UpdateRemotePlugins
 :checkhealth
 ```
 
