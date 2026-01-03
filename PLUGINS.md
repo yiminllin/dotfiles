@@ -45,6 +45,7 @@
 | Git | diffview.nvim | Git diff viewer | [diffview.lua](nvim/.config/nvim/lua/plugins/git/diffview.lua) |
 | Git | gitlinker.nvim | Generate git links | [gitlinker.lua](nvim/.config/nvim/lua/plugins/git/gitlinker.lua) |
 | UI/Visual | gruvbox.nvim | Gruvbox color scheme | [colorscheme.lua](nvim/.config/nvim/lua/plugins/ui/colorscheme.lua) |
+| UI/Visual | vim-solarized8 | Solarized color scheme | [diffview.lua](nvim/.config/nvim/lua/plugins/git/diffview.lua) |
 | UI/Visual | lualine.nvim | Status line | [lualine.lua](nvim/.config/nvim/lua/plugins/ui/lualine.lua) |
 | UI/Visual | indent-blankline.nvim | Indent guides | [indent-blankline.lua](nvim/.config/nvim/lua/plugins/ui/indent-blankline.lua) |
 | UI/Visual | nvim-colorizer.lua | Color code highlighting | [nvim-colorizer.lua](nvim/.config/nvim/lua/plugins/ui/nvim-colorizer.lua) |
