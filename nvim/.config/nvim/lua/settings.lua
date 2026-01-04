@@ -17,16 +17,12 @@ if os.getenv("SSH_TTY") then
 			["+"] = osc52.copy("+"),
 			["*"] = osc52.copy("*"),
 		},
-		-- Use system clipboard registers directly for paste to avoid OSC52 hanging
 		paste = {
-			["+"] = function()
-				return vim.fn.getreg("+")
-			end,
-			["*"] = function()
-				return vim.fn.getreg("*")
-			end,
+			["+"] = osc52.paste("+"),
+			["*"] = osc52.paste("*"),
 		},
 	}
+	vim.opt.clipboard = "" -- Clear when using custom provider
 end
 vim.opt.undofile = true -- Save undo history
 vim.opt.splitright = true -- Configure new splits orientation
