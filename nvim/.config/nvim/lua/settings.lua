@@ -8,16 +8,23 @@ vim.opt.clipboard = "unnamedplus" -- Sync clipboard between OS and Neovim
 vim.diagnostic.enable(false) -- Disable diagnostic by default
 
 -- Use OSC 52 for clipboard when in SSH session (allows yank to work over SSH)
+-- Only use OSC52 for copy operations; paste uses system clipboard to avoid "waiting for OSC52" issues
 if os.getenv("SSH_TTY") then
+	local osc52 = require("vim.ui.clipboard.osc52")
 	vim.g.clipboard = {
 		name = "OSC 52",
 		copy = {
-			["+"] = require("vim.ui.clipboard.osc52").copy("+"),
-			["*"] = require("vim.ui.clipboard.osc52").copy("*"),
+			["+"] = osc52.copy("+"),
+			["*"] = osc52.copy("*"),
 		},
+		-- Use system clipboard registers directly for paste to avoid OSC52 hanging
 		paste = {
-			["+"] = require("vim.ui.clipboard.osc52").paste("+"),
-			["*"] = require("vim.ui.clipboard.osc52").paste("*"),
+			["+"] = function()
+				return vim.fn.getreg("+")
+			end,
+			["*"] = function()
+				return vim.fn.getreg("*")
+			end,
 		},
 	}
 end
