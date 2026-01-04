@@ -62,6 +62,17 @@ abbr -a gca --set-cursor 'git commit --amend'
 abbr -a gp git push
 abbr -a gl git log --oneline -n 10
 
+# Git Spice
+abbr -a gsls gs log short
+abbr -a gsll gs log long
+abbr -a gsbc --set-cursor 'gs branch create yiminlin/%s'
+abbr -a gsu gs up
+abbr -a gsd gs down
+abbr -a gsm gs trunk
+abbr -a gsur gs upstack restack
+abbr -a gsrc gs rebase continue 
+abbr -a gsra gs rebase abort
+
 # AIchat
 abbr -a ai "aichat --role concise-bot"
 
