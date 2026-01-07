@@ -63,8 +63,7 @@ abbr -a gp git push
 abbr -a gl git log --oneline -n 10
 
 # Git Spice
-abbr -a gsls gs log short
-abbr -a gsll gs log long
+abbr -a gsl gs log long
 abbr -a gsbc --set-cursor 'gs branch create yiminlin/%'
 abbr -a gsu gs up
 abbr -a gsd gs down
