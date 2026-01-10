@@ -160,6 +160,10 @@ function fish_user_key_bindings
     bind -M visual y "fish_clipboard_copy"
 end
 
+# Cursor shape always block - For kitty cursor tail
+set -g fish_cursor_insert block
+set -g fish_cursor_visual block
+
 function fish_clipboard_copy --description "Copy selection to system clipboard"
     if command -v pbcopy &> /dev/null
         # macOS
