@@ -1,5 +1,6 @@
 # Essential
 build-essential
+clang
 libclang-14-dev
 tmux
 fish
