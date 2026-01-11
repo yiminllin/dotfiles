@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 
+# Check if tmux version is 3.3+ (required for fzf --tmux flag)
+tmux_version=$(tmux -V | sed 's/^tmux //' | sed 's/[^0-9.]//g')
+tmux_major=$(echo "$tmux_version" | cut -d. -f1)
+tmux_minor=$(echo "$tmux_version" | cut -d. -f2)
+
 # max-depth is 2, assuming dumping all repo in ~/ and its children
-workspace=$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type d --hidden | xargs -I{} dirname {} | fzf --cycle --border=bold --tmux --footer=Sessionizer)
+if [[ $tmux_major -gt 3 ]] || [[ $tmux_major -eq 3 && $tmux_minor -ge 3 ]]; then
+    workspace=$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type d --hidden | xargs -I{} dirname {} | fzf --cycle --border=bold --footer=Sessionizer --tmux)
+else
+    workspace=$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type d --hidden | xargs -I{} dirname {} | fzf --cycle --border=bold --footer=Sessionizer)
+fi
 
 if [[ -z $workspace ]]; then
     exit 0
