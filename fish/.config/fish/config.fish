@@ -45,7 +45,7 @@ end
 abbr -a fs to_dev_container_flight_software 
 
 function find_all_local_zipline_logs
-    set log_paths_joined (find ~/github/FlightSystems/.phoenix/logs/latest/**/*.{zml,zml.zst} ~/github/FlightSystems/.starling/logs/latest/**/*.{zml,zml.zst} | sed 's|^|fs://|g' | paste -sd ',')
+    set log_paths_joined (find ~/github/FlightSystems/.phoenix/logs/latest/**/*.{zml,zml.zst} | sed 's|^|fs://|g' | paste -sd ',')
     echo $log_paths_joined
     set encoded_log_paths (python3 -c "import urllib.parse; import sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$log_paths_joined")
     echo "https://baraza2.platform.flyzipline.com/log_plots?id=$encoded_log_paths"
