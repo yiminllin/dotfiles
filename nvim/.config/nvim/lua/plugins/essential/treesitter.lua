@@ -29,7 +29,7 @@ return { -- Highlight, edit, and navigate code
 			"diff",
 			"git_config",
 		}
-		ts.install(parsers)
+		ts.install(parsers, { skip = { installed = true } })
 
 		-- Enable treesitter highlighting for filetypes with parsers
 		vim.api.nvim_create_autocmd("FileType", {
