@@ -73,6 +73,12 @@ export PATH="/opt/nvim-linux-x86_64/bin:$PATH"
 export PATH="$HOME/go/bin:$PATH"
 export PATH="/usr/local/go/bin:$PATH"
 export PATH="/Library/TeX/texbin/:$PATH"
+export PATH=/home/ubuntu/.opencode/bin:$PATH
+FNM_PATH="/home/ubuntu/.local/share/fnm"
+if [ -d "$FNM_PATH" ]; then
+  export PATH="$FNM_PATH:$PATH"
+  eval "`fnm env`"
+fi
 
 export PS1="\[\e[30;47m\]\u\[\e[m\]\[\e[30;47m\]<\[\e[m\]\[\e[32;47m\]\w\[\e[m\]\[\e[30;47m\]>\[\e[m\]\[\e[33;47m\]\`parse_git_branch\`\[\e[m\] "
 export VISUAL="nvim"
@@ -86,6 +92,12 @@ export XDG_CONFIG_HOME="$HOME/.config"
 if [ -z "$TMUX" ] && [ "$TERM" = "xterm" ]; then
     export TERM=xterm-256color
 fi
+
+[ -f ~/.fzf.bash ] && source ~/.fzf.bash
+
+source ${HOME}/.bash_completion.d/bazel-complete.bash 2>/dev/null || true
+
+. "$HOME/.local/bin/env"
 
 # Execute fish shell
 if [ -z "$STARTEDFISH" ];

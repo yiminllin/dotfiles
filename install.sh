@@ -85,16 +85,18 @@ fi
 echo "Installing Fzf"
 rm -rf ~/.fzf/
 git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-~/.fzf/install --all
+~/.fzf/install --all --no-update-rc
 
 ################################################################################
 # Install Languages
 ################################################################################
 
 echo "Installing languages"
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# Install rustup without modifying shell configs
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
 curl -fsSL https://install.julialang.org | sh -s -- --yes
-curl -fsSL https://fnm.vercel.app/install | bash
+# Install fnm without modifying shell configs
+curl -fsSL https://fnm.vercel.app/install | bash -s -- --skip-shell
 curl -LsSf https://astral.sh/uv/install.sh | sh
 if is_debian; then
     wget https://go.dev/dl/go1.25.5.linux-amd64.tar.gz && rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.25.5.linux-amd64.tar.gz && rm -rf go1.25.5.linux-amd64.tar.gz
@@ -188,6 +190,13 @@ if [ -e ~/.bashrc ]; then
     mv ~/.bashrc ~/.bashrc.backup
 fi
 rm -rf ~/.config/fish
+
+# Clean up auto-generated lines from installers that don't support suppression flags
+# (opencode and cursor installers may still modify .bashrc)
+if [ -e ~/.bashrc ]; then
+    sed -i '/export PATH=.*\/home\/.*\/\.opencode\/bin/d' ~/.bashrc
+    sed -i '/source.*bazel-complete\.bash/d' ~/.bashrc
+fi
 
 CONFIGS=(
     aichat
