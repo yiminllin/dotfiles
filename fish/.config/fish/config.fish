@@ -178,3 +178,6 @@ end
 
 # opencode
 fish_add_path ~/.opencode/bin
+
+# direnv hook
+direnv hook fish | source

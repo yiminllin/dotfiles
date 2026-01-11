@@ -13,6 +13,7 @@ stow
 unzip
 tldr
 git-lfs
+direnv
 
 # Tools
 xsel
