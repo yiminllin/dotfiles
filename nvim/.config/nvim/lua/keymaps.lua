@@ -183,3 +183,16 @@ vim.keymap.set(
 	{ desc = "[C]ursor Add [B]uffers" }
 )
 vim.keymap.set({ "n", "x" }, "<leader>cd", add_git_diff_to_right_tmux_window, { desc = "[C]ursor Add [G]it Diff" })
+
+local function append_quick_note()
+	vim.ui.input({ prompt = "Quick note: " }, function(prompt)
+		if not prompt then
+			return
+		end
+		local notes_file = vim.fn.expand("~/notes/main/quick_notes.md")
+		local file = io.open(notes_file, "a")
+		file:write(string.format("- %s", prompt))
+		file:close()
+	end)
+end
+vim.keymap.set({ "n", "x" }, "<leader>n", append_quick_note, { desc = "Quick [N]ote" })

@@ -101,6 +101,10 @@ abbr -a tpr --position anywhere "project:read"
 abbr -a tpw --position anywhere "project:work"
 abbr -a tbt --position anywhere "blocked:T"
 
+
+# Note
+abbr -a note --set-cursor 'echo "- %" >> ~/notes/main/quick_notes.md'
+
 # Git Worktree Helper
 function git_worktree_add --description "Interactive Adding Git Worktree"
     set branch (git branch -r | fzf --prompt="Select Branch > " | string trim | string replace 'origin/' '')
