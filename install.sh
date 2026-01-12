@@ -86,6 +86,7 @@ echo "Installing Fzf"
 rm -rf ~/.fzf/
 git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 ~/.fzf/install --all --no-update-rc
+export PATH="$HOME/.fzf/bin:$PATH"
 
 ################################################################################
 # Install Languages
