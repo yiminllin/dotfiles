@@ -67,6 +67,78 @@ return {
 			desc = "[G]it [D]iffview Open [M]ain branch",
 		},
 		{
+			"<leader>gdp",
+			function()
+				-- Get the immediate parent branch (one level above)
+				local function get_parent_branch()
+					local current_branch = vim.fn.system("git branch --show-current"):gsub("%s+", "")
+					if current_branch == "" then
+						return nil
+					end
+
+					-- Get all local branches
+					local branches_output = vim.fn.system("git branch --list")
+					local branches = {}
+					for branch in branches_output:gmatch("[* ] ([^\n]+)") do
+						branch = branch:gsub("%s+", "")
+						if branch ~= current_branch then
+							table.insert(branches, branch)
+						end
+					end
+
+					local branch_tip = vim.fn.system("git rev-parse " .. current_branch):gsub("%s+", "")
+					if branch_tip == "" then
+						return nil
+					end
+
+					local closest_parent = nil
+					local shortest_dist = math.huge
+
+					-- Find the closest ancestor branch
+					for _, candidate in ipairs(branches) do
+						local candidate_tip = vim.fn.system("git rev-parse " .. candidate):gsub("%s+", "")
+						if candidate_tip == "" then
+							goto continue
+						end
+
+						-- Check if candidate is an ancestor of current branch
+						vim.fn.system("git merge-base --is-ancestor " .. candidate_tip .. " " .. branch_tip .. " 2>&1")
+						if vim.v.shell_error ~= 0 then
+							goto continue
+						end
+
+						-- Skip if current branch is an ancestor of candidate (would create cycle)
+						vim.fn.system("git merge-base --is-ancestor " .. branch_tip .. " " .. candidate_tip .. " 2>&1")
+						if vim.v.shell_error == 0 then
+							goto continue
+						end
+
+						-- Count commits between candidate and current branch
+						local dist_output =
+							vim.fn.system("git rev-list --count " .. candidate_tip .. ".." .. branch_tip .. " 2>&1")
+						local dist = tonumber(dist_output:match("%d+"))
+						if dist and dist < shortest_dist then
+							closest_parent = candidate
+							shortest_dist = dist
+						end
+
+						::continue::
+					end
+
+					return closest_parent
+				end
+
+				local parent = get_parent_branch()
+				if not parent then
+					vim.notify("Could not determine parent branch", vim.log.levels.WARN)
+					return
+				end
+				vim.cmd("DiffviewOpen " .. parent .. "...HEAD")
+			end,
+			mode = { "n", "v" },
+			desc = "[G]it [D]iffview Open [P]arent branch",
+		},
+		{
 			"<leader>gdx",
 			"<cmd>DiffviewClose<cr>",
 			mode = { "n", "v" },
