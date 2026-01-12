@@ -155,6 +155,20 @@ fi
 # Install Task
 ################################################################################
 
+# Install Taskwarrior from source on Linux
+if is_fedora || is_debian; then
+    echo "Installing Taskwarrior from source"
+    TASK_VERSION="3.4.2"
+    curl -LO "https://github.com/GothenburgBitFactory/taskwarrior/releases/download/v${TASK_VERSION}/task-${TASK_VERSION}.tar.gz"
+    tar xzvf "task-${TASK_VERSION}.tar.gz"
+    cd "task-${TASK_VERSION}"
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build
+    sudo cmake --install build
+    cd ..
+    rm -rf "task-${TASK_VERSION}" "task-${TASK_VERSION}.tar.gz"
+fi
+
 if is_macos; then
     mkdir -p ~/.task/themes/
     # solarized-light does not work on macOS...

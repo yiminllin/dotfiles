@@ -19,7 +19,6 @@ ncdu
 btop
 # nvtop   # Remove temporarily
 gh
-taskwarrior
 
 # Languages
 clangd
