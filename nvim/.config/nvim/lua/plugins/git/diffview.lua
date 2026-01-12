@@ -19,7 +19,17 @@ return {
 		vim.api.nvim_create_autocmd("User", {
 			pattern = "DiffviewViewOpened",
 			callback = function()
-				vim.cmd("DiffviewToggleFiles")
+				-- Check if this is a FileHistory view (don't close explorer for it)
+				local ok, view = pcall(function()
+					return require("diffview.lib").get_current_view()
+				end)
+				if ok and view then
+					local view_type = tostring(view.class or view.__class or "")
+					if not view_type:match("FileHistory") then
+						-- Close explorer for non-FileHistory views
+						vim.cmd("DiffviewToggleFiles")
+					end
+				end
 				vim.o.background = "light"
 				vim.cmd.colorscheme("solarized8_flat")
 				vim.api.nvim_set_hl(0, "DiffAdd", { bg = "#e6e9c1" })
@@ -156,6 +166,6 @@ return {
 			mode = { "n", "v" },
 			desc = "[G]it [D]iffview [R]efresh",
 		},
-		{ "<leader>gf", "<cmd>DiffviewFileHistory<cr>", mode = { "n", "v" }, desc = "[G]it Diffview [F]ile History" },
+		{ "<leader>gdf", "<cmd>DiffviewFileHistory<cr>", mode = { "n", "v" }, desc = "[G]it Diffview [F]ile History" },
 	},
 }
