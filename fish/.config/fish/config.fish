@@ -113,8 +113,8 @@ function git_worktree_add --description "Interactive Adding Git Worktree"
         set repo_name (string replace -a '.' '-' $repo)
         set branch_name (string replace -a '/' '-' $branch)
         set folder_name "$repo_name-$branch_name"
-        echo "Creating worktree for $branch in ../$folder_name"
-        git worktree add "../$folder_name" "$branch"
+        echo "Creating worktree for $branch in $HOME/$folder_name"
+        git worktree add "$HOME/$folder_name" "$branch"
     end
 end
 abbr -a gwa git_worktree_add
