@@ -5,11 +5,20 @@ tmux_version=$(tmux -V | sed 's/^tmux //' | sed 's/[^0-9.]//g')
 tmux_major=$(echo "$tmux_version" | cut -d. -f1)
 tmux_minor=$(echo "$tmux_version" | cut -d. -f2)
 
-# max-depth is 2, assuming dumping all repo in ~/ and its children
+# Find git repositories (both regular repos and worktrees)
+# 1. Regular git repos: find .git directories (min-depth 2 since .git is at ~/repo/.git)
+# 2. Git worktrees: find .git files (worktrees have .git as a file, not directory)
+repos=$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type f --hidden | xargs -I{} dirname {} 2>/dev/null)
+repos="$repos"$'\n'"$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type d --hidden | xargs -I{} dirname {} 2>/dev/null)"
+
+# Remove duplicates and sort
+repos=$(echo "$repos" | sort -u)
+
+# Use fzf to select workspace
 if [[ $tmux_major -gt 3 ]] || [[ $tmux_major -eq 3 && $tmux_minor -ge 3 ]]; then
-    workspace=$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type d --hidden | xargs -I{} dirname {} | fzf --cycle --border=bold --footer=Sessionizer --tmux)
+    workspace=$(echo "$repos" | fzf --cycle --border=bold --footer=Sessionizer --tmux)
 else
-    workspace=$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type d --hidden | xargs -I{} dirname {} | fzf --cycle --border=bold --footer=Sessionizer)
+    workspace=$(echo "$repos" | fzf --cycle --border=bold --footer=Sessionizer)
 fi
 
 if [[ -z $workspace ]]; then
