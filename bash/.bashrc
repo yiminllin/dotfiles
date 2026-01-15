@@ -94,16 +94,17 @@ if [ -z "$TMUX" ] && [ "$TERM" = "xterm" ]; then
     export TERM=xterm-256color
 fi
 
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
-
-source ${HOME}/.bash_completion.d/bazel-complete.bash 2>/dev/null || true
-
 . "$HOME/.local/bin/env"
 
-# Execute fish shell
+# Execute fish shell, before loading bash related config
 if [ -z "$STARTEDFISH" ];
 then
     export STARTEDFISH=1;
     exec fish;
     exit;
 fi
+
+[ -f ~/.fzf.bash ] && source ~/.fzf.bash
+
+source ${HOME}/.bash_completion.d/bazel-complete.bash 2>/dev/null || true
+
