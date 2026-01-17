@@ -36,7 +36,17 @@ abbr -a vdesk ssh -L 8888:localhost:8888 yilin@yilin.vdesk.cloud.aurora.tech
 abbr -a sb tmux_scrollback_pager
 
 function to_devbox
+    # Disable cursor_trail for remote sessions (causes visual glitches in tmux over SSH)
+    if type -q kitty
+        kitty @ set-config cursor_trail=0 2>/dev/null
+    end
+    
     TERM=xterm-256color command kitten ssh -L 3030:localhost:3030 -i ~/.ssh/id_ed25519_zipline ubuntu@devbox_yimin_lin.int.flyzipline.com $argv
+    
+    # Restore cursor_trail when SSH session ends
+    if type -q kitty
+        kitty @ set-config cursor_trail=3 2>/dev/null
+    end
 end
 abbr -a devbox to_devbox
 function to_dev_container_flight_software
