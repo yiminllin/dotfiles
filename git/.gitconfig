@@ -22,6 +22,8 @@
     defaultBranch = main
 [alias]
     tree = !~/dotfiles/git/git-tree.sh
+[pull]
+	rebase = true
 [push]
     autoSetupRemote = true
 [spice "branchCreate"]
