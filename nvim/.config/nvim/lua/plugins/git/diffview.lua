@@ -68,9 +68,9 @@ return {
 			"<leader>gdm",
 			function()
 				if string.find(vim.fn.system("git remote get-url origin"), "FlightSystems", 1, true) then
-					vim.cmd("DiffviewOpen origin/develop...HEAD")
+					vim.cmd("DiffviewOpen origin/develop")
 				else
-					vim.cmd("DiffviewOpen origin/main...HEAD")
+					vim.cmd("DiffviewOpen origin/main")
 				end
 			end,
 			mode = { "n", "v" },
@@ -143,7 +143,7 @@ return {
 					vim.notify("Could not determine parent branch", vim.log.levels.WARN)
 					return
 				end
-				vim.cmd("DiffviewOpen " .. parent .. "...HEAD")
+				vim.cmd("DiffviewOpen " .. parent)
 			end,
 			mode = { "n", "v" },
 			desc = "[G]it [D]iffview Open [P]arent branch",
