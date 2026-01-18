@@ -117,7 +117,13 @@ abbr -a note --set-cursor 'echo "- %" >> ~/notes/main/quick_notes.md'
 
 # Git Worktree Helper
 function git_worktree_add --description "Interactive Adding Git Worktree"
-    set branch (git branch -r | fzf --prompt="Select Branch > " | string trim | string replace 'origin/' '')
+    set location $argv[1]
+    switch $location
+        case "local"
+            set branch (git branch --format='%(refname:short)' | fzf --prompt="Select Branch > " | string trim)
+        case "remote"
+            set branch (git branch -r | fzf --prompt="Select Branch > " | string trim | string replace 'origin/' '')
+    end
     if test -n "$branch"
         set repo (basename (git rev-parse --show-toplevel))
         set repo_name (string replace -a '.' '-' $repo)
@@ -131,7 +137,6 @@ function git_worktree_add --description "Interactive Adding Git Worktree"
         end
     end
 end
-abbr -a gwa git_worktree_add
 
 function git_worktree_remove --description "Interactive Removing Git Worktree"
     set worktree_out (git worktree list | fzf --prompt="Select Worktree to Remove > ")
@@ -140,7 +145,20 @@ function git_worktree_remove --description "Interactive Removing Git Worktree"
         git worktree remove "$worktree_path"
     end
 end
-abbr -a gwr git_worktree_remove
+
+function git_worktree --description "Interactive Git Worktree"
+    set action $argv[1]
+    switch $action
+        case "add"
+            git_worktree_add $argv[2]
+        case "remove"
+            git_worktree_remove
+    end
+end
+abbr -a gw git_worktree
+abbr -a gwal git_worktree add local
+abbr -a gwar git_worktree add remote
+abbr -a gwr git_worktree remove
 
 function nvim_help --description "View command help in vim"
     $argv --help 2>&1 | nvim -R -c 'set ft=man' -
