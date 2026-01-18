@@ -124,7 +124,11 @@ function git_worktree_add --description "Interactive Adding Git Worktree"
         set branch_name (string replace -a '/' '-' $branch)
         set folder_name "$repo_name-$branch_name"
         echo "Creating worktree for $branch in $HOME/$folder_name"
-        git worktree add "$HOME/$folder_name" "$branch"
+        if git worktree add "$HOME/$folder_name" "$branch"
+            if test -n "$TMUX"
+                ~/.tmux/tmux-sessionizer
+            end
+        end
     end
 end
 abbr -a gwa git_worktree_add
