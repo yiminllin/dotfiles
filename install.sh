@@ -169,17 +169,7 @@ if is_fedora || is_debian; then
     rm -rf "task-${TASK_VERSION}" "task-${TASK_VERSION}.tar.gz"
 fi
 
-if is_macos; then
-    mkdir -p ~/.task/themes/
-    # solarized-light does not work on macOS...
-    curl -o ~/.task/themes/solarized-256.theme https://raw.githubusercontent.com/GothenburgBitFactory/taskwarrior/develop/doc/rc/solarized-dark-256.theme
-    sed -i '' 's/color.alternate=on color0/color.alternate=/g' ~/.task/themes/solarized-256.theme
-fi
-
-if is_fedora || is_debian; then
-    mkdir -p ~/.task/themes/
-    curl -o ~/.task/themes/solarized-256.theme https://raw.githubusercontent.com/GothenburgBitFactory/taskwarrior/develop/doc/rc/solarized-light-256.theme
-fi
+# Task theme is managed via stow (task/.task/themes/solarized.theme)
 
 ################################################################################
 # Install OpenCode

@@ -1,0 +1,84 @@
+# Solarized Light theme with explicit 256-color codes
+# Works over SSH/tmux without requiring terminal palette configuration
+#
+# Based on: https://github.com/GothenburgBitFactory/taskwarrior/blob/develop/doc/rc/solarized-light-256.theme
+# Modified to use explicit 256-color codes instead of terminal palette colors
+#
+# Solarized palette (256-color approximations):
+# base03=234, base02=23, base01=240, base00=241
+# base0=244, base1=245, base2=254, base3=230
+# yellow=136, orange=166, red=160, magenta=125
+# violet=61, blue=33, cyan=37, green=64
+
+rule.precedence.color=deleted,completed,active,keyword.,tag.,project.,overdue,scheduled,due.today,due,blocked,blocking,recurring,tagged,uda.
+
+# General
+color.label=
+color.label.sort=
+color.alternate=
+color.header=color108
+color.footnote=color108
+color.warning=color254 on color144
+color.error=color131
+color.debug=color144
+
+# Task state
+color.completed=
+color.deleted=
+color.active=color144
+color.recurring=color109
+color.scheduled=
+color.until=
+color.blocked=color245 on color254
+color.blocking=color254 on color245
+
+# Project
+color.project.none=
+
+# Priority - very mellow, muted colors
+color.uda.priority.H=bold color131
+color.uda.priority.M=bold color144
+color.uda.priority.L=bold color109
+
+# Tags
+color.tag.next=
+color.tag.none=
+color.tagged=
+
+# Due dates
+color.due=color144
+color.due.today=color131
+color.overdue=color138
+
+# Reports
+color.burndown.done=color241 on color108
+color.burndown.pending=color241 on color131
+color.burndown.started=color241 on color144
+
+# History
+color.history.add=color241 on color131
+color.history.delete=color241 on color144
+color.history.done=color241 on color108
+
+# Summary
+color.summary.background=on color254
+color.summary.bar=color241 on color108
+
+# Calendar
+color.calendar.due=color254 on color144
+color.calendar.due.today=color254 on color131
+color.calendar.holiday=color254 on color144
+color.calendar.overdue=color254 on color138
+color.calendar.scheduled=
+color.calendar.today=color254 on color109
+color.calendar.weekend=color245
+color.calendar.weeknumber=color245
+
+# Undo
+color.undo.after=color108
+color.undo.before=color131
+
+# Sync
+color.sync.added=color108
+color.sync.changed=color144
+color.sync.rejected=color131

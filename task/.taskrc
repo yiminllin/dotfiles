@@ -2,8 +2,8 @@ data.location=~/notes/.task
 
 default.command=list
 
-# Theme
-include ~/.task/themes/solarized-256.theme
+# Theme - uses explicit 256-color codes that work over SSH/tmux
+include ~/.task/themes/solarized.theme
 
 news.version=3.4.1
 
