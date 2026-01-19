@@ -131,6 +131,7 @@ local function create_cursor_split_or_prompt()
 	if not is_cursor_running_in_window() then
 		vim.fn.system("tmux split-window -h")
 		vim.fn.system("tmux select-pane -t 1")
+		vim.fn.system("tmux resize-pane -t 1 -x 30%")
 		vim.fn.system("tmux send-keys -t 1 'cursor-agent' Enter")
 	else
 		vim.ui.input({ prompt = "Cursor Prompt: " }, function(prompt)
