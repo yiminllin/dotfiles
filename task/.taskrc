@@ -11,6 +11,9 @@ report.list.sort = urgency+
 report.list.columns = id,priority,estimate,blocked,project,description.count,urgency
 report.list.labels = ID,P,E,B,Project,Description,Urg
 
+uda.priority.values=A,H,M,L
+
+urgency.uda.priority.A.coefficient = 100.0
 urgency.uda.priority.H.coefficient = 10.0
 urgency.uda.priority.M.coefficient = 5.0
 urgency.uda.priority.L.coefficient = 1.0

@@ -36,6 +36,7 @@ color.blocking=color254 on color245
 color.project.none=
 
 # Priority - very mellow, muted colors
+color.uda.priority.A=bold color61
 color.uda.priority.H=bold color131
 color.uda.priority.M=bold color144
 color.uda.priority.L=bold color109
