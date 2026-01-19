@@ -7,5 +7,9 @@ export TMUX_POWERLINE_SEG_AIR_COLOR="106"
 
 # Left right status bar
 # Cannot export array in bash: define as global variables
-TMUX_POWERLINE_LEFT_STATUS_SEGMENTS=("tmux_session_info 223" "vcs_branch 244 223")
-TMUX_POWERLINE_RIGHT_STATUS_SEGMENTS=("pwd 223" "date_day 106" "date 106" "time 106")
+TMUX_POWERLINE_LEFT_STATUS_SEGMENTS=("tmux_session_info 223")
+TMUX_POWERLINE_RIGHT_STATUS_SEGMENTS=("vcs_branch 244 223" "vcs_compare 244 223" "vcs_staged 244 223" "vcs_others 244 223" "pwd 223")
+
+export TMUX_POWERLINE_SEG_VCS_BRANCH_MAX_LEN=80
+export TMUX_POWERLINE_SEG_PWD_MAX_LEN=80
+export TMUX_POWERLINE_SEG_TMUX_SESSION_INFO_MAX_LEN=200
