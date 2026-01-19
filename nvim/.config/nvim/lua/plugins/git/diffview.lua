@@ -16,6 +16,56 @@ return {
 			})
 		end
 
+		local function auto_switch_diffview_layout()
+			local view = require("diffview.lib").get_current_view()
+			local entry = view and view.cur_entry
+			if
+				not view
+				or not view.cur_layout
+				or not entry
+				or not entry.layout
+				or not entry.layout.a
+				or not entry.layout.b
+			then
+				return
+			end
+
+			local width = vim.o.columns
+			local height = vim.o.lines
+			if width == 0 or height == 0 then
+				return
+			end
+
+			local visual_height = height * 2.0 -- Monospace font ratio
+			local target_layout_name = width > visual_height and "diff2_horizontal" or "diff2_vertical"
+
+			local LayoutClass = require("diffview.config").name_to_layout(target_layout_name)
+			local old_layout = entry.layout
+			entry.layout = LayoutClass({ a = old_layout.a.file, b = old_layout.b.file })
+			old_layout:destroy()
+			view:use_entry(entry)
+			vim.cmd("wincmd =") -- Resize to equal dimension
+		end
+
+		local resize_timer = nil
+		vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
+			callback = function()
+				local view = require("diffview.lib").get_current_view()
+				if not view then
+					return
+				end
+
+				if resize_timer then
+					vim.fn.timer_stop(resize_timer)
+				end
+
+				resize_timer = vim.fn.timer_start(100, function()
+					auto_switch_diffview_layout()
+					resize_timer = nil
+				end)
+			end,
+		})
+
 		vim.api.nvim_create_autocmd("User", {
 			pattern = "DiffviewViewOpened",
 			callback = function()
