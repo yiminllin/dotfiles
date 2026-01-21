@@ -79,6 +79,7 @@ abbr -a gsu gs up
 abbr -a gsd gs down
 abbr -a gsm gs trunk
 abbr -a gsur gs upstack restack
+abbr -a gsus gs upstack submit
 abbr -a gsrc gs rebase continue 
 abbr -a gsra gs rebase abort
 
