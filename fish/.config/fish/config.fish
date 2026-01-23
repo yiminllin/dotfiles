@@ -82,6 +82,7 @@ abbr -a gsur gs upstack restack
 abbr -a gsus gs upstack submit
 abbr -a gsrc gs rebase continue 
 abbr -a gsra gs rebase abort
+abbr -a gsrs gs repo sync
 
 # AIchat
 abbr -a ai "aichat --role concise-bot"
