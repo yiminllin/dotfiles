@@ -37,6 +37,12 @@ For the first time starting tmux, use tmuxinator:
 tmuxinator start main
 ```
 
+Task import:
+
+```bash
+task import ~/notes/.task/tasks.json
+```
+
 Julia: To install
 
 ```bash
