@@ -50,7 +50,7 @@ function to_devbox
 end
 abbr -a devbox to_devbox
 function to_dev_container_flight_software
-    cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems
+    cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems-systems
 end
 abbr -a fs to_dev_container_flight_software 
 
