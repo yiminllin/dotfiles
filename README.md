@@ -1,3 +1,5 @@
+**Minimal install** (fish, nvim, tmux, fzf, rg only): `./install_minimal.sh`
+
 (Only if on ubuntu docker)
 
 ```bash
