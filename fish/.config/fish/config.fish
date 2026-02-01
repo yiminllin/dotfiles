@@ -75,6 +75,7 @@ abbr -a gl git log --oneline -n 10
 # Git Spice
 abbr -a gsl gs log long
 abbr -a gsbc --set-cursor 'gs branch create yiminlin/%'
+abbr -a gsbd --set-cursor 'gs branch delete yiminlin/%'
 abbr -a gsu gs up
 abbr -a gsd gs down
 abbr -a gsm gs trunk
