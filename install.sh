@@ -207,6 +207,7 @@ CONFIGS=(
     aichat
     bash
     bat
+    codex
     cursor-agent
     fish
     git
