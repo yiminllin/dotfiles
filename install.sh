@@ -177,11 +177,6 @@ fi
 curl -fsSL https://opencode.ai/install | bash
 
 ################################################################################
-# Install Cursor-Agent CLI
-################################################################################
-curl https://cursor.com/install -fsS | bash
-
-################################################################################
 # Stow Configs
 ################################################################################
 
@@ -197,7 +192,7 @@ fi
 rm -rf ~/.config/fish
 
 # Clean up auto-generated lines from installers that don't support suppression flags
-# (opencode and cursor installers may still modify .bashrc)
+# (opencode installer may still modify .bashrc)
 if [ -e ~/.bashrc ]; then
     sed -i '/export PATH=.*\/home\/.*\/\.opencode\/bin/d' ~/.bashrc
     sed -i '/source.*bazel-complete\.bash/d' ~/.bashrc
@@ -208,7 +203,6 @@ CONFIGS=(
     bash
     bat
     codex
-    cursor-agent
     fish
     git
     kitty

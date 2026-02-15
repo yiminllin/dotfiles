@@ -1,6 +1,6 @@
 return {
 	"NickvanDyke/opencode.nvim",
-	cond = vim.fn.executable("cursor-agent") == 0, -- Prefer Cursor agent (used in work, since it is free XD)
+	cond = vim.fn.executable("codex") == 0, -- Prefer Codex CLI when available.
 	dependencies = {
 		{ "folke/snacks.nvim", opts = { input = {}, picker = {}, terminal = {} } },
 	},

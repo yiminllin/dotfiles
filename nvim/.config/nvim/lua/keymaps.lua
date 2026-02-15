@@ -120,21 +120,20 @@ local function quit_scroll_mode_right_tmux_pane()
 	vim.fn.system("tmux select-pane -t 0")
 end
 
--- Cursor-agent keymap
-local function create_cursor_split_or_prompt()
-	local function is_cursor_running_in_window()
-		local cmd =
-			[[tmux list-panes -F '#{pane_tty}' | xargs -I{} ps -t {} -o args= 2>/dev/null | grep -qi cursor-agent]]
+-- Agent keymap
+local function create_agent_split_or_prompt()
+	local function is_agent_running_in_window()
+		local cmd = [=[tmux list-panes -F '#{pane_tty}' | xargs -I{} ps -t {} -o args= 2>/dev/null | grep -qi 'codex']=]
 		vim.fn.system(cmd)
 		return vim.v.shell_error == 0
 	end
-	if not is_cursor_running_in_window() then
+	if not is_agent_running_in_window() then
 		vim.fn.system("tmux split-window -h")
 		vim.fn.system("tmux select-pane -t 1")
 		vim.fn.system("tmux resize-pane -t 1 -x 30%")
-		vim.fn.system("tmux send-keys -t 1 'cursor-agent' Enter")
+		vim.fn.system("tmux send-keys -t 1 'codex --yolo' Enter")
 	else
-		vim.ui.input({ prompt = "Cursor Prompt: " }, function(prompt)
+		vim.ui.input({ prompt = "Agent Prompt: " }, function(prompt)
 			if not prompt then
 				return
 			end
@@ -175,15 +174,20 @@ local function add_git_diff_to_right_tmux_window()
 	vim.fn.system("tmux send-keys -t 1 'For git diff, '")
 end
 
-vim.keymap.set({ "n", "x" }, "<leader>cp", create_cursor_split_or_prompt, { desc = "[C]ursor [P]rompt" })
-vim.keymap.set({ "n", "x" }, "<leader>ca", add_curr_loc_to_right_tmux_window, { desc = "[C]ursor [A]dd Context" })
+vim.keymap.set({ "n", "x" }, "<leader>cp", create_agent_split_or_prompt, { desc = "[C]oding Agent [P]rompt" })
+vim.keymap.set({ "n", "x" }, "<leader>ca", add_curr_loc_to_right_tmux_window, { desc = "[C]oding Agent [A]dd Context" })
 vim.keymap.set(
 	{ "n", "x" },
 	"<leader>cb",
 	add_curr_buffer_path_relative_to_cwd_to_right_tmux_window,
-	{ desc = "[C]ursor Add [B]uffers" }
+	{ desc = "[C]oding Agent Add [B]uffers" }
 )
-vim.keymap.set({ "n", "x" }, "<leader>cd", add_git_diff_to_right_tmux_window, { desc = "[C]ursor Add [G]it Diff" })
+vim.keymap.set(
+	{ "n", "x" },
+	"<leader>cd",
+	add_git_diff_to_right_tmux_window,
+	{ desc = "[C]oding Agent Add [G]it Diff" }
+)
 
 local function append_quick_note(prefix)
 	vim.ui.input({ prompt = string.format("Quick note (%s): ", prefix) }, function(prompt)
