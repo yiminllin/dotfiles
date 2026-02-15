@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+rows="$(
+  tmux list-panes -a -F '#{pane_id}|#{session_name}:#{window_name}.#{pane_index}|#{pane_current_command}|#{pane_start_command}|#{pane_title}' \
+    | while IFS='|' read -r pane_id pane_name current_cmd start_cmd pane_title; do
+        if [[ "$current_cmd" == codex ]] || [[ "$start_cmd" == *codex* ]] || [[ "$pane_title" == *codex* ]]; then
+          if tmux capture-pane -pt "$pane_id" -S -100 -E - | sed -E "s/\x1B\[[0-9;?]*[ -/]*[@-~]//g" | tr -d "\r" | grep -qi "esc to interrupt"; then
+            sort_key=1
+            status=$(printf '\033[32m[running]\033[0m')
+          else
+            sort_key=0
+            status=$(printf '\033[31m[waiting]\033[0m')
+          fi
+          printf '%s\t%s\t%s | %s\n' "$sort_key" "$pane_id" "$status" "$pane_name"
+        fi
+      done \
+    | sort -t$'\t' -k1,1n -k3,3
+)"
+
+if [[ -z "$rows" ]]; then
+  echo "No active Codex panes."
+  exit 0
+fi
+
+selected="$(
+  printf '%s\n' "$rows" \
+    | fzf \
+      --ansi \
+      --cycle \
+      --delimiter=$'\t' \
+      --with-nth=3 \
+      --height=100% \
+      --layout=reverse \
+      --header='Select Codex pane' \
+      --preview='tmux capture-pane -e -pt {2} -S -100 -E - | tr -d "\r"' \
+      --preview-window='down,70%,border-top,wrap,+999999,follow' || true
+)"
+
+if [[ -z "$selected" ]]; then
+  exit 0
+fi
+
+pane_id="$(printf '%s\n' "$selected" | cut -f2)"
+session_name="$(tmux display-message -p -t "$pane_id" '#{session_name}')"
+
+tmux switch-client -t "$session_name"
+tmux select-pane -t "$pane_id"
