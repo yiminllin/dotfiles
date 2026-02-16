@@ -8,6 +8,33 @@ return {
 			enhanced_diff_hl = true,
 		})
 
+		local function apply_diff2_winhl()
+			local view = require("diffview.lib").get_current_view()
+			if not view or not view.winopts or not view.winopts.diff2 then
+				return
+			end
+
+			-- Darker variant of current DiffDelete (#f4c2a2) for left changed text.
+			vim.api.nvim_set_hl(0, "DiffviewLeftDiffText", { bg = "#dca482", fg = "#323024", bold = true })
+
+			-- Only for diff2 layouts:
+			-- left  changed lines -> DiffDelete color
+			-- right changed lines -> DiffAdd color
+			-- changed text chunks  -> DiffChange color
+			view.winopts.diff2.a.winhl = {
+				"DiffAdd:DiffviewDiffAddAsDelete",
+				"DiffDelete:DiffviewDiffDeleteDim",
+				"DiffChange:DiffDelete",
+				"DiffText:DiffviewLeftDiffText",
+			}
+			view.winopts.diff2.b.winhl = {
+				"DiffDelete:DiffviewDiffDeleteDim",
+				"DiffAdd:DiffviewDiffAdd",
+				"DiffChange:DiffAdd",
+				"DiffText:DiffChange",
+			}
+		end
+
 		local refresh_ibl = function()
 			vim.api.nvim_set_hl(0, "Base2", { fg = "#eee8d5" })
 			require("ibl").setup({
@@ -67,6 +94,12 @@ return {
 		})
 
 		vim.api.nvim_create_autocmd("User", {
+			pattern = "DiffviewViewPostLayout",
+			callback = function()
+				apply_diff2_winhl()
+			end,
+		})
+		vim.api.nvim_create_autocmd("User", {
 			pattern = "DiffviewViewOpened",
 			callback = function()
 				-- Check if this is a FileHistory view (don't close explorer for it)
@@ -86,6 +119,7 @@ return {
 				vim.api.nvim_set_hl(0, "DiffChange", { bg = "#cecba1" })
 				vim.api.nvim_set_hl(0, "DiffText", { bg = "#c5e0dc", fg = "#323024", bold = true })
 				vim.api.nvim_set_hl(0, "DiffDelete", { bg = "#f4c2a2" })
+				apply_diff2_winhl()
 				refresh_ibl()
 			end,
 		})
