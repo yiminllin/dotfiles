@@ -66,8 +66,13 @@ return {
 			local visual_height = height * 2.0 -- Monospace font ratio
 			local target_layout_name = width > visual_height and "diff2_horizontal" or "diff2_vertical"
 
-			local LayoutClass = require("diffview.config").name_to_layout(target_layout_name)
 			local old_layout = entry.layout
+			local current_layout_name = old_layout.name or (old_layout.class and old_layout.class.name)
+			if current_layout_name == target_layout_name then
+				return
+			end
+
+			local LayoutClass = require("diffview.config").name_to_layout(target_layout_name)
 			entry.layout = LayoutClass({ a = old_layout.a.file, b = old_layout.b.file })
 			old_layout:destroy()
 			view:use_entry(entry)
