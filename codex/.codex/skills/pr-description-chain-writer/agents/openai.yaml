@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Chain Description Writer"
+  short_description: "Generate PR bodies for stacked PR chains"
+  default_prompt: "Use $pr-description-chain-writer to generate PR descriptions for this PR chain from the listed PR numbers and commits."
