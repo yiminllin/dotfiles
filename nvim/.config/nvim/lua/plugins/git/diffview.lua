@@ -15,7 +15,7 @@ return {
 			end
 
 			-- Darker variant of current DiffDelete (#f4c2a2) for left changed text.
-			vim.api.nvim_set_hl(0, "DiffviewLeftDiffText", { bg = "#dca482", fg = "#323024", bold = true })
+			vim.api.nvim_set_hl(0, "DiffviewLeftDiffText", { bg = "#dca482" })
 
 			-- Only for diff2 layouts:
 			-- left  changed lines -> DiffDelete color
