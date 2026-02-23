@@ -65,6 +65,7 @@ function find_all_local_zipline_logs
 end
 abbr -a ldb_url find_all_local_zipline_logs
 abbr -a ldb "log_data_bridge -i '/home/ubuntu/github/FlightSystems/.starling/**/*.{zml,zst}" -i "/home/ubuntu/github/FlightSystems/.phoenix/logs/latest/**/*.{zml,zst}'"
+abbr -a awslogin aws sso login --no-browser
 
 # Git
 abbr -a gst git status
