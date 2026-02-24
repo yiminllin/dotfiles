@@ -137,8 +137,18 @@ function git_worktree_add --description "Interactive Adding Git Worktree"
         set repo_name (string replace -a '.' '-' $repo)
         set branch_name (string replace -a '/' '-' $branch)
         set folder_name "$repo_name-$branch_name"
-        echo "Creating worktree for $branch in $HOME/$folder_name"
-        if git worktree add "$HOME/$folder_name" "$branch"
+        set worktree_path "$HOME/$folder_name"
+        echo "Creating worktree for $branch in $worktree_path"
+        if git worktree add "$worktree_path" "$branch"
+            set exclude_file (git -C "$worktree_path" rev-parse --git-path info/exclude)
+            for pattern in ".codex/skills/" "notes/"
+                grep -Fxq -- "$pattern" "$exclude_file"; or echo "$pattern" >> "$exclude_file"
+            end
+            set skills_src "$HOME/dotfiles/codex/.codex/skills"
+            if test -d "$skills_src"
+                mkdir -p "$worktree_path/.codex/skills"
+                command cp -R "$skills_src"/. "$worktree_path/.codex/skills"/
+            end
             if test -n "$TMUX"
                 ~/.tmux/tmux-sessionizer
             end
@@ -164,6 +174,7 @@ function git_worktree --description "Interactive Git Worktree"
     end
 end
 abbr -a gw git_worktree
+abbr -a gwa git_worktree add
 abbr -a gwal git_worktree add local
 abbr -a gwar git_worktree add remote
 abbr -a gwr git_worktree remove
