@@ -11,8 +11,8 @@ tmux_minor=$(echo "$tmux_version" | cut -d. -f2)
 repos=$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type f --hidden | xargs -I{} dirname {} 2>/dev/null)
 repos="$repos"$'\n'"$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type d --hidden | xargs -I{} dirname {} 2>/dev/null)"
 
-# Remove duplicates, hide paths with directory starting with ., and sort
-repos=$(echo "$repos" | grep -v '/\.' | sort -u)
+# Remove duplicates, hide paths with directory starting with ., ignore /tmp, and sort
+repos=$(echo "$repos" | grep -v '/\.' | grep -vE '^/tmp(/|$)' | sort -u)
 
 # Use fzf to select workspace
 if [[ $tmux_major -gt 3 ]] || [[ $tmux_major -eq 3 && $tmux_minor -ge 3 ]]; then
