@@ -14,13 +14,16 @@ return {
 				return
 			end
 
-			-- Darker variant of current DiffDelete (#f4c2a2) for left changed text.
-			vim.api.nvim_set_hl(0, "DiffviewLeftDiffText", { bg = "#dca482" })
+			-- GitHub-like light diff colors: red on left, green on right.
+			vim.api.nvim_set_hl(0, "DiffviewLeftDiffText", { bg = "#ffb3ad" })
+			vim.api.nvim_set_hl(0, "DiffviewRightDiffText", { bg = "#9fe8ad" })
+			vim.api.nvim_set_hl(0, "DiffviewDiffDeleteDim", { bg = "#ffe1d6" })
+			vim.api.nvim_set_hl(0, "DiffDelete", { bg = "#ffe1d6" })
 
 			-- Only for diff2 layouts:
 			-- left  changed lines -> DiffDelete color
 			-- right changed lines -> DiffAdd color
-			-- changed text chunks  -> DiffChange color
+			-- changed text chunks  -> brighter side-specific colors
 			view.winopts.diff2.a.winhl = {
 				"DiffAdd:DiffviewDiffAddAsDelete",
 				"DiffDelete:DiffviewDiffDeleteDim",
@@ -31,7 +34,7 @@ return {
 				"DiffDelete:DiffviewDiffDeleteDim",
 				"DiffAdd:DiffviewDiffAdd",
 				"DiffChange:DiffAdd",
-				"DiffText:DiffChange",
+				"DiffText:DiffviewRightDiffText",
 			}
 		end
 
