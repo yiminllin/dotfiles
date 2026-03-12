@@ -155,12 +155,27 @@ mkdir -p "$OUT_DIR"
 aws s3 sync "$S3_URI" "$OUT_DIR"
 ```
 
-5. Build a first-pass failure summary from logs and `test_record.json`.
+5. Inventory artifacts before reading logs.
+   - HIL exports often contain multiple test phase directories. List them first and avoid assuming `phoenix.log` is the only useful log.
+   - Current common filenames:
+     - `test_log_0.log`: HTF/pytest harness log for a phase. This starts life as working-directory `test.log`, is attached with key `test_log`, then exported under the generated name `test_log_0.log`.
+     - `phoenix_logs/phoenix.log`: Phoenix orchestration/sim log.
+     - `zip_a.<flight_id>.log.zml.zst`, `zip_b.<flight_id>.log.zml.zst`, `droid.<flight_id>.log.zml.zst`, `dock.<flight_id>.log.zml.zst`: flattened compute ZML logs used by validators.
+     - `phoenix_logs/world.zml` or `world.zml.zst`: Phoenix world/physics log.
+     - `test_record.json`: authoritative summary of result, measurements, and manifest.
+   - Do not assume a standalone `journalctl.log` text artifact exists. In many runs the journal data only appears as `journalctl_log` topics inside compute ZML files.
+
+```bash
+find "$OUT_DIR" -maxdepth 3 -type f | sort
+```
+
+6. Build a first-pass failure summary from logs and `test_record.json`.
    - Find the first clear failure markers:
      - `=== FAILURE REASONS ===`
      - `Error Code`
      - `FAIL_TEST` / `FAIL_VALIDATORS`
    - Treat failure reasons/error table as higher-signal than prior LLM summaries in logs.
+   - If the summary only shows infra-style failures such as `SIMULATION_FAILED`, `FAIL_TEST`, or teardown failures while validators passed, inspect `test_log_0.log` first for the earliest harness exception before reading later `SIGTERM` noise.
 
 ```bash
 rg -n "=== FAILURE REASONS ===|Error Code|FAIL_TEST|FAIL_VALIDATORS|unexpected-alarms" /tmp/hil_job.log
@@ -228,6 +243,7 @@ PY
   fi
 fi
 jq '.test_info | {name, result}' "$TEST_RECORD"
+jq -r '.manifest[]? | "\(.key)\t\(.filename)\t\(.phase // "")"' "$TEST_RECORD"
 ```
 
 Collect failed validators and checks:
@@ -245,7 +261,7 @@ jq -r '
 ' "$TEST_RECORD"
 ```
 
-6. Run internal LLM-backed failure categorization (mandatory).
+7. Run internal LLM-backed failure categorization (mandatory).
    - Requires configured `HIL_DB_URL` and `OPENAI_API_KEY`.
    - Fail fast if unavailable.
 
@@ -266,15 +282,34 @@ LOOKBACK_HOURS=720 \
 bazel run //hil/htf/src:hil_failure_summary > /tmp/hil_failure_summary.json
 ```
 
-7. Inspect ZML and journal logs for evidence.
-   - Common compute logs include `zip-a__ipc.zml*`, `zip-b__ipc.zml*`, `droid__ipc.zml*`, `dock__ipc.zml*`.
+8. Inspect harness, Phoenix, ZML, and journal logs for evidence.
+   - Use artifacts in this order unless the failure mode is already obvious:
+     1. `test_record.json`
+     2. `test_log_0.log`
+     3. `phoenix_logs/phoenix.log`
+     4. compute ZML logs
+     5. Phoenix `world.zml*`
+   - `test_log_0.log` is often the only place you will see:
+     - Python exceptions
+     - HTF plug failures
+     - IPC metadata parse failures
+     - teardown failures that later collapse into generic `SIMULATION_FAILED`
+   - Common compute logs include flattened names like `zip_a.<flight_id>.log.zml.zst`, `zip_b.<flight_id>.log.zml.zst`, `droid.<flight_id>.log.zml.zst`, `dock.<flight_id>.log.zml.zst`. Older/internal names may still appear as `zip-a__ipc.zml*`, `zip-b__ipc.zml*`, `droid__ipc.zml*`, `dock__ipc.zml*`.
    - Phoenix sim logs often include `world.zml*`, `physics.zml*`.
-   - Journal content may appear as `journalctl_log` in ZML streams.
+   - Journal content often appears as `journalctl_log` in ZML streams, for example:
+     - `/compute_a.journalctl_log`
+     - `/compute_b.journalctl_log`
+     - `/droid.journalctl_log`
+   - The raw working-directory names `test.log` and `log.zml.zst` are usually not exported because attached copies like `test_log_0.log` and `zml_log_0.zml.zst` replace them.
 
 ```bash
 find "$OUT_DIR" -type f \( -name "*.zml" -o -name "*.zml.zst" \) | sort
+find "$OUT_DIR" -type f \( -name "test_log_*.log" -o -path "*/phoenix_logs/*" -o -name "*.zml" -o -name "*.zml.zst" \) | sort
+TEST_LOG="$(find "$OUT_DIR" -name 'test_log_*.log' | sort | head -n1)"
+[ -n "$TEST_LOG" ] && rg -n "Traceback|Exception|Could not parse metadata|SIGTERM|simulation_passed|All scenarios completed successfully" "$TEST_LOG"
 zml -z <log.zml.zst> list
 zml -z <log.zml.zst> print '*<topic_or_alarm_hint>*'
+zml -z <log.zml.zst> list | rg 'journalctl|process_status|alarm|fault|dock_status'
 zml -z <log.zml.zst> separate '/compute_a.journalctl_log' -o /tmp/zml_sep/
 ```
 
@@ -285,7 +320,7 @@ sudo journalctl -u <service> -n 500 --no-pager
 sudo journalctl -u <service> --since "<UTC timestamp>" --no-pager
 ```
 
-8. Map failing validator/alarm/error to code and confirm causality.
+9. Map failing validator/alarm/error to code and confirm causality.
    - Search validator implementation and config paths:
 
 ```bash
@@ -301,7 +336,7 @@ rg -n "<ALARM_OR_ERROR_NAME>" ash p2_zip p2_droid p2_dock gnc p2_validation
    - Re-check every major claim against source files before finalizing.
    - Distinguish `confirmed` evidence from `inferred` reasoning.
 
-9. Produce root cause and fixes.
+10. Produce root cause and fixes.
    - Primary cause = earliest signal that explains downstream failures.
    - Separate:
      - Mission/behavior failure that later trips validators
@@ -340,5 +375,9 @@ Keep it concise. Prefer short evidence-backed statements over broad speculation.
 - `hil/htf/src/zipline/htf/hil/failure_analyzer.py`
 - `hil/tools/fetch_hil_logs.py`
 - `hil/tools/test_log_metrics.py`
+- `hil/htf/src/zipline/htf/core/executor.py`
+- `hil/htf/src/zipline/htf/core/context.py`
+- `hil/htf/src/zipline/htf/pytest_plugins/htf_export.py`
+- `ash/phoenix/orchestration/src/logging.rs`
 - `tools/zml/README.md`
 - `hil/utils/remote_machine.py`
