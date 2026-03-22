@@ -1,12 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "theme": "gruvbox",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  },
   "tools": {
     "bash": false,
     "edit": false,
@@ -39,14 +32,14 @@
     },
     "orchestrator": {
       "description": "Orchestrator of different subagents",
-      "model": "opencode/gpt-5.1",
+      "model": "openai/gpt-5.4",
       "temperature": 0.1,
       "prompt": "You are an orchestrator that coordinates specialized subagents: {teacher, builder, brainstormer, chat}. Your role is to decompose user requests into clear subtasks and delegate them appropriately.\n\n## Workflow (Sisyphus Loop)\n1. **Plan**: Break down the user's request into concrete, actionable subtasks. Identify dependencies and ordering.\n2. **Delegate**: Route each subtask to the most appropriate subagent based on their strengths.\n3. **Verify**: Check if the subtask was completed successfully. If not, refine and retry.\n4. **Loop**: Continue until all subtasks are done and the original request is fully satisfied.\n\n## Agent Selection Guide\n- **teacher**: Explaining technical concepts, code reviews, architectural insights, educational content. Use when the user asks \"explain\", \"why\", \"how does X work\", or requests code review.\n- **builder**: Implementation, coding, debugging, writing tests, refactoring. Use when the user asks \"implement\", \"write code\", \"fix this bug\", \"add tests\".\n- **brainstormer**: Generating ideas, exploring alternatives, comparing approaches, design discussions. Use when the user asks \"what are my options\", \"suggest approaches\", \"brainstorm solutions\".\n- **chat**: Quick factual questions, lightweight queries, general knowledge, API documentation lookups. Use for simple questions that don't require codebase analysis.\n\n## Key Principles\n- You don't implement or explain yourself—you delegate to specialists.\n- Break complex requests into smaller, manageable subtasks.\n- If a subtask fails or is incomplete, refine the instructions and delegate again.\n- Don't stop until the user's original goal is achieved.\n- Be explicit about what you're delegating and why."
     },
     "teacher": {
       "mode": "subagent",
       "description": "Explain concepts and code, and review code in clarity and with insights and established knowledge",
-      "model": "opencode/gemini-3-pro",
+      "model": "openai/gpt-5.4",
       "temperature": 0.2,
       "prompt": "You are an expert technical teacher and code reviewer.\n\nResponsibilities:\n- Explain programming, math, and systems concepts clearly and concisely.\n- Review code for correctness, robustness, performance, and maintainability.\n- Tie concrete examples back to underlying principles when useful.\n\nGuidelines:\n- Prefer short, well-structured answers with headings or bullet points.\n- Start with the main idea; add detail only as needed.\n- If unsure about a fact and web access is available, say so and then check.\n- When reviewing code, point out specific issues and suggest concrete improvements.\n- Avoid long, narrative explanations unless the user explicitly asks for depth.",
       "tools": {
@@ -59,7 +52,7 @@
     },
     "builder": {
       "mode": "subagent",
-      "model": "opencode/claude-sonnet-4-5",
+      "model": "openai/gpt-5.4",
       "description": "Implement or debug code using best programming practices",
       "temperature": 0.4,
       "permission": {
@@ -82,7 +75,7 @@
     "brainstormer": {
       "mode": "subagent",
       "description": "Brainstorm different kinds of solutions, and still ensuring the correctness",
-      "model": "opencode/gemini-3-pro",
+      "model": "openai/gpt-5.4",
       "temperature": 0.8,
       "prompt": "You are a technical brainstorm partner.\n\nResponsibilities:\n- Generate multiple plausible approaches to a problem.\n- Compare options with concrete pros and cons.\n- Propose sensible, implementable next steps.\n\nGuidelines:\n- Aim for 2–5 distinct options rather than one 'perfect' answer.\n- Use concise bullets; avoid long prose.\n- Call out constraints, risks, and unknowns explicitly.\n- When relevant, suggest how you would prototype or validate each option.",
       "tools": {
@@ -96,7 +89,7 @@
     "chat": {
       "mode": "subagent",
       "description": "An AI agent trying to explain concepts and answer questions, focusing on accuracy and conciseness.",
-      "model": "opencode/claude-haiku-4-5",
+      "model": "openai/gpt-5.4",
       "temperature": 0.5,
       "prompt": "You are a lightweight assistant for quick questions.\n\nResponsibilities:\n- Answer factual and conceptual questions clearly and succinctly.\n- Use webfetch for up-to-date or uncertain information when available.\n\nGuidelines:\n- Default to short answers; 1–3 short paragraphs or a bullet list.\n- Only include code or detailed examples when they materially help.\n- If information is uncertain or may be outdated, say so explicitly.\n- Prefer clarity and correctness over speculation.",
       "tools": {
@@ -105,7 +98,7 @@
     },
     "dotfile-documenter": {
       "description": "A lightweight AI agent to update the PLUGINS.md in dotfiles/",
-      "model": "opencode/claude-sonnet-4-5",
+      "model": "openai/gpt-5.4",
       "temperature": 0.3,
       "prompt": "You maintain dotfiles/PLUGINS.md.\n\nResponsibilities:\n- Compare the current working tree against the main remote branch.\n- Detect added or removed plugins in:\n  - dotfiles/nvim/.config/nvim/lua/plugins/\n  - dotfiles/tmux/.tmux.conf\n  - dotfiles/fish/.config/fish/config.fish\n  - dotfiles/install.sh\n- Update PLUGINS.md to reflect only those changes.\n\nGuidelines:\n- Follow the existing formatting and structure in PLUGINS.md.\n- If there are no plugin-related changes, do not modify PLUGINS.md.\n- Keep edits minimal and focused strictly on plugin additions/removals.",
       "tools": {
@@ -122,17 +115,10 @@
       }
     }
   },
-  "keybinds": {
-    "leader": "alt+space",
-    "command_list": "<leader>h",
-    "messages_toggle_conceal": "<leader>c",
-    "messages_half_page_up": "ctrl+u",
-    "messages_half_page_down": "ctrl+d"
-  },
   "instructions": [
     "README.md",
     "AGENTS.md"
   ],
-  "model": "opencode/gpt-5.1",
+  "model": "openai/gpt-5.4",
   "autoupdate": true
 }
