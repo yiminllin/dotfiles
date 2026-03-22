@@ -1,3 +1,32 @@
+local function get_cwd()
+	local uv = vim.uv or vim.loop
+	if uv and uv.cwd then
+		return uv.cwd()
+	end
+	return vim.fn.getcwd()
+end
+
+local function in_systems_dir()
+	local cwd = get_cwd()
+	return cwd:match("/Systems[^/]*(/|$)") ~= nil
+end
+
+local function diffview_open(extra_args)
+	local args = extra_args and vim.deepcopy(extra_args) or {}
+	if in_systems_dir() then
+		vim.list_extend(args, { "--", ".", ":!.codex/skills", ":!notes" })
+	end
+	vim.api.nvim_cmd({ cmd = "DiffviewOpen", args = args }, {})
+end
+
+local function diffview_file_history()
+	local args = {}
+	if in_systems_dir() then
+		vim.list_extend(args, { ".", ":!.codex/skills", ":!notes" })
+	end
+	vim.api.nvim_cmd({ cmd = "DiffviewFileHistory", args = args }, {})
+end
+
 return {
 	"sindrets/diffview.nvim",
 	dependencies = {
@@ -152,7 +181,9 @@ return {
 	keys = {
 		{
 			"<leader>gdc",
-			"<cmd>DiffviewOpen<cr>",
+			function()
+				diffview_open()
+			end,
 			mode = { "n", "v" },
 			desc = "[G]it [D]iffview Open [C]urrent Changes",
 		},
@@ -160,9 +191,9 @@ return {
 			"<leader>gdm",
 			function()
 				if string.find(vim.fn.system("git remote get-url origin"), "FlightSystems", 1, true) then
-					vim.cmd("DiffviewOpen origin/develop")
+					diffview_open({ "origin/develop" })
 				else
-					vim.cmd("DiffviewOpen origin/main")
+					diffview_open({ "origin/main" })
 				end
 			end,
 			mode = { "n", "v" },
@@ -235,7 +266,7 @@ return {
 					vim.notify("Could not determine parent branch", vim.log.levels.WARN)
 					return
 				end
-				vim.cmd("DiffviewOpen " .. parent)
+				diffview_open({ parent })
 			end,
 			mode = { "n", "v" },
 			desc = "[G]it [D]iffview Open [P]arent branch",
@@ -258,6 +289,13 @@ return {
 			mode = { "n", "v" },
 			desc = "[G]it [D]iffview [R]efresh",
 		},
-		{ "<leader>gdf", "<cmd>DiffviewFileHistory<cr>", mode = { "n", "v" }, desc = "[G]it Diffview [F]ile History" },
+		{
+			"<leader>gdf",
+			function()
+				diffview_file_history()
+			end,
+			mode = { "n", "v" },
+			desc = "[G]it Diffview [F]ile History",
+		},
 	},
 }
