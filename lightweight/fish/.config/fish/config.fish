@@ -1,5 +1,5 @@
 if status is-interactive
-    # Lightweight fish: minimal abbrs, no tmux/task/aichat/opencode
+    # Lightweight fish: minimal abbrs, no tmux/task/opencode
 end
 
 # So fzf and (on Debian) tarball nvim are in PATH after minimal install

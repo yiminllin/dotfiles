@@ -2,9 +2,6 @@
 
 # Sensitive Information
 # Personal API keys and tokens
-aichat/.config/aichat/.env
-# AIChat sessions
-aichat/.config/aichat/sessions/
 # Cursor agent
 cursor-agent/
 # SSH and private authentication keys

@@ -72,7 +72,6 @@
 | du-dust | Disk usage analyzer | [Cargofile](Cargofile) |
 | tokei | Line counter | [Cargofile](Cargofile) |
 | zoxide | Smart cd replacement | [Cargofile](Cargofile) |
-| aichat | CLI AI chat tool | [Cargofile](Cargofile) |
 | vivid | LS_COLORS generator | [Cargofile](Cargofile) |
 
 ### Python Tools (via UV)

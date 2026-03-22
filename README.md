@@ -52,12 +52,6 @@ juliaup add <julia_version>
 julia -e 'using Pkg; Pkg.add("LanguageServer")'
 ```
 
-AIChat: create `aichat/.config/aichat/.env`, where
-
-```bash
-CLAUDE_API_KEY=...
-```
-
 OpenCode: run
 
 ```bash

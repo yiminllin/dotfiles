@@ -89,9 +89,6 @@ abbr -a gsrc gs rebase continue
 abbr -a gsra gs rebase abort
 abbr -a gsrs gs repo sync
 
-# AIchat
-abbr -a ai "aichat --role concise-bot"
-
 # Task
 abbr -a t task
 abbr -a t0 task project: or estimate: or priority: list

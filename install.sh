@@ -199,7 +199,6 @@ if [ -e ~/.bashrc ]; then
 fi
 
 CONFIGS=(
-    aichat
     bash
     bat
     codex

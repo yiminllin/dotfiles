@@ -87,7 +87,6 @@ export EDITOR="nvim"
 export LS_COLORS=$(vivid generate solarized-light)
 export SHELL_PATH=$(which fish)
 export EDITOR_PATH=$(which nvim)
-export AICHAT_CONFIG_DIR="$HOME/.config/aichat"
 export XDG_CONFIG_HOME="$HOME/.config"
 
 if [ -z "$TMUX" ] && [ "$TERM" = "xterm" ]; then
@@ -107,4 +106,3 @@ fi
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
 
 source ${HOME}/.bash_completion.d/bazel-complete.bash 2>/dev/null || true
-
