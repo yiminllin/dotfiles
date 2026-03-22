@@ -10,7 +10,7 @@ return {
 		formatters_by_ft = {
 			lua = { "stylua" },
 			cpp = { "clang_format" },
-			python = { "isort", "black" },
+			python = { "ruff" },
 			rust = { "rustfmt", lsp_format = "fallback" },
 			markdown = { "prettier" },
 		},
