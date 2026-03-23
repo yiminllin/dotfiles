@@ -58,6 +58,8 @@ OpenCode: run
 opencode auth login
 ```
 
+In tmux, we need to leader+h, then toggle appearance to manually switch to light mode in opencode.
+
 Github-CLI, we need
 
 ```bash
