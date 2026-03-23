@@ -231,5 +231,8 @@ end
 # opencode
 fish_add_path ~/.opencode/bin
 
+# fzf
+fish_add_path -p $HOME/.fzf/bin
+
 # direnv hook
 direnv hook fish | source
