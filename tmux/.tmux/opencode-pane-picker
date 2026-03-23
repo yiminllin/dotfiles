@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+separator=$'\034'
+
+status_sort_key() {
+  case "$1" in
+    active) printf '1' ;;
+    idle) printf '2' ;;
+    *) printf '3' ;;
+  esac
+}
+
+status_label() {
+  case "$1" in
+    active) printf '\033[31mRUNNING\033[0m' ;;
+    idle) printf '\033[32mIDLE\033[0m' ;;
+    *) printf '\033[2mUNKNOWN\033[0m' ;;
+  esac
+}
+
+resolve_status() {
+  local pane_id="$1"
+  local pane_height probe_start
+
+  pane_height="$(tmux display-message -p -t "$pane_id" '#{pane_height}')"
+  probe_start=$(( pane_height > 5 ? pane_height - 5 : 0 ))
+
+  if tmux capture-pane -p -t "$pane_id" -S "$probe_start" -E - 2>/dev/null | tr -d '\r' | grep -Fiq 'Esc interrupt'; then
+    printf 'active'
+    return
+  fi
+
+  printf 'idle'
+}
+
+list_opencode_panes() {
+  tmux list-panes -a -F "#{pane_id}${separator}#{session_name}:#{window_id}${separator}#{session_name}:#{window_name}.#{pane_index}${separator}#{pane_current_command}" \
+    | while IFS="$separator" read -r pane_id target_window pane_name current_cmd; do
+        [[ "$current_cmd" == opencode ]] || continue
+
+        local pane_status session_name
+        pane_status="$(resolve_status "$pane_id")"
+        session_name="${pane_name%%:*}"
+
+        printf 'pane\t%s\t%s\t%s\t%s\t%s\t  %s %s\n' \
+          "$pane_id" \
+          "$target_window" \
+          "$session_name" \
+          "$(status_sort_key "$pane_status")" \
+          "$pane_name" \
+          "$(status_label "$pane_status")" \
+          "$pane_name"
+      done
+}
+
+add_session_headers() {
+  local current_session=""
+
+  while IFS=$'\t' read -r row_type pane_id target_window session_name status_sort pane_name display; do
+    if [[ "$current_session" != "$session_name" ]]; then
+      current_session="$session_name"
+      printf 'header\t\t\t%s\t\t\t%s\n' "$session_name" "$session_name"
+    fi
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$row_type" \
+      "$pane_id" \
+      "$target_window" \
+      "$session_name" \
+      "$status_sort" \
+      "$pane_name" \
+      "$display"
+  done
+}
+
+preview_command() {
+  cat <<'EOF'
+bash -c 'if [[ "$1" == header ]]; then printf "Session: %s\n" "$2"; else tmux capture-pane -e -pt "$3" -S -100 -E - | tr -d "\r"; fi' _ {1} {4} {2}
+EOF
+}
+
+rows="$(list_opencode_panes | sort -t$'\t' -k4,4 -k5,5 -k6,6 | add_session_headers)"
+
+if [[ -z "$rows" ]]; then
+  echo "No OpenCode panes found."
+  exit 0
+fi
+
+selected="$(
+  printf '%s\n' "$rows" \
+    | fzf \
+      --ansi \
+      --cycle \
+      --delimiter=$'\t' \
+      --with-nth=7 \
+      --height=100% \
+      --layout=reverse \
+      --header='Select OpenCode pane' \
+      --preview="$(preview_command)" \
+      --preview-window='down,70%,border-double,wrap,+999999,follow' || true
+)"
+
+if [[ -z "$selected" ]]; then
+  exit 0
+fi
+
+IFS=$'\t' read -r row_type pane_id target_window _ <<< "$selected"
+
+if [[ "$row_type" != pane ]]; then
+  exit 0
+fi
+
+tmux run-shell -b "sleep 0.05; tmux switch-client -t \"$target_window\"; tmux select-pane -t \"$pane_id\""

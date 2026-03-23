@@ -79,18 +79,43 @@ vim.keymap.set("n", "<M-c>", cycle_layout, { desc = "Cycle Split Layout" })
 vim.keymap.set("n", "<M-|>", ":vsplit<CR>", { desc = "Vertical split" })
 vim.keymap.set("n", "<M-->", ":split<CR>", { desc = "Horizontal split" })
 
--- Scroll right tmux pane
-local function tmux_scroll_right_pane_silent(direction)
-	local scroll_cmd = direction == "up" and "halfpage-up" or "halfpage-down"
-	vim.fn.system("tmux copy-mode -t '{right}'")
-	vim.fn.system("tmux send-keys -X -t '{right}' " .. scroll_cmd)
-end
+-- Opencode Related
+local opencode = require("utils.opencode")
 vim.keymap.set({ "n", "x" }, "<M-u>", function()
-	tmux_scroll_right_pane_silent("up")
+	opencode.scroll_pane("up")
 end, { desc = "Right Tmux Scroll Up" })
 vim.keymap.set({ "n", "x" }, "<M-d>", function()
-	tmux_scroll_right_pane_silent("down")
+	opencode.scroll_pane("down")
 end, { desc = "Right Tmux Scroll Down" })
+
+vim.keymap.set({ "n", "x" }, "<leader>cp", opencode.create_window_or_prompt, { desc = "Open[C]ode [P]rompt" })
+vim.keymap.set({ "n", "x" }, "<leader>ca", opencode.add_current_location, { desc = "Open[C]ode [A]dd Context" })
+vim.keymap.set(
+	{ "n", "x" },
+	"<leader>cb",
+	opencode.add_current_buffer_path_relative_to_cwd,
+	{ desc = "Open[C]ode Add [B]uffers" }
+)
+
+-- Note related
+local function append_quick_note(prefix)
+	vim.ui.input({ prompt = string.format("Quick note (%s): ", prefix) }, function(prompt)
+		if not prompt then
+			return
+		end
+		local notes_file = vim.fn.expand("~/notes/main/quick_notes.md")
+		local file = io.open(notes_file, "a")
+		file:write(string.format("- %s: %s\n", prefix, prompt))
+		file:close()
+	end)
+end
+
+vim.keymap.set({ "n", "x" }, "<leader>nb", function()
+	append_quick_note("BUG")
+end, { desc = "Quick [N]ote [B]ug" })
+vim.keymap.set({ "n", "x" }, "<leader>nn", function()
+	append_quick_note("NOTE")
+end, { desc = "Quick [N]ote" })
 
 -- For Zettlekasten
 vim.keymap.set("n", "<leader>zn", function()
@@ -111,99 +136,3 @@ vim.keymap.set("n", "<leader>zn", function()
 		vim.cmd.edit(new_note_path)
 	end)
 end, { desc = "[Z]ettlekasten [N]ew Note" })
-
-local function quit_scroll_mode_right_tmux_pane()
-	vim.fn.system("tmux select-pane -t 1")
-	if vim.trim(vim.fn.system("tmux display-message -p '#{pane_in_mode}'")) == "1" then
-		vim.fn.system("tmux send-keys -X cancel")
-	end
-	vim.fn.system("tmux select-pane -t 0")
-end
-
--- Agent keymap
-local function create_agent_split_or_prompt()
-	local function is_agent_running_in_window()
-		local cmd = [=[tmux list-panes -F '#{pane_tty}' | xargs -I{} ps -t {} -o args= 2>/dev/null | grep -qi 'codex']=]
-		vim.fn.system(cmd)
-		return vim.v.shell_error == 0
-	end
-	if not is_agent_running_in_window() then
-		vim.fn.system("tmux split-window -h")
-		vim.fn.system("tmux select-pane -t 1")
-		vim.fn.system("tmux resize-pane -t 1 -x 30%")
-		vim.fn.system("tmux send-keys -t 1 'codex --yolo' Enter")
-	else
-		vim.ui.input({ prompt = "Agent Prompt: " }, function(prompt)
-			if not prompt then
-				return
-			end
-			quit_scroll_mode_right_tmux_pane()
-			vim.fn.system(string.format("tmux send-keys -t 1 '%s'", prompt))
-			vim.fn.system("tmux send-keys -t 1 Enter")
-		end)
-	end
-	vim.fn.system("tmux select-pane -t 0")
-end
-
-local function add_curr_buffer_path_relative_to_cwd_to_right_tmux_window()
-	quit_scroll_mode_right_tmux_pane()
-	local relative_path = vim.fn.expand("%:.")
-	vim.fn.system("tmux send-keys -t 1 " .. relative_path .. " Space")
-end
-
-local function add_curr_loc_to_right_tmux_window()
-	quit_scroll_mode_right_tmux_pane()
-	local relative_path = vim.fn.expand("%:.")
-	if vim.fn.mode() == "n" then
-		local curr_line_num = vim.fn.line(".")
-		vim.fn.system("tmux send-keys -t 1 " .. relative_path .. ":" .. curr_line_num .. " Space")
-		return
-	end
-
-	if vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode == "^V" then
-		local start_v_line = vim.fn.getpos("v")[2]
-		local end_v_line = vim.fn.getpos(".")[2]
-		local start_line = math.min(start_v_line, end_v_line)
-		local end_line = math.max(start_v_line, end_v_line)
-		vim.fn.system("tmux send-keys -t 1 " .. relative_path .. ":" .. start_line .. "-" .. end_line .. " Space")
-		return
-	end
-end
-
-local function add_git_diff_to_right_tmux_window()
-	vim.fn.system("tmux send-keys -t 1 'For git diff, '")
-end
-
-vim.keymap.set({ "n", "x" }, "<leader>cp", create_agent_split_or_prompt, { desc = "[C]oding Agent [P]rompt" })
-vim.keymap.set({ "n", "x" }, "<leader>ca", add_curr_loc_to_right_tmux_window, { desc = "[C]oding Agent [A]dd Context" })
-vim.keymap.set(
-	{ "n", "x" },
-	"<leader>cb",
-	add_curr_buffer_path_relative_to_cwd_to_right_tmux_window,
-	{ desc = "[C]oding Agent Add [B]uffers" }
-)
-vim.keymap.set(
-	{ "n", "x" },
-	"<leader>cd",
-	add_git_diff_to_right_tmux_window,
-	{ desc = "[C]oding Agent Add [G]it Diff" }
-)
-
-local function append_quick_note(prefix)
-	vim.ui.input({ prompt = string.format("Quick note (%s): ", prefix) }, function(prompt)
-		if not prompt then
-			return
-		end
-		local notes_file = vim.fn.expand("~/notes/main/quick_notes.md")
-		local file = io.open(notes_file, "a")
-		file:write(string.format("- %s: %s\n", prefix, prompt))
-		file:close()
-	end)
-end
-
-vim.keymap.set({ "n", "x" }, "<leader>nb", function()
-	append_quick_note("BUG")
-end, { desc = "Quick [N]ote [B]ug" })
-vim.keymap.set({ "n", "x" }, "<leader>nn", function()
-	append_quick_note("NOTE")
-end, { desc = "Quick [N]ote" })

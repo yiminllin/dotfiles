@@ -8,7 +8,7 @@ return {
 		local wk = require("which-key")
 		-- Document existing key chains
 		wk.add({
-			{ "<leader>c", group = "Open[C]ode AI assistant" },
+			{ "<leader>c", group = "Open[C]ode" },
 			{ "<leader>d", group = "[D]ebugPrint" },
 			{ "<leader>ds", group = "[D]ebugPrint [S]urround" },
 			{ "<leader>g", group = "[G]it / [G]odbolt" },

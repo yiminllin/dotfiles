@@ -201,7 +201,6 @@ fi
 CONFIGS=(
     bash
     bat
-    codex
     fish
     git
     kitty

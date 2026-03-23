@@ -138,13 +138,13 @@ function git_worktree_add --description "Interactive Adding Git Worktree"
         echo "Creating worktree for $branch in $worktree_path"
         if git worktree add "$worktree_path" "$branch"
             set exclude_file (git -C "$worktree_path" rev-parse --git-path info/exclude)
-            for pattern in ".codex/skills/" "notes/"
+            for pattern in ".opencode/skills/" "notes/"
                 grep -Fxq -- "$pattern" "$exclude_file"; or echo "$pattern" >> "$exclude_file"
             end
-            set skills_src "$HOME/dotfiles/codex/.codex/skills"
+            set skills_src "$HOME/dotfiles/opencode/.config/opencode/skills"
             if test -d "$skills_src"
-                mkdir -p "$worktree_path/.codex/skills"
-                command cp -R "$skills_src"/. "$worktree_path/.codex/skills"/
+                mkdir -p "$worktree_path/.opencode/skills"
+                command cp -R "$skills_src"/. "$worktree_path/.opencode/skills"/
             end
             if test -n "$TMUX"
                 ~/.tmux/tmux-sessionizer

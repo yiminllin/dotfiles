@@ -22,7 +22,7 @@ Generate draft PR bodies for an ordered PR chain. Reuse section structure and to
 Use the generator script:
 
 ```bash
-python3 .codex/skills/pr-description-chain-writer/scripts/generate_pr_chain_descriptions.py \
+python3 .opencode/skills/pr-description-chain-writer/scripts/generate_pr_chain_descriptions.py \
   48761 48824 48825 48784 48833 \
   --repo ZiplineTeam/FlightSystems \
   --style-pr 48761 \

@@ -14,7 +14,7 @@ end
 local function diffview_open(extra_args)
 	local args = extra_args and vim.deepcopy(extra_args) or {}
 	if in_systems_dir() then
-		vim.list_extend(args, { "--", ".", ":!.codex/skills", ":!notes" })
+		vim.list_extend(args, { "--", ".", ":!.opencode/skills", ":!notes" })
 	end
 	vim.api.nvim_cmd({ cmd = "DiffviewOpen", args = args }, {})
 end
@@ -22,7 +22,7 @@ end
 local function diffview_file_history()
 	local args = {}
 	if in_systems_dir() then
-		vim.list_extend(args, { ".", ":!.codex/skills", ":!notes" })
+		vim.list_extend(args, { ".", ":!.opencode/skills", ":!notes" })
 	end
 	vim.api.nvim_cmd({ cmd = "DiffviewFileHistory", args = args }, {})
 end
