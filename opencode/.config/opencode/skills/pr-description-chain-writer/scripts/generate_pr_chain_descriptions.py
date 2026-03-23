@@ -13,12 +13,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-DEFAULT_REASON = "Continue this scoped change in the PR chain."
+DEFAULT_REASON = (
+    "Describe the concrete symptom/problem this PR addresses and the mechanism or root cause "
+    "it changes."
+)
 DEFAULT_CRITICALITY = """- [ ] L1 Major <!-- Impacts critical safety systems (e.g. Paraland, DAA, fault mgmt) -->
 - [ ] L2 Moderate <!-- Impacts production system, or safety-related testing -->
 - [x] L3 Nonfunctional <!-- Trivial to validate no impact on prod (e.g. docs, style, dev tool) -->"""
 DEFAULT_VERIFICATION = """- [ ] Unit tests
-- [ ] AB-compare with develop, behavior no-op."""
+- [ ] Verified with concrete evidence (for example: exact test/command, scenario, CI job, log, screenshot, or metric)."""
 DEFAULT_RELEASE_NOTES = """- [ ] Release Notes or Upgrade Instructions required
 
 <!-- If checked, replace this line with your release notes or upgrade instructions -->"""
@@ -28,8 +31,8 @@ NOISE_FILES = {
     "MODULE.bazel.lock",
 }
 
-DEFAULT_MAX_SECTIONS = 4
-DEFAULT_MAX_BULLETS_PER_SECTION = 3
+DEFAULT_MAX_SECTIONS = 5
+DEFAULT_MAX_BULLETS_PER_SECTION = 4
 
 AREA_ORDER = [
     "scenario",
@@ -44,15 +47,15 @@ AREA_ORDER = [
 ]
 
 AREA_TITLES = {
-    "scenario": "Scenario and mission flow",
-    "orchestration": "Phoenix graph behavior",
-    "config": "Runtime/config plumbing",
-    "routing": "Inter-domain routing behavior",
-    "validator": "Validation expectations",
-    "injection": "Message redirection behavior",
-    "tests": "Test harness coverage",
-    "ci": "CI dispatch plumbing",
-    "other": "Additional implementation details",
+    "scenario": "Scenario setup and mission flow",
+    "orchestration": "Graph/domain bring-up",
+    "config": "Config resolution and runtime planning",
+    "routing": "Inter-domain routing and bridge classification",
+    "validator": "Validation rules and fail-fast guardrails",
+    "injection": "Message redirection and identifier mapping",
+    "tests": "Automated coverage and scenario plumbing",
+    "ci": "Workflow dispatch and test-plan selection",
+    "other": "Additional supporting changes",
 }
 
 SECTION_HEADER_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
@@ -84,6 +87,11 @@ SNIPPET_START_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"^\s*[A-Z][A-Z0-9_]+\s*=\s*auto\(\)"),
     re.compile(r"^\s*-+\s+[A-Z][A-Z0-9_]+\s*->"),
 ]
+
+DECLARATION_RE = re.compile(
+    r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:const|fn|struct|enum|type)\s+([A-Za-z_][A-Za-z0-9_]*)"
+)
+SCOPED_SYMBOL_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)::([A-Za-z_][A-Za-z0-9_]*)\b")
 
 KNOWN_SCENARIO_STEPS = {
     "takeoff",
@@ -243,6 +251,13 @@ def _extract_reason_text(reason_block: str) -> str:
     return text if text else DEFAULT_REASON
 
 
+def _looks_generic_verification_block(text: str) -> bool:
+    cleaned = _strip_comments(text).strip().lower()
+    if not cleaned:
+        return True
+    return "ab-compare" in cleaned or "behavior no-op" in cleaned
+
+
 def _infer_style_template(
     repo: str,
     prs: list[PullRequestInfo],
@@ -273,23 +288,19 @@ def _infer_style_template(
         )
 
     sections = _extract_sections(source.body)
+    verification_block = _clean_block(
+        sections.get("Verification", ""),
+        DEFAULT_VERIFICATION,
+        preserve_comments=True,
+    )
+    if _looks_generic_verification_block(verification_block):
+        verification_block = DEFAULT_VERIFICATION
+
     return StyleTemplate(
         reason_text=_extract_reason_text(sections.get("Reason for Change", "")),
-        criticality_block=_clean_block(
-            sections.get("Criticality of Change", ""),
-            DEFAULT_CRITICALITY,
-            preserve_comments=True,
-        ),
-        verification_block=_clean_block(
-            sections.get("Verification", ""),
-            DEFAULT_VERIFICATION,
-            preserve_comments=True,
-        ),
-        release_notes_block=_clean_block(
-            sections.get("Release Notes", ""),
-            DEFAULT_RELEASE_NOTES,
-            preserve_comments=True,
-        ),
+        criticality_block=DEFAULT_CRITICALITY,
+        verification_block=verification_block,
+        release_notes_block=DEFAULT_RELEASE_NOTES,
     )
 
 
@@ -367,8 +378,10 @@ def _classify_area(path: str) -> str:
         return "other"
     if path.startswith("ash/scenarios/") or ("/scenarios/" in path and path.endswith(".pbtxt")):
         return "scenario"
+    if path.startswith("ash/phoenix/core/zrtmp_bridge/"):
+        return "routing"
     if path.startswith("ash/phoenix/orchestration/"):
-        if "routing" in path or "bridge" in path:
+        if "ipc_domain" in path or "routing" in path or "bridge" in path:
             return "routing"
         if "config" in path:
             return "config"
@@ -461,6 +474,66 @@ def _extract_helper_defs(files: list[PatchedFile]) -> list[str]:
                 continue
             funcs.append(name)
     return _dedupe(funcs)
+
+
+def _extract_declared_symbols(
+    files: list[PatchedFile],
+    *,
+    keywords: tuple[str, ...] | None = None,
+) -> list[str]:
+    symbols: list[str] = []
+    lowered_keywords = tuple(keyword.lower() for keyword in keywords or ())
+    for file_info in files:
+        skip_next_declaration = False
+        in_test_module = False
+        for line in file_info.added_lines:
+            stripped = line.strip()
+            if stripped.startswith("mod tests {"):
+                in_test_module = True
+            if in_test_module:
+                continue
+            if stripped.startswith("#[test]") or stripped.startswith("#[should_panic"):
+                skip_next_declaration = True
+                continue
+            match = DECLARATION_RE.match(line)
+            if match is None:
+                continue
+            if skip_next_declaration:
+                skip_next_declaration = False
+                continue
+            name = match.group(1)
+            if name.startswith("test_"):
+                continue
+            if lowered_keywords and not any(
+                keyword in name.lower() for keyword in lowered_keywords
+            ):
+                continue
+            symbols.append(name)
+    return _dedupe(symbols)
+
+
+def _extract_scoped_symbols(
+    files: list[PatchedFile],
+    *,
+    prefixes: tuple[str, ...],
+) -> list[str]:
+    symbols: list[str] = []
+    wanted_prefixes = set(prefixes)
+    for file_info in files:
+        for line in file_info.added_lines:
+            for prefix, value in SCOPED_SYMBOL_RE.findall(line):
+                if prefix not in wanted_prefixes:
+                    continue
+                symbols.append(f"{prefix}::{value}")
+    return _dedupe(symbols)
+
+
+def _has_fail_fast_checks(files: list[PatchedFile]) -> bool:
+    return any(
+        any(token in line for token in ("panic!", "assert!", "assert_eq!", "assert_ne!"))
+        for file_info in files
+        for line in file_info.added_lines
+    )
 
 
 def _extract_config_paths(files: list[PatchedFile]) -> list[str]:
@@ -618,14 +691,15 @@ def _build_human_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]
 
         if area == "scenario":
             scenario_paths = [f.filename for f in area_files if f.filename.endswith(".pbtxt")]
-            bullets.append("Adds a new scenario configuration and wires it into scenario targets.")
+            bullets.append(
+                "Adds or updates scenario definitions and mission wiring needed to exercise this flow."
+            )
             if scenario_paths:
                 bullets.append(f"Scenario file: {', '.join(f'`{p}`' for p in scenario_paths[:3])}.")
             mission_steps = _extract_scenario_steps(area_files)
             if mission_steps:
                 bullets.append(
-                    "Defines mission progression as "
-                    f"`{' -> '.join(mission_steps[:8])}`."
+                    f"Defines mission progression as `{' -> '.join(mission_steps[:8])}`."
                 )
             registered = []
             for file_info in area_files:
@@ -643,7 +717,13 @@ def _build_human_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]
 
         elif area == "orchestration":
             files_list = _dedupe([f.filename for f in area_files])
-            bullets.append("Updates graph construction so HIL includes the required components.")
+            bullets.append(
+                "Updates graph/domain bring-up so the right components are created in the intended runtime."
+            )
+            if any(path.endswith(("BUILD.bazel", "Cargo.toml")) for path in files_list):
+                bullets.append(
+                    "Adds build/dependency wiring needed for the new orchestration and domain plumbing."
+                )
             graph_nodes = _extract_graph_nodes(area_files)
             if graph_nodes:
                 bullets.append(
@@ -656,20 +736,57 @@ def _build_human_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]
 
         elif area == "config":
             files_list = _dedupe([f.filename for f in area_files if f.filename not in NOISE_FILES])
-            bullets.append("Plumbs runtime configuration changes needed for this feature.")
+            bullets.append(
+                "Plumbs configuration and domain-resolution changes needed to make this stack step work."
+            )
+            config_symbols = _extract_declared_symbols(
+                area_files,
+                keywords=("config", "dock", "domain", "runtime"),
+            )
+            if config_symbols:
+                bullets.append(
+                    "Introduces or extends config/domain-planning symbols "
+                    f"{_join_codes(config_symbols, limit=6)}."
+                )
+            if _has_fail_fast_checks(area_files):
+                bullets.append(
+                    "Adds fail-fast validation for unsupported or inconsistent configuration states."
+                )
             if files_list:
                 bullets.append(
-                    "Config files touched: "
-                    f"{', '.join(f'`{p}`' for p in files_list[:4])}."
+                    f"Config files touched: {', '.join(f'`{p}`' for p in files_list[:4])}."
                 )
 
         elif area == "routing":
             files_list = _dedupe([f.filename for f in area_files if f.filename not in NOISE_FILES])
-            bullets.append("Adjusts routing behavior so relevant traffic takes the intended path.")
+            bullets.append(
+                "Adds or updates inter-domain routing so traffic is classified onto the intended bridge path."
+            )
+            routing_bridge_symbols = _extract_scoped_symbols(
+                area_files,
+                prefixes=("BridgeMockType", "ZrtmpBridgeComputeDomain"),
+            )
+            if routing_bridge_symbols:
+                bullets.append(
+                    "Touches routing-specific bridge symbols "
+                    f"{_join_codes(routing_bridge_symbols, limit=6)}."
+                )
+            routing_declared_symbols = _extract_declared_symbols(
+                area_files,
+                keywords=("route", "routing", "bridge", "metadata", "identifier"),
+            )
+            if routing_declared_symbols:
+                bullets.append(
+                    "Adds routing-specific helpers and identifier sets "
+                    f"{_join_codes(routing_declared_symbols, limit=6)}."
+                )
+            if _has_fail_fast_checks(area_files):
+                bullets.append(
+                    "Adds fail-fast checks around conflicting routing metadata or unsupported direct-routing states."
+                )
             if files_list:
                 bullets.append(
-                    "Routing files touched: "
-                    f"{', '.join(f'`{p}`' for p in files_list[:4])}."
+                    f"Routing files touched: {', '.join(f'`{p}`' for p in files_list[:4])}."
                 )
 
         elif area == "validator":
@@ -678,7 +795,9 @@ def _build_human_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]
                 for f in area_files
                 if "validator_configs" in f.filename or "validators/config" in f.filename
             ]
-            bullets.append("Adds validator coverage for the updated mission flow.")
+            bullets.append(
+                "Adds validator coverage and reviewer-visible guardrails for the updated flow."
+            )
             if validator_files:
                 bullets.append(
                     "Validator config(s): "
@@ -686,25 +805,25 @@ def _build_human_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]
                 )
             tasks = _extract_required_tasks(area_files)
             if tasks:
-                bullets.append(
-                    "Defines required task sequence "
-                    f"`{' -> '.join(tasks[:8])}`."
-                )
+                bullets.append(f"Defines required task sequence `{' -> '.join(tasks[:8])}`.")
             alarms = _extract_optional_alarms(area_files)
             if alarms:
                 bullets.append(
                     "Allows expected optional alarms for startup/no-sync behavior "
                     f"({_join_codes(alarms, limit=6)})."
                 )
+            if _has_fail_fast_checks(area_files):
+                bullets.append(
+                    "Adds fail-fast validation when required task sequencing or expected metadata becomes inconsistent."
+                )
 
         elif area == "injection":
             injection_files = _dedupe([f.filename for f in area_files])
             bullets.append(
-                "Adds redirection/injection rules so simulated topics drive runtime identifiers."
+                "Adds redirection/injection rules so simulated topics map onto the intended runtime identifiers."
             )
             bullets.append(
-                "Injection config(s): "
-                f"{', '.join(f'`{p}`' for p in injection_files[:4])}."
+                f"Injection config(s): {', '.join(f'`{p}`' for p in injection_files[:4])}."
             )
             pairs = _extract_redirect_pairs(area_files)
             if pairs:
@@ -717,17 +836,13 @@ def _build_human_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]
 
         elif area == "tests":
             test_files = _dedupe([f.filename for f in area_files])
-            bullets.append("Extends mission test coverage for this new flow.")
             bullets.append(
-                "Test files touched: "
-                f"{', '.join(f'`{p}`' for p in test_files[:4])}."
+                "Extends automated coverage for the new flow and the new routing/config branches."
             )
+            bullets.append(f"Test files touched: {', '.join(f'`{p}`' for p in test_files[:4])}.")
             pytest_ids = _extract_pytest_ids(area_files)
             if pytest_ids:
-                bullets.append(
-                    "Adds mission/scenario cases "
-                    f"{_join_codes(pytest_ids, limit=6)}."
-                )
+                bullets.append(f"Adds mission/scenario cases {_join_codes(pytest_ids, limit=6)}.")
             helper_defs = _extract_helper_defs(area_files)
             if helper_defs:
                 bullets.append(
@@ -747,16 +862,14 @@ def _build_human_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]
 
         elif area == "ci":
             ci_files = _dedupe([f.filename for f in area_files])
-            bullets.append("Plumbs the scenario through workflow dispatch and test-plan selection.")
             bullets.append(
-                "CI files touched: "
-                f"{', '.join(f'`{p}`' for p in ci_files[:4])}."
+                "Plumbs the scenario through workflow dispatch, selection, and test-plan handling."
             )
+            bullets.append(f"CI files touched: {', '.join(f'`{p}`' for p in ci_files[:4])}.")
             dispatch_options = _extract_dispatch_options(area_files)
             if dispatch_options:
                 bullets.append(
-                    "Adds workflow dispatch option(s) "
-                    f"{_join_codes(dispatch_options, limit=5)}."
+                    f"Adds workflow dispatch option(s) {_join_codes(dispatch_options, limit=5)}."
                 )
             valid_tests = _extract_valid_tests(area_files)
             if valid_tests:
@@ -773,15 +886,19 @@ def _build_human_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]
             ]
             if misc_files:
                 bullets.append(
-                    "Updates additional files "
-                    f"{', '.join(f'`{p}`' for p in _dedupe(misc_files)[:5])}."
+                    "Updates supporting implementation files that back the main behavior change in this PR."
+                )
+                bullets.append(
+                    f"Supporting files: {', '.join(f'`{p}`' for p in _dedupe(misc_files)[:5])}."
                 )
 
         if bullets:
             sections.append((AREA_TITLES[area], bullets))
 
     if not sections:
-        sections.append(("Implementation details", ["Updates implementation files in this PR scope."]))
+        sections.append(
+            ("Implementation details", ["Updates implementation files in this PR scope."])
+        )
 
     return sections
 
@@ -797,6 +914,7 @@ def _is_listing_bullet(bullet: str) -> bool:
         "test files touched:",
         "ci files touched:",
         "primary wiring file:",
+        "supporting files:",
         "updates scenario build registration",
         "wires additional validator/injection configs",
     )
@@ -814,19 +932,104 @@ def _compact_sections(
 
     compacted: list[tuple[str, list[str]]] = []
     for title, bullets in sections:
-        filtered = [bullet for bullet in bullets if not _is_listing_bullet(bullet)]
-        if not filtered:
-            filtered = bullets
-        compacted.append((title, filtered[:max_bullets_per_section]))
+        prioritized = [bullet for bullet in bullets if not _is_listing_bullet(bullet)]
+        prioritized.extend(bullet for bullet in bullets if _is_listing_bullet(bullet))
+        compacted.append((title, prioritized[:max_bullets_per_section]))
         if len(compacted) >= max_sections:
             break
     return compacted
+
+
+def _ensure_sentence(text: str) -> str:
+    cleaned = text.strip()
+    if not cleaned:
+        return ""
+    if cleaned[-1] in ".!?":
+        return cleaned
+    return f"{cleaned}."
+
+
+def _build_prose_description(
+    pr: PullRequestInfo,
+    sections: list[tuple[str, list[str]]],
+    *,
+    include_snippets: bool,
+    snippets: list[Snippet],
+) -> str:
+    lines = [f"This PR {_humanize_title(pr.title)}."]
+    for title, bullets in sections:
+        summary = " ".join(_ensure_sentence(bullet) for bullet in bullets if bullet.strip())
+        if not summary:
+            continue
+        lines.extend(["", f"{title}: {summary}"])
+
+    if include_snippets and snippets:
+        lines.extend(["", "Illustrative snippets:"])
+        for snippet in snippets:
+            lines.append(f"- `{snippet.label}`")
+            lines.append(f"  ```{snippet.language}")
+            lines.extend(f"  {code_line}" for code_line in snippet.code.splitlines())
+            lines.append("  ```")
+
+    return "\n".join(lines).strip()
+
+
+def _build_bulleted_description(
+    pr: PullRequestInfo,
+    sections: list[tuple[str, list[str]]],
+    *,
+    include_snippets: bool,
+    snippets: list[Snippet],
+) -> str:
+    lines = [f"This PR {_humanize_title(pr.title)}. In particular:", ""]
+    for title, bullets in sections:
+        lines.append(f"- {title}")
+        lines.extend(f"  - {bullet}" for bullet in bullets)
+
+    if include_snippets and snippets:
+        lines.append("- Illustrative snippets")
+        for snippet in snippets:
+            lines.append(f"  - `{snippet.label}`")
+            lines.append(f"    ```{snippet.language}")
+            lines.extend(f"    {code_line}" for code_line in snippet.code.splitlines())
+            lines.append("    ```")
+
+    return "\n".join(lines).strip()
+
+
+def _build_hybrid_description(
+    pr: PullRequestInfo,
+    sections: list[tuple[str, list[str]]],
+    *,
+    include_snippets: bool,
+    snippets: list[Snippet],
+) -> str:
+    lines = [
+        f"This PR {_humanize_title(pr.title)}.",
+        "",
+        "In particular, it makes the following changes:",
+        "",
+    ]
+    for title, bullets in sections:
+        lines.append(f"- {title}")
+        lines.extend(f"  - {bullet}" for bullet in bullets)
+
+    if include_snippets and snippets:
+        lines.append("- Illustrative snippets")
+        for snippet in snippets:
+            lines.append(f"  - `{snippet.label}`")
+            lines.append(f"    ```{snippet.language}")
+            lines.extend(f"    {code_line}" for code_line in snippet.code.splitlines())
+            lines.append("    ```")
+
+    return "\n".join(lines).strip()
 
 
 def _build_description_of_change(
     repo: str,
     pr: PullRequestInfo,
     *,
+    description_style: str,
     include_snippets: bool,
     max_snippets: int,
     snippet_lines: int,
@@ -835,7 +1038,9 @@ def _build_description_of_change(
     max_bullets_per_section: int,
 ) -> str:
     patched_files = _fetch_pr_files_with_patch(repo, pr.number)
-    useful_files = [file_info for file_info in patched_files if file_info.filename not in NOISE_FILES]
+    useful_files = [
+        file_info for file_info in patched_files if file_info.filename not in NOISE_FILES
+    ]
     if useful_files:
         patched_files = useful_files
 
@@ -847,26 +1052,47 @@ def _build_description_of_change(
             max_bullets_per_section=max_bullets_per_section,
         )
 
-    lines = [f"This PR {_humanize_title(pr.title)}. In particular:", ""]
-    for title, bullets in sections:
-        lines.append(f"- {title}")
-        lines.extend(f"  - {bullet}" for bullet in bullets)
-
+    snippets: list[Snippet] = []
     if include_snippets:
         snippets = _extract_snippets(
             patched_files,
             max_snippets=max_snippets,
             max_lines=snippet_lines,
         )
-        if snippets:
-            lines.append("- Illustrative snippets")
-            for snippet in snippets:
-                lines.append(f"  - `{snippet.label}`")
-                lines.append(f"    ```{snippet.language}")
-                lines.extend(f"    {code_line}" for code_line in snippet.code.splitlines())
-                lines.append("    ```")
 
-    return "\n".join(lines).strip()
+    if description_style == "bullets":
+        return _build_bulleted_description(
+            pr,
+            sections,
+            include_snippets=include_snippets,
+            snippets=snippets,
+        )
+
+    if description_style == "hybrid":
+        return _build_hybrid_description(
+            pr,
+            sections,
+            include_snippets=include_snippets,
+            snippets=snippets,
+        )
+
+    return _build_prose_description(
+        pr,
+        sections,
+        include_snippets=include_snippets,
+        snippets=snippets,
+    )
+
+
+def _format_context_link(context_link: str | None) -> str:
+    if context_link is None:
+        return ""
+    text = context_link.strip()
+    if not text:
+        return ""
+    if re.match(r"^https?://", text):
+        return f"Context: {text}"
+    return text
 
 
 def _build_pr_body(
@@ -875,6 +1101,9 @@ def _build_pr_body(
     pr_chain: list[int],
     style: StyleTemplate,
     reason_override: str | None,
+    context_link: str | None,
+    include_pr_tree: bool,
+    description_style: str,
     include_snippets: bool,
     max_snippets: int,
     snippet_lines: int,
@@ -883,9 +1112,11 @@ def _build_pr_body(
     max_bullets_per_section: int,
 ) -> str:
     reason_text = reason_override.strip() if reason_override else style.reason_text.strip()
+    context_link_text = _format_context_link(context_link)
     description_of_change = _build_description_of_change(
         repo=repo,
         pr=pr,
+        description_style=description_style,
         include_snippets=include_snippets,
         max_snippets=max_snippets,
         snippet_lines=snippet_lines,
@@ -902,22 +1133,27 @@ def _build_pr_body(
         "<!-- Describe the bug or feature -->",
         "",
         reason_text if reason_text else DEFAULT_REASON,
-        "",
-        "PR Tree",
-        _chain_tree(pr_chain, pr.number),
-        "",
-        "## Description of Change",
-        "",
-        "<!-- What actually changed and how was it implemented? -->",
-        "",
-        description_of_change,
-        "",
-        "## Criticality of Change",
-        "",
-        style.criticality_block.strip(),
-        "",
-        "## Verification",
     ]
+    if context_link_text:
+        lines.extend(["", context_link_text])
+    if include_pr_tree and pr_chain:
+        lines.extend(["", "PR Tree", _chain_tree(pr_chain, pr.number)])
+    lines.extend(
+        [
+            "",
+            "## Description of Change",
+            "",
+            "<!-- What actually changed and how was it implemented? -->",
+            "",
+            description_of_change,
+            "",
+            "## Criticality of Change",
+            "",
+            style.criticality_block.strip(),
+            "",
+            "## Verification",
+        ]
+    )
     if include_verification_comment:
         lines.extend(["", "<!-- How have you proven this change works?-->"])
     lines.extend(
@@ -977,10 +1213,39 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="Override text for the Reason for Change paragraph (before PR Tree).",
     )
     parser.add_argument(
+        "--context-link",
+        default=None,
+        help="Optional markdown or URL line to append in Reason for Change.",
+    )
+    parser.add_argument(
         "--write-dir",
         type=Path,
         default=None,
         help="Directory to write per-PR markdown files (pr_<number>.md).",
+    )
+    parser.add_argument(
+        "--include-pr-tree",
+        dest="include_pr_tree",
+        action="store_true",
+        default=None,
+        help="Force-include a PR Tree block (default for multi-PR chains).",
+    )
+    parser.add_argument(
+        "--omit-pr-tree",
+        dest="include_pr_tree",
+        action="store_false",
+        help="Omit the PR Tree block, even for a multi-PR chain.",
+    )
+    parser.add_argument(
+        "--description-style",
+        choices=("hybrid", "prose", "bullets"),
+        default="hybrid",
+        help="Description of Change rendering style (default: hybrid).",
+    )
+    parser.add_argument(
+        "--tiny",
+        action="store_true",
+        help="Emit a shorter Description of Change.",
     )
     parser.add_argument(
         "--include-snippets",
@@ -1002,7 +1267,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--detailed",
         action="store_true",
-        help="Disable compact mode and emit full detailed bullets.",
+        help="Disable compact mode and keep all generated sections and bullets.",
     )
     parser.add_argument(
         "--max-sections",
@@ -1038,6 +1303,14 @@ def main(argv: list[str]) -> int:
         return 1
 
     outputs: dict[int, str] = {}
+    max_sections = max(1, args.max_sections)
+    max_sub_bullets = max(1, args.max_sub_bullets)
+    include_pr_tree = args.include_pr_tree
+    if include_pr_tree is None:
+        include_pr_tree = len(args.prs) > 1
+    if args.tiny:
+        max_sections = min(max_sections, 2)
+        max_sub_bullets = min(max_sub_bullets, 2)
     for pr in prs:
         outputs[pr.number] = _build_pr_body(
             repo=args.repo,
@@ -1045,12 +1318,15 @@ def main(argv: list[str]) -> int:
             pr_chain=args.prs,
             style=style,
             reason_override=args.reason,
+            context_link=args.context_link,
+            include_pr_tree=include_pr_tree,
+            description_style=args.description_style,
             include_snippets=args.include_snippets,
             max_snippets=max(0, args.max_snippets),
             snippet_lines=max(2, args.snippet_lines),
             compact=not args.detailed,
-            max_sections=max(1, args.max_sections),
-            max_bullets_per_section=max(1, args.max_sub_bullets),
+            max_sections=max_sections,
+            max_bullets_per_section=max_sub_bullets,
         )
 
     _write_outputs(outputs, args.write_dir, print_stdout=args.stdout)
