@@ -197,6 +197,8 @@ set -U fish_complete_hidden 1
 set -gx FORCE_COLOR 3                                                              
 # Tell apps we have a light background (fixes cursor-agent theme detection in tmux)
 set -gx COLORFGBG "0;15"                                                           
+# Work around OpenCode 1.3.0 white code blocks in recent sessions
+set -gx OPENCODE_EXPERIMENTAL_MARKDOWN 0
 
 ################################################################################
 # FZF

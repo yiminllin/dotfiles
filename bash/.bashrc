@@ -88,6 +88,7 @@ export LS_COLORS=$(vivid generate solarized-light)
 export SHELL_PATH=$(which fish)
 export EDITOR_PATH=$(which nvim)
 export XDG_CONFIG_HOME="$HOME/.config"
+export OPENCODE_EXPERIMENTAL_MARKDOWN=0
 
 if [ -z "$TMUX" ] && [ "$TERM" = "xterm" ]; then
     export TERM=xterm-256color
