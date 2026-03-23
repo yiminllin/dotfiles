@@ -39,6 +39,17 @@
       "git clean *": "ask"
     }
   },
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5.4": {
+          "options": {
+            "reasoningEffort": "xhigh"
+          }
+        }
+      }
+    }
+  },
   "agent": {
     "build": {
       "disable": true
