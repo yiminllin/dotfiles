@@ -28,6 +28,7 @@ abbr -a ls eza -lah --git
 test (uname) = Darwin; and abbr -a cat bat; or abbr -a cat batcat 
 abbr -a du dust
 abbr -a top btop
+abbr -a gs git-spice
 
 # Convenience
 abbr -a ... cd ../..
@@ -77,17 +78,17 @@ abbr -a gp git push
 abbr -a gl git log --oneline -n 10
 
 # Git Spice
-abbr -a gsl gs log long
-abbr -a gsbc --set-cursor 'gs branch create yiminlin/%'
-abbr -a gsbd --set-cursor 'gs branch delete yiminlin/%'
-abbr -a gsu gs up
-abbr -a gsd gs down
-abbr -a gsm gs trunk
-abbr -a gsur gs upstack restack
-abbr -a gsus gs upstack submit
-abbr -a gsrc gs rebase continue 
-abbr -a gsra gs rebase abort
-abbr -a gsrs gs repo sync
+abbr -a gsl git-spice log long
+abbr -a gsbc --set-cursor 'git-spice branch create yiminlin/%'
+abbr -a gsbd --set-cursor 'git-spice branch delete yiminlin/%'
+abbr -a gsu git-spice up
+abbr -a gsd git-spice down
+abbr -a gsm git-spice trunk
+abbr -a gsur git-spice upstack restack
+abbr -a gsus git-spice upstack submit
+abbr -a gsrc git-spice rebase continue 
+abbr -a gsra git-spice rebase abort
+abbr -a gsrs git-spice repo sync
 
 # Task
 abbr -a t task
@@ -227,6 +228,9 @@ function fish_clipboard_copy --description "Copy selection to system clipboard"
         echo "No clipboard utility found"
     end
 end
+
+# git spice
+fish_add_path -m $HOME/go/bin
 
 # opencode
 fish_add_path ~/.opencode/bin

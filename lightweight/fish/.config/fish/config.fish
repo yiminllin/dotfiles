@@ -2,7 +2,8 @@ if status is-interactive
     # Lightweight fish: minimal abbrs, no tmux/task/opencode
 end
 
-# So fzf and (on Debian) tarball nvim are in PATH after minimal install
+# So Go-installed tools, fzf, and (on Debian) tarball nvim are in PATH after minimal install
+fish_add_path -m $HOME/go/bin
 fish_add_path $HOME/.fzf/bin $HOME/.local/bin
 
 ################################################################################
