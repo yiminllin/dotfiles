@@ -1,24 +1,43 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "tools": {
-    "bash": false,
-    "edit": false,
-    "write": false,
-    "read": true,
-    "grep": true,
-    "glob": true,
-    "list": true,
-    "patch": false,
-    "todowrite": false,
-    "todoread": false,
-    "webfetch": true
-  },
   "permission": {
-    "bash": "ask",
-    "edit": "ask",
-    "webfetch": "allow",
+    "*": "allow",
+    "external_directory": {
+      "*": "ask",
+      "/tmp": "allow",
+      "/tmp/**": "allow",
+      "/private/tmp": "allow",
+      "/private/tmp/**": "allow"
+    },
     "doom_loop": "ask",
-    "external_directory": "ask"
+    "read": {
+      "*": "allow",
+      "*.env": "ask",
+      "*.env.*": "ask",
+      "*.env.example": "allow",
+      "*.pem": "ask",
+      "*.key": "ask"
+    },
+    "edit": {
+      "*": "allow",
+      "*.env": "ask",
+      "*.env.*": "ask",
+      "*.env.example": "allow",
+      "*.pem": "ask",
+      "*.key": "ask"
+    },
+    "bash": {
+      "*": "allow",
+      "sudo *": "ask",
+      "git push --force": "ask",
+      "git push --force *": "ask",
+      "git push * --force": "ask",
+      "git push * --force *": "ask",
+      "git reset --hard": "ask",
+      "git reset --hard *": "ask",
+      "git clean": "ask",
+      "git clean *": "ask"
+    }
   },
   "agent": {
     "build": {
@@ -47,7 +66,8 @@
         "grep": true,
         "glob": true,
         "list": true,
-        "webfetch": true
+        "webfetch": true,
+        "skill": true
       }
     },
     "builder": {
@@ -55,10 +75,6 @@
       "model": "openai/gpt-5.4",
       "description": "Implement or debug code using best programming practices",
       "temperature": 0.4,
-      "permission": {
-        "bash": "allow",
-        "edit": "allow"
-      },
       "prompt": "You are a group of experienced software engineers. You focus on building easy-to-read, extendible, and performant software. You avoid premature optimization and premature abstractions, but will also recognize the potential opportunities of using the correct design patterns and room for performance optimizations. You don't prefer over cluttering the code with inline comments, but will add necessary doc for functions and classes to explain the contract. You prefer writing robust code against error, but will not write overly defensive code if throwing error is appropriate or preferable.\n\n## IDE-like Workflow\nWhen working on code, follow this systematic approach:\n\n1. **Locate**\n   - Use `glob` to find relevant files by name or path pattern (e.g. `src/**/service*.ts`, `**/*_test.py`).\n   - Use `grep` or `codesearch` to find symbol definitions and usages (functions, classes, types, etc.).\n   - Do not guess file paths or symbols—search first.\n\n2. **Read Before Edit**\n   - Always read the target file (and nearby related files) before editing.\n   - Understand existing patterns, style, and invariants.\n   - If changing a function/class, first search for and inspect all references.\n\n3. **Edit Carefully**\n   - Make small, focused changes via the edit/write tools.\n   - Preserve style and structure; adapt to the project, don't fight it.\n   - Prefer incremental refactors over large rewrites unless explicitly requested.\n\n4. **Verify After Edit**\n   - Re-read the modified sections (or whole file if small) to sanity check.\n   - When possible, run tests or linters via `bash` and report results.\n   - If something looks inconsistent, loop back and fix it.\n\n## Engineering Philosophy\nYou clarify requirements when vague, propose trade-offs when there are multiple viable designs, and ask the user when their preferences matter. You write tests when they meaningfully improve confidence, especially around tricky logic or regressions.\n\n## Key Principles\n- Search first; never operate blind.\n- Read before you edit.\n- Verify your work with tests/checks when available.\n- Communicate your plan and the impact of changes.",
       "tools": {
         "bash": true,
@@ -69,7 +85,10 @@
         "glob": true,
         "list": true,
         "patch": true,
-        "webfetch": true
+        "todoread": true,
+        "todowrite": true,
+        "webfetch": true,
+        "skill": true
       }
     },
     "brainstormer": {
@@ -83,7 +102,8 @@
         "grep": true,
         "glob": true,
         "list": true,
-        "webfetch": true
+        "webfetch": true,
+        "skill": true
       }
     },
     "chat": {
@@ -93,7 +113,8 @@
       "temperature": 0.5,
       "prompt": "You are a lightweight assistant for quick questions.\n\nResponsibilities:\n- Answer factual and conceptual questions clearly and succinctly.\n- Use webfetch for up-to-date or uncertain information when available.\n\nGuidelines:\n- Default to short answers; 1–3 short paragraphs or a bullet list.\n- Only include code or detailed examples when they materially help.\n- If information is uncertain or may be outdated, say so explicitly.\n- Prefer clarity and correctness over speculation.",
       "tools": {
-        "webfetch": true
+        "webfetch": true,
+        "skill": true
       }
     },
     "dotfile-documenter": {
@@ -107,11 +128,8 @@
         "grep": true,
         "glob": true,
         "list": true,
-        "edit": true
-      },
-      "permission": {
-        "bash": "allow",
-        "edit": "allow"
+        "edit": true,
+        "skill": true
       }
     }
   },
@@ -119,6 +137,7 @@
     "README.md",
     "AGENTS.md"
   ],
+  "default_agent": "orchestrator",
   "model": "openai/gpt-5.4",
   "autoupdate": true
 }
