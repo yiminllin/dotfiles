@@ -5,6 +5,12 @@
     "skill": "allow",
     "external_directory": {
       "*": "ask",
+      "~/notes/": "allow",
+      "~/notes/**": "allow",
+      "~/dotfiles/": "allow",
+      "~/dotfiles/**": "allow",
+      "~/.config/": "allow",
+      "~/.config/**": "allow",
       "/tmp": "allow",
       "/tmp/**": "allow",
       "/private/tmp": "allow",
