@@ -20,8 +20,13 @@ DEFAULT_REASON = (
 DEFAULT_CRITICALITY = """- [ ] L1 Major <!-- Impacts critical safety systems (e.g. Paraland, DAA, fault mgmt) -->
 - [ ] L2 Moderate <!-- Impacts production system, or safety-related testing -->
 - [x] L3 Nonfunctional <!-- Trivial to validate no impact on prod (e.g. docs, style, dev tool) -->"""
-DEFAULT_VERIFICATION = """- [ ] Unit tests
-- [ ] Verified with concrete evidence (for example: exact test/command, scenario, CI job, log, screenshot, or metric)."""
+DEFAULT_VERIFICATION = """- [ ] Unit Tests
+- [x] Command-based verification
+
+    ```bash
+    <exact command(s)>
+    ```
+- [ ] Other evidence (for example: scenario, CI job, log, screenshot, or metric)"""
 DEFAULT_RELEASE_NOTES = """- [ ] Release Notes or Upgrade Instructions required
 
 <!-- If checked, replace this line with your release notes or upgrade instructions -->"""
