@@ -18,7 +18,7 @@ pane_rows() {
         pane_title="${pane_title#OpenCode | }"
         pane_title="${pane_title#"${pane_title%%[![:space:]]*}"}"
         pane_title="${pane_title%"${pane_title##*[![:space:]]}"}"
-        pane_title="${pane_title:-OpenCode}"
+        pane_title="${pane_title:-OpenCode ($target_window)}"
 
         content="$(tmux capture-pane -p -t "$pane_id" -S -4 -E - 2>/dev/null || true)"
         content="${content//$'\r'/}"

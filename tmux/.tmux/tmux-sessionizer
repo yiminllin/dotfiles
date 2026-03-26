@@ -1,49 +1,40 @@
 #!/usr/bin/env bash
 
-# Check if tmux version is 3.3+ (required for fzf --tmux flag)
-tmux_version=$(tmux -V | sed 's/^tmux //' | sed 's/[^0-9.]//g')
-tmux_major=$(echo "$tmux_version" | cut -d. -f1)
-tmux_minor=$(echo "$tmux_version" | cut -d. -f2)
+set -euo pipefail
 
-# Find git repositories (both regular repos and worktrees)
-# 1. Regular git repos: find .git directories (min-depth 2 since .git is at ~/repo/.git)
-# 2. Git worktrees: find .git files (worktrees have .git as a file, not directory)
-repos=$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type f --hidden | xargs -I{} dirname {} 2>/dev/null)
-repos="$repos"$'\n'"$(fd '^\.git$' $HOME / --min-depth 2 --max-depth 3 --type d --hidden | xargs -I{} dirname {} 2>/dev/null)"
-
-# Remove duplicates, hide paths with directory starting with ., ignore /tmp, and sort
-repos=$(echo "$repos" | grep -v '/\.' | grep -vE '^/tmp(/|$)' | sort -u)
-
-# Use fzf to select workspace
-if [[ $tmux_major -gt 3 ]] || [[ $tmux_major -eq 3 && $tmux_minor -ge 3 ]]; then
-    workspace=$(echo "$repos" | fzf --cycle --border=bold --footer=Sessionizer --tmux)
-else
-    workspace=$(echo "$repos" | fzf --cycle --border=bold --footer=Sessionizer)
+if [[ $# -ne 1 ]]; then
+    echo "Usage: $(basename "$0") <path>" >&2
+    exit 1
 fi
 
-if [[ -z $workspace ]]; then
-    exit 0
-fi
-
+workspace=$1
 workspace_name=$(basename "$workspace" | tr . _)
 
-if ! tmux has-session -t=$workspace_name 2> /dev/null; then
-    # -d detach when running inside tmux
-    tmux new-session -ds $workspace_name -c $workspace
+create_window() {
+    local name=$1
+    local command=${2:-}
 
-    # Default tempalte for a workspace
-    tmux rename-window -t $workspace_name:1 'task'
-    tmux send-keys -t $workspace_name:1 'task' C-m
+    tmux new-window -t "$workspace_name" -n "$name" -c "$workspace"
 
-    tmux new-window -t $workspace_name -n 'cli' -c $workspace
+    if [[ -n "$command" ]]; then
+        tmux send-keys -t "$workspace_name:$name" "$command" C-m
+    fi
+}
 
-    tmux new-window -t $workspace_name -n 'git' -c $workspace
-    tmux send-keys -t $workspace_name:3 'lazygit' C-m
+if ! tmux has-session -t="$workspace_name" 2>/dev/null; then
+    tmux new-session -ds "$workspace_name" -n code -c "$workspace"
+    tmux send-keys -t "$workspace_name:code" 'nvim' C-m
 
-    tmux new-window -t $workspace_name -n 'nvim' -c $workspace
-    tmux send-keys -t $workspace_name:4 'nvim' C-m
+    create_window git 'lazygit'
+    create_window run
+    create_window shell
+    create_window agent 'opencode'
 
-    tmux select-window -t $workspace_name:4
+    tmux select-window -t "$workspace_name:code"
 fi
 
-tmux switch-client -t $workspace_name
+if [[ -n ${TMUX:-} ]]; then
+    tmux switch-client -t "$workspace_name"
+else
+    tmux attach-session -t "$workspace_name"
+fi

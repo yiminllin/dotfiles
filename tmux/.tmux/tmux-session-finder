@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
+supports_fzf_tmux() {
+    local tmux_version tmux_major tmux_minor
+
+    tmux_version=$(tmux -V | sed 's/^tmux //' | sed 's/[^0-9.]//g')
+    tmux_major=${tmux_version%%.*}
+    tmux_minor=${tmux_version#*.}
+    tmux_minor=${tmux_minor%%.*}
+
+    [[ $tmux_major -gt 3 || ( $tmux_major -eq 3 && $tmux_minor -ge 3 ) ]]
+}
+
+discover_repos() {
+    {
+        while IFS= read -r git_path; do
+            dirname "$git_path"
+        done < <(fd '^\.git$' "$HOME" / --min-depth 2 --max-depth 3 --type f --hidden 2>/dev/null)
+
+        while IFS= read -r git_path; do
+            dirname "$git_path"
+        done < <(fd '^\.git$' "$HOME" / --min-depth 2 --max-depth 3 --type d --hidden 2>/dev/null)
+    } | awk '!/\/\./ && $0 !~ /^\/tmp(\/|$)/' | sort -u
+}
+
+main() {
+    local repos workspace
+    local -a fzf_args=(--cycle --border=bold --footer "Session Finder")
+
+    repos=$(discover_repos)
+    [[ -n $repos ]] || exit 0
+
+    if supports_fzf_tmux; then
+        fzf_args+=(--tmux)
+    fi
+
+    workspace=$(printf '%s\n' "$repos" | fzf "${fzf_args[@]}" || true)
+    [[ -n $workspace ]] || exit 0
+
+    exec "$script_dir/tmux-sessionizer" "$workspace"
+}
+
+main "$@"
