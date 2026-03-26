@@ -1,5 +1,5 @@
-# Main tmux session configuration
-name: main
+# Home tmux session configuration
+name: home
 root: ~/
 
 windows:

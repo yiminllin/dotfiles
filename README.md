@@ -36,7 +36,7 @@ nvim
 For the first time starting tmux, use tmuxinator:
 
 ```bash
-tmuxinator start main
+tmuxinator start home
 ```
 
 Task import:
