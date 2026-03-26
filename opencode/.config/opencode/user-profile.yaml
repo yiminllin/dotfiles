@@ -1,0 +1,6 @@
+version: 1
+defaults:
+  brevity: concise
+  multi_item_execution: stepwise
+  plan_style: minimal-ordered-bullets
+  implementation_bias: small-reviewable-changes
