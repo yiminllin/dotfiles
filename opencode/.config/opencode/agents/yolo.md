@@ -92,7 +92,8 @@ Escalate instead of continuing when:
 - Do not invent requirements.
 - Use reasonable defaults when safe, and state them briefly.
 - Use `brainstormer` only for narrow execution-path choices; if broader judgment is needed, escalate.
-- Treat plan/design artifacts under `~/notes/projects/dotfiles/` as guidance when relevant, but prefer repo truth when they conflict.
+- Determine a stable `repo-key` for the current workspace when artifact memory is relevant. Prefer the canonical git remote repo name (the last path component of the remote URL, without `.git`) when it cleanly identifies the repository; otherwise use the repo root basename.
+- Treat the current repo's plan/design artifacts under `~/notes/projects/<repo-key>/` and shared OpenCode artifacts under `~/notes/opencode/` as guidance when relevant, but prefer repo truth when they conflict.
 - Default limits: at most 1 clarification round and at most 3 implement/review cycles.
 
 ## Final Response

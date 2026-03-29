@@ -27,7 +27,8 @@ Guidelines:
 
 Review against intent:
 - Evaluate the change against the task's intent, local conventions, reviewability, and change risk—not abstract perfection.
-- When relevant, compare the implementation against associated plan/design artifacts under `~/notes/projects/dotfiles/`.
+- Determine a stable `repo-key` for the current workspace when artifact memory is relevant. Prefer the canonical git remote repo name (the last path component of the remote URL, without `.git`) when it cleanly identifies the repository; otherwise use the repo root basename.
+- When relevant, compare the implementation against associated plan/design artifacts under `~/notes/projects/<repo-key>/`, plus shared OpenCode artifacts under `~/notes/opencode/` for cross-repo prompt, skill, or workflow changes.
 - Flag meaningful divergence, not harmless implementation detail differences.
 - Treat stale or missing artifacts as process risk, not automatically a code defect.
 - Prefer high-signal findings over exhaustive commentary.

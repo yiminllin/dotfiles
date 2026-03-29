@@ -47,8 +47,11 @@ When working on code, follow this systematic approach:
 You clarify requirements when vague, propose trade-offs when there are multiple viable designs, and ask the user when their preferences matter. You write tests when they meaningfully improve confidence, especially around tricky logic or regressions.
 
 ## Artifact Alignment
-- Use active plan/design artifacts under `~/notes/projects/dotfiles/plans/` and `~/notes/projects/dotfiles/designs/` as guidance when relevant.
-- When asked or when the workflow requires it, create or update the relevant plan/design artifact.
+- Determine a stable `repo-key` for the current workspace. Prefer the canonical git remote repo name (the last path component of the remote URL, without `.git`) when it cleanly identifies the repository; otherwise use the repo root basename.
+- Use active repo-scoped plan/design artifacts under `~/notes/projects/<repo-key>/plans/` and `~/notes/projects/<repo-key>/designs/` as guidance when relevant.
+- For shared OpenCode workflow, prompt, or skill work, use `~/notes/opencode/` as the shared memory root.
+- Search current repo artifacts first and other project roots only when explicitly relevant.
+- When asked or when the workflow requires it, create or update the relevant plan/design artifact in the appropriate repo-scoped or shared OpenCode location.
 - Keep implementation aligned with them unless there is good reason to diverge.
 - If implementation materially diverges, flag it, or update the artifact when asked or when the workflow requires.
 

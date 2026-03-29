@@ -3,7 +3,7 @@ description: Review OpenCode prompt insights with an approval gate
 agent: orchestrator
 ---
 
-Run the approval-gated `/insights` workflow for this dotfiles repo.
+Run the approval-gated `/insights` workflow for shared OpenCode prompts, skills, and workflow memory.
 
 ## Goal
 - Review recent high-signal evidence about OpenCode behavior.
@@ -17,8 +17,8 @@ Run the approval-gated `/insights` workflow for this dotfiles repo.
 - If `$ARGUMENTS` is provided, treat it as a scope hint, but keep proposals narrow and approval-gated.
 
 ## Required references
-- `~/notes/projects/dotfiles/plans/2026-03-25-opencode-insights-mvp-plan.md`
-- `~/notes/projects/dotfiles/designs/2026-03-25-opencode-safe-semi-automatic-prompt-tuning.md`
+- shared OpenCode plan/design artifacts under `~/notes/opencode/` when available
+- if those shared artifacts have not been migrated yet, legacy shared OpenCode notes under `~/notes/projects/dotfiles/` may still be relevant as fallback references
 - `opencode/.config/opencode/opencode.json`
 - the current target prompt/profile file(s)
 
@@ -49,7 +49,7 @@ Start from this evidence summary before weighing the current session. If the sam
 - After showing the exact diff/change, ask for a final confirmation such as `approve apply <proposal-id>` before making any repo edit.
 - Before any approved edit, restate the exact target file(s), the exact diff/change being applied, and the validation plan.
 - Only after that final approval should you delegate one bounded implementation task to `builder` or `yolo` to apply only the approved change and run verification.
-- If the user rejects or continues refining, keep changes limited to analysis/proposal output and optional note artifacts under `~/notes/projects/dotfiles/opencode/` when persistence is helpful.
+- If the user rejects or continues refining, keep changes limited to analysis/proposal output and optional note artifacts under `~/notes/opencode/insights/` when persistence is helpful.
 
 ## Response contract
 - First response after `/insights`:
