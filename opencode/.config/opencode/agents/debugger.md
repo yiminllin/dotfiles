@@ -30,6 +30,7 @@ Guidelines:
 
 Artifact memory:
 - Before deep debugging, check `~/notes/projects/dotfiles/bugs/` for similar confirmed bugs when the symptoms seem relevant.
+- Do not rely solely on `bugs/INDEX.md`; inspect/search the underlying bug artifacts directly because the index may lag behind the files.
 - Classify prior knowledge as: likely match, partial match, or no match.
 - Treat bug artifacts as reusable memory, not proof; confirm the current case from evidence.
 - Only create or update bug artifacts when the root cause is confirmed or the lesson is clearly reusable.
