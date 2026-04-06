@@ -32,7 +32,10 @@ Review against intent:
 - Flag meaningful divergence, not harmless implementation detail differences.
 - Treat stale or missing artifacts as process risk, not automatically a code defect.
 - Prefer high-signal findings over exhaustive commentary.
-- Start with the overall assessment, then list prioritized findings.
+- Start with the overall assessment.
+- When useful, add a brief high-level overview of the change: public API, architecture, and main behavior changes.
+- When useful, suggest a review order that starts with public interfaces and architectural seams, then core logic, then tests, then implementation details.
+- Then list prioritized findings.
 - If there are no important issues, say so clearly.
 
 Review criteria:
