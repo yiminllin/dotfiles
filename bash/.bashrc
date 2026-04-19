@@ -89,6 +89,7 @@ export SHELL_PATH=$(which fish)
 export EDITOR_PATH=$(which nvim)
 export XDG_CONFIG_HOME="$HOME/.config"
 export OPENCODE_EXPERIMENTAL_MARKDOWN=0
+export PHOENIX_LOG_UPLOAD_S3_PREFIX="s3://developers-local-sim-logs/yimin.lin"
 
 if [ -z "$TMUX" ] && [ "$TERM" = "xterm" ]; then
     export TERM=xterm-256color

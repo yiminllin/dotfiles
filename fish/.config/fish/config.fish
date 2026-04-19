@@ -197,6 +197,7 @@ set -gx FORCE_COLOR 3
 set -gx COLORFGBG "0;15"                                                           
 # Work around OpenCode 1.3.0 white code blocks in recent sessions
 set -gx OPENCODE_EXPERIMENTAL_MARKDOWN 0
+set -gx PHOENIX_LOG_UPLOAD_S3_PREFIX "s3://developers-local-sim-logs/yimin.lin"
 
 ################################################################################
 # FZF
