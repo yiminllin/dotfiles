@@ -7,8 +7,12 @@ function fsw_init_worktree --argument-names wt
     test -f ~/.config/flightsystems/user.bazelrc; and command cp ~/.config/flightsystems/user.bazelrc "$wt"/user.bazelrc
 
     pushd "$wt" >/dev/null
-    test -f .envrc; and direnv allow .
-    bazel run //bazel/tools:bazel_env
+    if test -f .envrc
+        direnv allow .
+        direnv exec . bazel run //bazel/tools:bazel_env
+    else
+        bazel run //bazel/tools:bazel_env
+    end
     set -l rc $status
     popd >/dev/null
 
