@@ -9,3 +9,6 @@ defaults:
   clarification_style: minimum-needed
   approval_for_prompt_edits: required
   artifact_expectation: use-plans-and-designs-for-nontrivial-work
+  selection_style: choice-first-when-available
+  follow_up_style: delta-only
+  implementation_flow: scaffold-first-inspectable

@@ -57,6 +57,7 @@ Start from this evidence summary before weighing the current session. If the sam
   2. proposals (1-3)
   3. recommended next step
   4. reply options: `refine <proposal-id or focus>`, `reject <proposal-id or all>`, `show-diff <proposal-id>`
+- Prefer chooser/dropdown-style reply options when available. Otherwise present short numbered options and accept compact replies (for example `1`, `2`, or `1+3`) instead of requiring exact command phrases.
 - On `refine`: revise the proposal set or wording only; do not edit `~/dotfiles`.
 - On `reject`: close the proposal and confirm that no repo prompt/config files were changed.
 - On `show-diff`: present the exact diff/change plus the validation plan only; do not edit `~/dotfiles`.

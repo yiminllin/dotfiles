@@ -7,7 +7,7 @@ description: Generate consistent PR descriptions for chained/stacked GitHub PRs 
 
 ## Overview
 
-Generate draft PR bodies for an ordered PR chain. Reuse section structure and tone from a style reference PR, but default toward concrete `Reason for Change` paragraphs, a dock-in-loop-shaped hybrid `Description of Change` (short prose lead plus nested bullets), baked-in `L3 Nonfunctional` / no-release-notes defaults, a checklist-shaped `Verification` block with a command-based option checked by default, and `PR Tree` included by default for multi-PR stacks.
+Generate draft PR bodies for an ordered PR chain. Reuse section structure and tone from a style reference PR, but default toward concrete `Reason for Change` paragraphs, a dock-in-loop-shaped hybrid `Description of Change` (short prose lead plus nested bullets), baked-in `L3 Nonfunctional` / no-release-notes defaults, a concise checklist-shaped `Verification` block that prefers `Unit Test`, `Manual Test`, or `CI` based on the actual evidence, and `PR Tree` included by default for multi-PR stacks.
 
 ## Workflow
 
@@ -54,9 +54,9 @@ Important options:
 - Keep `PR Tree` by default for chains; only omit it when the user asks or it is clearly noise for reviewers.
 - If you include `PR Tree`, keep the ordering exactly aligned to the chain and keep `◀` on the current PR.
 - Ensure the baked-in `L3 Nonfunctional` / no-release-notes defaults still reflect reality for each PR.
-- Replace generic verification placeholders with concrete evidence when you have it (exact test, command, scenario, CI job, log, screenshot, or metric).
-- Keep `Verification` shaped like a small checklist of verification modes, analogous to `Criticality of Change`.
-- When the evidence is command-based, prefer the lightest/default checklist item checked and place the full command(s) in an indented fenced `bash` block directly under that item, rather than inline command snippets.
+- Keep `Verification` shaped like a small checklist of `Unit Test`, `Manual Test`, and `CI`, analogous to `Criticality of Change`; check the item that best matches the actual proof unless more than one is clearly warranted.
+- For `Manual Test`, keep it concise: name the Phoenix scenario or workflow, add environment or mode only when it matters, summarize the result briefly, and include links when useful.
+- Use an indented fenced `bash` block only when command details are the real verification evidence.
 
 ### 4. Apply generated body to each PR (optional)
 
@@ -75,7 +75,7 @@ For each PR, generate:
 - Human-readable `Description of Change`, hybrid by default with prose-only and bullets-only modes still available.
 - More detailed nested bullets with reviewer-meaningful section labels where the diff supports them.
 - Optional illustrative snippets when requested.
-- Baked-in `L3 Nonfunctional` and unchecked release-notes defaults, plus a verification checklist that defaults to a checked command-based option with an indented fenced `bash` block placeholder.
+- Baked-in `L3 Nonfunctional` and unchecked release-notes defaults, plus a concise verification checklist covering `Unit Test`, `Manual Test`, and `CI`.
 
 Write files to:
 

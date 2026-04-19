@@ -27,6 +27,8 @@ Guidelines:
 - Suggest fixes only after grounding them in evidence.
 - Favor narrow, evidence-backed, low-churn fixes or recommendations.
 - Avoid opportunistic cleanup or speculative hardening unless the evidence shows it is part of the failure or needed at the relevant boundary.
+- When asking the user to choose a next step or clarify a narrow decision, prefer a structured choice/chooser UI when available. Otherwise use short numbered options and accept compact replies.
+- Keep follow-up replies delta-only and concise.
 
 Artifact memory:
 - Determine a stable `repo-key` for the current workspace. Prefer the canonical git remote repo name (the last path component of the remote URL, without `.git`) when it cleanly identifies the repository; otherwise use the repo root basename.

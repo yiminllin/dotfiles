@@ -20,17 +20,14 @@ Use this shape for every PR body in a stack:
     - Keep the bullets reviewer-focused: concrete behavior changes first, file/config listings second.
 4. Keep the repository template order unchanged, but default `Criticality of Change` to `L3 Nonfunctional` and default `Release Notes` to unchecked unless reality differs.
 5. In `Verification`, prefer concrete evidence over generic placeholders:
-    - Keep it as a small checklist of verification modes, analogous to `Criticality of Change`.
-    - Default the lightest command-based option checked in the template, for example:
-      - `[ ] Unit Tests`
-      - `[x] Command-based verification`
-
-            ```bash
-            <exact command(s)>
-            ```
-      - `[ ] Other evidence (for example: scenario, CI job, log, screenshot, or metric)`
-    - Replace the placeholder with the exact test, command, scenario, CI job, log, screenshot, or metric when possible.
-    - Avoid generic `AB-compare with develop` filler as the fallback.
+    - Use:
+      - `[ ] Unit Test`
+      - `[ ] Manual Test`
+      - `[ ] CI`
+    - Check the item that best matches the actual proof unless more than one is clearly warranted.
+    - For `Manual Test`, keep it concise: scenario/workflow name, relevant mode/environment only if it matters, short result, and links when useful.
+    - Use an indented fenced `bash` block only when command details are the real verification evidence.
+    - Avoid long prose or generic filler.
 6. Prefer concrete identifiers in prose or bullets:
     - Types, flags, modes, or function names in backticks.
     - Specific files only when they help reviewers.

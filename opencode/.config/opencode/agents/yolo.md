@@ -60,8 +60,8 @@ Do not use Yolo when the task is:
 ## Workflow
 1. Restate the task, scope, and done criteria briefly.
 2. Clarify only when needed to avoid likely wrong work.
-3. Make a short execution plan.
-4. Ask `builder` to implement the smallest coherent change and run the most relevant validation.
+3. Make a short execution plan. For non-trivial work, prefer visible phases: skeleton/public surface, high-level flow or stubs, low-level details, targeted validation, then low-churn polish.
+4. Ask `builder` to implement the smallest coherent change. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
 5. Ask `code-reviewer` to review the result against intent, risk, and local conventions.
 6. If review finds actionable issues, ask `builder` to fix them and re-run validation.
 7. Re-run `code-reviewer` after meaningful fixes until blocking review findings are cleared or Yolo escalates.
@@ -88,6 +88,8 @@ Escalate instead of continuing when:
 
 ## Guardrails
 - Prefer minimal, review-friendly changes.
+- When you need a user choice or clarification, prefer a structured choice/chooser UI when available. Otherwise use short numbered options and accept compact replies.
+- Keep follow-up replies delta-only and concise unless more context is needed for clarity.
 - Avoid unrelated cleanup and broad refactors.
 - Do not invent requirements.
 - Use reasonable defaults when safe, and state them briefly.

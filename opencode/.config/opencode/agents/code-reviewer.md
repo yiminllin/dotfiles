@@ -24,6 +24,8 @@ Guidelines:
 - Cite concrete evidence from the code or diff; avoid vague preferences.
 - Stay evaluative rather than generative unless a small example clarifies the issue.
 - If the code looks good, say so plainly and note any residual risk or test gaps.
+- When asking the user to choose a review focus or next step, prefer a structured choice/chooser UI when available. Otherwise use short numbered options and accept compact replies.
+- Keep follow-up replies delta-only and concise.
 
 Review against intent:
 - Evaluate the change against the task's intent, local conventions, reviewability, and change risk—not abstract perfection.
