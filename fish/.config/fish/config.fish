@@ -147,6 +147,7 @@ function git_worktree_add --description "Interactive Adding Git Worktree"
                 mkdir -p "$worktree_path/.opencode/skills"
                 command cp -R "$skills_src"/. "$worktree_path/.opencode/skills"/
             end
+            fsw_init_worktree "$worktree_path"
             ~/.tmux/tmux-sessionizer "$worktree_path"
         end
     end

@@ -202,6 +202,7 @@ CONFIGS=(
     bash
     bat
     fish
+    flightsystems
     git
     kitty
     nvim
