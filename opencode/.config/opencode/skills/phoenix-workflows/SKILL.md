@@ -16,7 +16,7 @@ Use this skill for Zipline-internal Phoenix requests that involve:
 
 If the user gives a failing GitHub Actions run/job URL and wants root-cause analysis for one attempt, prefer `$debug-phoenix-hil-from-gha`. If they specifically want to upload a local Phoenix log directory and generate a LogPlots link, `$upload_local_log_to_s3` is the focused path.
 
-For local Phoenix SIL runs, if `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, treat post-run log upload and Baraza-link return as the default behavior unless the user opts out. Do not apply this default to HIL runs unless the user explicitly asks.
+For local Phoenix SIL runs, if `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, treat post-run log upload, Baraza-link capture from upload output, and Baraza-link return as the default behavior unless the user opts out. Do not apply this default to HIL runs unless the user explicitly asks.
 
 ## Safety gates
 
@@ -65,8 +65,9 @@ For `run-sil-scenario`, `run-no-sync-scenario`, and `run-flakiness-check`:
 1. Before launching Phoenix, confirm whether the run itself needs confirmation under the normal safety gates.
 2. After a successful local run, resolve the produced log directory. Prefer the run-specific directory when available; otherwise fall back to `.phoenix/logs/latest/`.
 3. If `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, upload that log directory with `phoenix/debug/scripts/upload_local_log_to_s3.sh` or `$upload_local_log_to_s3`.
-4. Include the final S3 path and Baraza link in the response when upload succeeds.
-5. If upload cannot happen because AWS auth is missing/expired or the destination prefix is unavailable, say that clearly instead of silently skipping it.
+4. When upload output includes a Baraza link, capture it from the upload output. If `TMUX` is set and `tmux` is available, copy it into the tmux buffer with `tmux set-buffer -- "$baraza_link"`.
+5. Include the final S3 path and Baraza link in the response when upload succeeds, and say whether the tmux copy happened.
+6. If upload cannot happen because AWS auth is missing/expired or the destination prefix is unavailable, say that clearly instead of silently skipping it.
 
 Do not auto-upload logs for HIL launches, fetched HIL logs, or purely read-only inspection requests.
 
@@ -347,4 +348,4 @@ When using this skill, reply with:
 - the exact Phoenix label or identifiers being used
 - the safest next read-only step
 - any confirmation needed before launching Phoenix, repeated flakiness runs, or real HIL
-- if a local Phoenix run was executed and uploaded, the final S3 path and Baraza link
+- if a local Phoenix run was executed and uploaded, the final S3 path and Baraza link, plus whether the tmux buffer copy happened
