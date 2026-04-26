@@ -79,7 +79,7 @@ Treat the task as done only when all of the following are true:
 Treat `code-reviewer` findings as blocking by default when they are severity `blocker` or `high`, unless the handoff contract defines a stricter threshold.
 
 ## Final Quality Pass
-- Treat the result as if it may be reviewed carefully by a human and another model.
+- Follow shared agent defaults for the final quality pass.
 - Before finalizing, re-check the original request, changed behavior, validation evidence, review findings, edge cases, and residual risks.
 - Fix clear issues before returning; if something cannot be verified, state that explicitly and keep the uncertainty concise.
 
@@ -94,8 +94,7 @@ Escalate instead of continuing when:
 
 ## Guardrails
 - Prefer minimal, review-friendly changes.
-- When you need a user choice or clarification, prefer a structured choice/chooser UI when available. Otherwise use short numbered options and accept compact replies.
-- Keep follow-up replies delta-only and concise unless more context is needed for clarity.
+- Follow shared agent defaults for bounded choices, clarification, and delta-only follow-ups.
 - Avoid unrelated cleanup and broad refactors.
 - Do not invent requirements.
 - Use reasonable defaults when safe, and state them briefly.

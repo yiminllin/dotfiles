@@ -1,4 +1,19 @@
 #!/bin/bash
+set -euo pipefail
 
-opencode run "Based on dotfiles/nvim/.config/nvim/lua/plugins/, dotfiles/tmux/.tmux.conf dotfiles/fish/.config/fish/config.fish, dotfiles/install.sh, can you update the documentation file PLUGINS.md? If there are no changes, don't update anything, keep the change as minimal as possible." --agent dotfile-documenter
-git add ~/dotfiles/PLUGINS.md && git commit -m "Auto Update - PLUGINS.md" --allow-empty
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+opencode run "Based on nvim/.config/nvim/lua/plugins/, tmux/.tmux.conf, fish/.config/fish/config.fish, and install.sh, update PLUGINS.md for plugin additions/removals only. If there are no plugin-related changes, don't update anything. Keep the change as minimal as possible." --agent dotfile-documenter
+
+if ! git diff --quiet -- PLUGINS.md; then
+  git add PLUGINS.md
+fi
+
+if ! git diff --cached --quiet -- PLUGINS.md; then
+  cat >&2 <<'EOF'
+pre-push: PLUGINS.md was updated and staged.
+Review the staged change, commit it, then push again.
+EOF
+  exit 1
+fi

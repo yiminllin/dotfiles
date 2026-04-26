@@ -14,7 +14,7 @@ Use this skill for Zipline-internal Phoenix requests that involve:
 - fetching Phoenix/HIL artifacts from S3
 - launching a Phoenix HIL run locally or through the checked-in GitHub workflow
 
-If the user gives a failing GitHub Actions run/job URL and wants root-cause analysis for one attempt, prefer `$debug-phoenix-hil-from-gha`. If they specifically want to upload a local Phoenix log directory and generate a LogPlots link, `$upload_local_log_to_s3` is the focused path.
+If the user gives a failing GitHub Actions run/job URL and wants root-cause analysis for one attempt, prefer `$debug-phoenix-hil-from-gha`. If they specifically want to upload a local Phoenix log directory and generate a LogPlots link, prefer `$upload_local_log_to_s3` when it is available from repo/system skill roots such as `.agents/skills/` or `/Systems/.agents/skills/`; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly.
 
 For local Phoenix SIL runs, if `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, treat post-run log upload, Baraza-link capture from upload output, and Baraza-link return as the default behavior unless the user opts out. Do not apply this default to HIL runs unless the user explicitly asks.
 
@@ -32,7 +32,7 @@ For local Phoenix SIL runs, if `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, treat post
 - `gh workflow run` needs GitHub auth.
 - Local HIL execution should be done from the HIL container started with `./hil/dev_entrypoint.sh zsh`.
 
-If AWS auth is stale, use `$aws-sso-login` first.
+If AWS auth is stale, use `$aws-sso-login` first when it is available from repo/system skill roots; otherwise stop and ask the user to run `aws sso login`.
 
 ### Confirm first
 
@@ -64,7 +64,7 @@ For `run-sil-scenario`, `run-no-sync-scenario`, and `run-flakiness-check`:
 
 1. Before launching Phoenix, confirm whether the run itself needs confirmation under the normal safety gates.
 2. After a successful local run, resolve the produced log directory. Prefer the run-specific directory when available; otherwise fall back to `.phoenix/logs/latest/`.
-3. If `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, upload that log directory with `phoenix/debug/scripts/upload_local_log_to_s3.sh` or `$upload_local_log_to_s3`.
+3. If `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, upload that log directory with `$upload_local_log_to_s3` when available; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh`.
 4. When upload output includes a Baraza link, capture it from the upload output. If `TMUX` is set and `tmux` is available, copy it into the tmux buffer with `tmux set-buffer -- "$baraza_link"`.
 5. Include the final S3 path and Baraza link in the response when upload succeeds, and say whether the tmux copy happened.
 6. If upload cannot happen because AWS auth is missing/expired or the destination prefix is unavailable, say that clearly instead of silently skipping it.
@@ -338,7 +338,7 @@ For fetched or CI HIL logs:
 
 If the user wants local visualization, `ash/scenarios/README.md` documents the `fs:///...` LogPlots path shape for `.phoenix/logs/latest/...`.
 
-If the user wants a shareable LogPlots link from a local Phoenix log directory, either run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly or use `$upload_local_log_to_s3`.
+If the user wants a shareable LogPlots link from a local Phoenix log directory, use `$upload_local_log_to_s3` when available; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly.
 
 ## Response pattern
 

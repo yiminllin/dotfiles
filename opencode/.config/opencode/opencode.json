@@ -16,7 +16,9 @@
       "/private/tmp": "allow",
       "/private/tmp/**": "allow",
       "/Systems/.phoenix/": "allow",
-      "/Systems/.phoenix/**": "allow"
+      "/Systems/.phoenix/**": "allow",
+      "/Systems/.agents/": "allow",
+      "/Systems/.agents/**": "allow"
     },
     "doom_loop": "ask",
     "read": {
@@ -33,7 +35,27 @@
       "*.env.*": "ask",
       "*.env.example": "allow",
       "*.pem": "ask",
-      "*.key": "ask"
+      "*.key": "ask",
+      "opencode/.config/opencode/agents/*": "ask",
+      "opencode/.config/opencode/commands/*": "ask",
+      "opencode/.config/opencode/skills/*": "ask",
+      "opencode/.config/opencode/skills/**": "ask",
+      "opencode/.config/opencode/opencode.json": "ask",
+      "opencode/.config/opencode/user-profile.yaml": "ask",
+      "~/dotfiles/opencode/.config/opencode/agents/*": "ask",
+      "~/dotfiles/opencode/.config/opencode/commands/*": "ask",
+      "~/dotfiles/opencode/.config/opencode/skills/*": "ask",
+      "~/dotfiles/opencode/.config/opencode/skills/**": "ask",
+      "~/dotfiles/opencode/.config/opencode/opencode.json": "ask",
+      "~/dotfiles/opencode/.config/opencode/user-profile.yaml": "ask",
+      "~/.config/opencode/agents/*": "ask",
+      "~/.config/opencode/commands/*": "ask",
+      "~/.config/opencode/skills/*": "ask",
+      "~/.config/opencode/skills/**": "ask",
+      "~/.config/opencode/opencode.json": "ask",
+      "~/.config/opencode/user-profile.yaml": "ask",
+      "/Systems/.agents/*": "ask",
+      "/Systems/.agents/**": "ask"
     },
     "bash": {
       "*": "allow",
@@ -72,7 +94,8 @@
   },
   "instructions": [
     "README.md",
-    "AGENTS.md"
+    "AGENTS.md",
+    "~/.config/opencode/user-profile.yaml"
   ],
   "default_agent": "orchestrator",
   "model": "openai/gpt-5.5",

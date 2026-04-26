@@ -12,7 +12,7 @@ Given a GitHub Actions HIL job URL, identify the primary failure cause and expla
 ## Auth failure handling
 
 - On `gh` auth failure, stop and ask the user to authenticate (`gh auth login`) before continuing.
-- On AWS auth failure, stop and ask the user to authenticate (`aws sso login`, or use `$aws-sso-login`) before continuing.
+- On AWS auth failure, use `$aws-sso-login` when available from repo/system skill roots; otherwise stop and ask the user to authenticate with `aws sso login` before continuing.
 
 ## Required input
 
@@ -39,7 +39,7 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 1
 fi
 if ! aws sts get-caller-identity >/tmp/aws_identity.json 2>/tmp/aws_auth_error.log; then
-  echo "AUTH ERROR: AWS auth failed. Ask user to run: aws sso login (or use \$aws-sso-login)."
+  echo "AUTH ERROR: AWS auth failed. Use \$aws-sso-login if available, or ask user to run: aws sso login."
   cat /tmp/aws_auth_error.log
   exit 1
 fi

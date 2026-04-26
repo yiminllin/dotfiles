@@ -12,3 +12,34 @@ defaults:
   selection_style: choice-first-when-available
   follow_up_style: delta-only
   implementation_flow: scaffold-first-inspectable
+  review_quality_pass: explicit-silent-before-final
+  skill_resolution: repo-then-system-then-global
+
+shared_agent_defaults:
+  quality_pass:
+    applies_to: non-trivial outputs
+    check:
+      - instruction_fit
+      - factual_accuracy
+      - hidden_assumptions
+      - edge_cases
+      - uncertainty
+      - validation_or_evidence
+    report_only: material_assumptions_risks_or_uncertainty
+  clarification:
+    style: minimum-needed
+    prefer: structured_choice_when_available
+    fallback: short_numbered_options_with_compact_replies
+  followups:
+    style: delta-only
+    restate_context_only_for_safety_or_clarity: true
+  skill_loading:
+    prefer_order:
+      - current_repo_agents_skills
+      - system_agents_skills
+      - global_opencode_skills
+    roots:
+      repo: ".agents/skills/"
+      system: "/Systems/.agents/skills/"
+      global: "~/.config/opencode/skills/"
+    guidance: "Use skill names from SKILL.md metadata, not filesystem paths. Prefer the most specific applicable skill. Inspect or ask if overlapping skill names make precedence unclear."

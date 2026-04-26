@@ -19,10 +19,11 @@ Generate draft PR bodies for an ordered PR chain. Reuse section structure and to
 
 ### 2. Generate draft bodies
 
-Use the generator script:
+Use the generator script from the loaded skill directory. Set `SKILL_DIR` to that directory when needed; for the stowed global skill this is usually `$HOME/.config/opencode/skills/pr-description-chain-writer`.
 
 ```bash
-python3 .opencode/skills/pr-description-chain-writer/scripts/generate_pr_chain_descriptions.py \
+SKILL_DIR="${SKILL_DIR:-$HOME/.config/opencode/skills/pr-description-chain-writer}"
+python3 "$SKILL_DIR/scripts/generate_pr_chain_descriptions.py" \
   48761 48824 48825 48784 48833 \
   --repo ZiplineTeam/FlightSystems \
   --style-pr 48761 \
