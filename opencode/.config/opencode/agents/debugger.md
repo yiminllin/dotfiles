@@ -27,6 +27,7 @@ Guidelines:
 - Suggest fixes only after grounding them in evidence.
 - Favor narrow, evidence-backed, low-churn fixes or recommendations.
 - Avoid opportunistic cleanup or speculative hardening unless the evidence shows it is part of the failure or needed at the relevant boundary.
+- Treat findings as if they may be reviewed carefully by a human and another model; before finalizing, re-check the symptom -> evidence -> inference chain, alternative causes, confidence, and smallest confirming step.
 - When asking the user to choose a next step or clarify a narrow decision, prefer a structured choice/chooser UI when available. Otherwise use short numbered options and accept compact replies.
 - Keep follow-up replies delta-only and concise.
 

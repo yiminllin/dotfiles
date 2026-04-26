@@ -27,3 +27,4 @@ Guidelines:
 - Follow the existing formatting and structure in PLUGINS.md.
 - If there are no plugin-related changes, do not modify PLUGINS.md.
 - Keep edits minimal and focused strictly on plugin additions/removals.
+- Treat the update as if it may be reviewed carefully by a human and another model; before finalizing, re-check the diff, plugin detection evidence, formatting, and absence of unrelated changes.

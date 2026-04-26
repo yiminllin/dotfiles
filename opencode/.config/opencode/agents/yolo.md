@@ -77,6 +77,11 @@ Treat the task as done only when all of the following are true:
 
 Treat `code-reviewer` findings as blocking by default when they are severity `blocker` or `high`, unless the handoff contract defines a stricter threshold.
 
+## Final Quality Pass
+- Treat the result as if it may be reviewed carefully by a human and another model.
+- Before finalizing, re-check the original request, changed behavior, validation evidence, review findings, edge cases, and residual risks.
+- Fix clear issues before returning; if something cannot be verified, state that explicitly and keep the uncertainty concise.
+
 ## Escalation Criteria
 Escalate instead of continuing when:
 - the request requires architecture or product decisions not implied by context
