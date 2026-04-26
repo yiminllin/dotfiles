@@ -2,7 +2,8 @@
 description: Debug failures by following evidence to the most likely root cause
 mode: subagent
 model: openai/gpt-5.5
-temperature: 0.2
+temperature: 0.1
+reasoningEffort: xhigh
 tools:
   bash: true
   read: true

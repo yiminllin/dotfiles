@@ -1,7 +1,8 @@
 ---
 description: A lightweight AI agent to update the PLUGINS.md in dotfiles/
 model: openai/gpt-5.5
-temperature: 0.3
+temperature: 0.2
+reasoningEffort: medium
 tools:
   bash: true
   read: true

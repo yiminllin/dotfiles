@@ -3,6 +3,7 @@ description: Explain concepts and code clearly with insights and established kno
 mode: subagent
 model: openai/gpt-5.5
 temperature: 0.2
+reasoningEffort: medium
 tools:
   read: true
   grep: true

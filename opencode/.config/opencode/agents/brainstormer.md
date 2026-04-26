@@ -2,7 +2,8 @@
 description: Brainstorm different kinds of solutions, and still ensuring the correctness
 mode: subagent
 model: openai/gpt-5.5
-temperature: 0.8
+temperature: 0.7
+reasoningEffort: high
 tools:
   read: true
   grep: true

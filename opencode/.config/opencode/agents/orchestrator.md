@@ -2,6 +2,7 @@
 description: Orchestrator of specialized subagents and lightweight direct responses
 model: openai/gpt-5.5
 temperature: 0.1
+reasoningEffort: high
 tools:
   read: true
   grep: true

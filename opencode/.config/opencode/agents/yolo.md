@@ -3,6 +3,7 @@ description: Bounded one-shot executor that converges via plan, implementation, 
 mode: subagent
 model: openai/gpt-5.5
 temperature: 0.2
+reasoningEffort: xhigh
 tools:
   bash: true
   read: true
