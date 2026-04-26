@@ -1,7 +1,7 @@
 ---
 description: Review code and prioritize findings by severity and risk
 mode: subagent
-model: openai/gpt-5.4
+model: openai/gpt-5.5
 temperature: 0.2
 tools:
   read: true

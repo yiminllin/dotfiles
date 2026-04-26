@@ -1,7 +1,7 @@
 ---
 description: Explain concepts and code clearly with insights and established knowledge
 mode: subagent
-model: openai/gpt-5.4
+model: openai/gpt-5.5
 temperature: 0.2
 tools:
   read: true
