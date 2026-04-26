@@ -58,7 +58,7 @@ OpenCode: run
 opencode auth login
 ```
 
-In tmux, we need to leader+h, then toggle appearance to manually switch to light mode in opencode.
+OpenCode uses a fixed light Everforest theme from the dotfiles config, so tmux-launched panes do not depend on terminal light/dark detection.
 
 Github-CLI, we need
 
