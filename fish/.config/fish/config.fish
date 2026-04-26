@@ -55,7 +55,7 @@ abbr -a fs_notes_sync 'mkdir -p ~/Desktop/notes && rsync -az --delete -e "ssh -i
 
 function to_dev_container_flight_software
     source ~/.config/dev-secrets/flightsystems.fish
-    cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems-systems -- env JIRA_API_TOKEN="$JIRA_API_TOKEN" BUILDKITE_API_TOKEN="$BUILDKITE_API_TOKEN" fish
+    cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems-systems -- env JIRA_API_TOKEN="$JIRA_API_TOKEN" BUILDKITE_API_TOKEN="$BUILDKITE_API_TOKEN" bash -l
 end
 abbr -a fs to_dev_container_flight_software 
 
