@@ -3,6 +3,7 @@ ipython       # python
 rexi          # Interactive CLI for regex testing
 
 # Tools
+jiratui       # Terminal UI for Jira
 visidata      # Visualizing & Editing CSVs
 
 # Languages
