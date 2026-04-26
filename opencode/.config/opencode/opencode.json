@@ -95,7 +95,7 @@
   "instructions": [
     "README.md",
     "AGENTS.md",
-    "~/.config/opencode/user-profile.yaml"
+    "~/dotfiles/opencode/.config/opencode/user-profile.yaml"
   ],
   "default_agent": "orchestrator",
   "model": "openai/gpt-5.5",
