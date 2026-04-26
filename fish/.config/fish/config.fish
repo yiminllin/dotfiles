@@ -54,7 +54,8 @@ abbr -a devbox to_devbox
 abbr -a fs_notes_sync 'mkdir -p ~/Desktop/notes && rsync -az --delete -e "ssh -i ~/.ssh/id_ed25519_zipline" ubuntu@devbox_yimin_lin.int.flyzipline.com:/home/ubuntu/github/FlightSystems/notes/ ~/Desktop/notes/'
 
 function to_dev_container_flight_software
-    cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems-systems
+    source ~/.config/dev-secrets/flightsystems.fish
+    cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems-systems -- env JIRA_API_TOKEN="$JIRA_API_TOKEN" BUILDKITE_API_TOKEN="$BUILDKITE_API_TOKEN" fish
 end
 abbr -a fs to_dev_container_flight_software 
 
