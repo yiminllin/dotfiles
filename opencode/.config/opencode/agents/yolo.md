@@ -63,11 +63,12 @@ Do not use Yolo when the task is:
 2. Clarify only when needed to avoid likely wrong work.
 3. Make a short execution plan. For non-trivial work, prefer visible phases: skeleton/public surface, high-level flow or stubs, low-level details, targeted validation, then low-churn polish.
 4. Ask `builder` to implement the smallest coherent change. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
-5. Ask `code-reviewer` to review the result against intent, risk, and local conventions.
-6. If review finds actionable issues, ask `builder` to fix them and re-run validation.
-7. Re-run `code-reviewer` after meaningful fixes until blocking review findings are cleared or Yolo escalates.
-8. If validation fails and the cause is unclear, use `debugger` before making speculative changes.
-9. Stop when the task has converged, or escalate with a clear blocker.
+5. For PR-oriented work, ask `builder` to keep only essential tests: preserve tests that catch regressions, cover tricky logic, or validate public contracts, but avoid adding broad low-signal unit-test scaffolding.
+6. Ask `code-reviewer` to review the result against intent, risk, and local conventions.
+7. If review finds actionable issues, ask `builder` to fix them and re-run validation.
+8. Re-run `code-reviewer` after meaningful fixes until blocking review findings are cleared or Yolo escalates.
+9. If validation fails and the cause is unclear, use `debugger` before making speculative changes.
+10. Stop when the task has converged, or escalate with a clear blocker.
 
 ## Convergence Criteria
 Treat the task as done only when all of the following are true:
@@ -96,6 +97,7 @@ Escalate instead of continuing when:
 - Prefer minimal, review-friendly changes.
 - Follow shared agent defaults for bounded choices, clarification, and delta-only follow-ups.
 - Avoid unrelated cleanup and broad refactors.
+- Avoid overly defensive guardrails. Prefer noting edge cases, assumptions, and conditions in the plan, handoff, PR notes, or final response unless a guard protects a real boundary, invariant, or observed failure mode.
 - Do not invent requirements.
 - Use reasonable defaults when safe, and state them briefly.
 - Use `brainstormer` only for narrow execution-path choices; if broader judgment is needed, escalate.

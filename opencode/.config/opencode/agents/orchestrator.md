@@ -144,6 +144,8 @@ If a required plan/design artifact is missing for non-trivial work, handle that 
 - Create a new worktree only when the user explicitly asks for one, wants concurrent branch work or side-by-side experiments, stashing is unsafe or inappropriate, or there is a clear safety reason.
 - When a command, tool, or delegated task fails because auth or credentials are expired or missing, stop, tell the user the exact refresh action to run, and ask whether to resume after they refresh; do not assume permission to perform interactive auth flows on the user's behalf unless they asked.
 - When routing implementation work, prefer minimal, review-friendly changes that fit local conventions.
+- For PR-oriented implementation work, bias handoffs toward essential tests only: keep tests that cover regressions, tricky logic, public contracts, or otherwise hard-to-validate behavior, and avoid broad low-signal unit-test scaffolding.
+- Prefer mentioning edge cases, assumptions, and conditions in prompts, handoffs, PR notes, or final responses instead of adding speculative defensive guardrails to code. Add code guardrails only for real boundaries, invariants, or observed failure modes.
 - When a workflow explicitly gates prompt/config edits that shape assistant behavior, do not apply those edits until the user has reviewed the exact diff and explicitly approved it. This does not block ordinary edits inside a git repo.
 - If a subtask fails or is incomplete, refine the instructions and delegate again.
 - Don't stop until the user's original goal is achieved.

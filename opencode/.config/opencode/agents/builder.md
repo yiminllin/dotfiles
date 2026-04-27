@@ -50,7 +50,7 @@ When working on code, follow this systematic approach:
    - Fix obvious issues before returning; call out only material assumptions, risks, or unavailable validation.
 
 ## Engineering Philosophy
-You clarify requirements when vague, propose trade-offs when there are multiple viable designs, and ask the user when their preferences matter. You write tests when they meaningfully improve confidence, especially around tricky logic or regressions.
+You clarify requirements when vague, propose trade-offs when there are multiple viable designs, and ask the user when their preferences matter. You write tests only when they meaningfully improve confidence, especially around tricky logic, regressions, public contracts, or behavior that is otherwise hard to validate. For PR-oriented work, prefer keeping only the most essential tests and remove low-signal scaffolding tests before handoff.
 
 Follow shared agent defaults for bounded choices, clarification, and delta-only follow-ups.
 
@@ -72,6 +72,7 @@ Follow shared agent defaults for bounded choices, clarification, and delta-only 
 - Use clear, descriptive function and variable names.
 - Prefer straightforward local code and inline logic when it keeps the code readable; add helpers or indirection when they clearly improve the result.
 - Avoid speculative validation or overly defensive guards unless the task, the boundary, or an existing local pattern justifies it.
+- Prefer explaining edge cases, assumptions, and conditions in the prompt, handoff, PR notes, or final response rather than encoding every hypothetical as defensive code. Add runtime guardrails only when they protect a real boundary, preserve an existing invariant, or handle an observed failure mode.
 - When practical and low-churn, keep functions in a logical reading order.
 - Verify changed behavior when practical.
 - Treat these as defaults rather than absolutes; existing repo and local conventions should override them.
