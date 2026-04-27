@@ -53,6 +53,57 @@ abbr -a devbox to_devbox
 
 abbr -a fs_notes_sync 'mkdir -p ~/Desktop/notes && rsync -az --delete -e "ssh -i ~/.ssh/id_ed25519_zipline" ubuntu@devbox_yimin_lin.int.flyzipline.com:/home/ubuntu/github/FlightSystems/notes/ ~/Desktop/notes/'
 
+function jira_list_fzf
+    set q '(assignee = currentUser() OR reporter = currentUser()) AND status NOT IN ("Done", "Canceled") ORDER BY duedate ASC, parent, created ASC'
+    set u (string trim --right --chars=/ "$JIRA_API_BASE_URL")
+
+    curl -sS -u "$JIRA_API_USERNAME:$JIRA_API_TOKEN" -G "$u/rest/api/3/search/jql" \
+        --data-urlencode "jql=$q" \
+        --data-urlencode 'maxResults=50' \
+        --data-urlencode 'fields=summary,parent,status,duedate' |
+        jq -r '
+          def p(n): tostring | if length > n then .[0:n-1] + "…" else . + (" " * (n - length)) end;
+          def status_color:
+            . as $s
+            | ($s | gsub("^\\s+|\\s+$"; "") | ascii_downcase) as $n
+            | if $n == "done" then "\u001b[32m\($s)\u001b[0m"
+              elif $n == "in review" then "\u001b[35m\($s)\u001b[0m"
+              elif $n == "in progress" then "\u001b[33m\($s)\u001b[0m"
+              elif $n == "select for development" then "\u001b[95m\($s)\u001b[0m"
+              else $s end;
+          .issues[]
+          | [.key, (.fields.summary // ""), (.fields.parent.fields.summary // "-"), (.fields.status.name // "-"), (.fields.duedate // "-")] as $x
+          | "\($x[1]|p(100))  \($x[2]|p(100))  \($x[3]|p(24)|status_color)  \($x[4])\t\($x[0])"
+        ' |
+        fzf \
+            --ansi \
+            --no-sort \
+            --layout=default \
+            --height=100% \
+            --delimiter='\t' \
+            --with-nth=1 \
+            --header='SUMMARY                                                                                              PARENT SUMMARY                                                                                       STATUS                    DUE' \
+            --preview='jira issue view {2} --comments 5' \
+            --preview-window=up:60%:wrap \
+            --bind='enter:become(jira issue view {2} --comments 10)'
+end
+abbr -a jl jira_list_fzf
+
+function jira_create_phoenix
+    set summary (string join ' ' $argv)
+    test -n "$summary"; or return 1
+    jira issue create -t Task -s "[Phoenix] $summary" -C Phoenix --custom team=Simulation --no-input
+end
+
+abbr -a jm --set-cursor 'jira issue move %'
+abbr -a jms --set-cursor 'jira issue move % "Select for Development"'
+abbr -a jmp --set-cursor 'jira issue move % "In Progress"'
+abbr -a jmr --set-cursor 'jira issue move % "In Review"'
+abbr -a jmd --set-cursor 'jira issue move % Done'
+abbr -a je --set-cursor 'set f (mktemp); nvim $f; and jira issue edit % -b (string collect < $f) --no-input; rm -f $f'
+abbr -a jc --set-cursor 'set f (mktemp); nvim $f; and jira issue comment add % --template $f --no-input; rm -f $f'
+abbr -a jn --set-cursor 'jira_create_phoenix %'
+
 function to_dev_container_flight_software
     source ~/.config/dev-secrets/flightsystems.fish
     cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems-systems -- env JIRA_API_TOKEN="$JIRA_API_TOKEN" BUILDKITE_API_TOKEN="$BUILDKITE_API_TOKEN" JIRA_API_USERNAME='yimin.lin@flyzipline.com' JIRA_API_BASE_URL='https://flyzipline.atlassian.net/' bash -il

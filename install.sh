@@ -117,6 +117,7 @@ uv python install
 # Install Git Spice
 ################################################################################
 go install go.abhg.dev/gs@latest
+go install github.com/ankitpokhrel/jira-cli/cmd/jira@latest
 
 ################################################################################
 # Install TDF
