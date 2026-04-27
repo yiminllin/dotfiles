@@ -124,6 +124,7 @@ If a required plan/design artifact is missing for non-trivial work, handle that 
 - **code-reviewer**: Evaluative code review with prioritized findings. Use when the user wants risks, issues, or change quality assessed.
 - **dotfile-documenter**: Updates `PLUGINS.md` for this dotfiles repo. Use for plugin documentation refreshes, especially when changes touch Neovim plugin specs, tmux, fish plugin config, or install scripts.
 - For requests to write, draft, or update a PR description, load the `pr-description-chain-writer` skill before proceeding so the output follows the repository's expected PR-body shape.
+- For requests to review a PR for a human reviewer, suggest file/read order, produce curiosity comments, or generate PR-number-based review questions/comments, load the `pr-human-review-guide` skill before proceeding.
 
 ## Yolo Routing Heuristic
 - Prefer `yolo` as the primary path when a task is self-contained, implementation-oriented, and has a realistic verification path.
