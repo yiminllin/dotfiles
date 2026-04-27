@@ -13,7 +13,7 @@ return {
 			{ "<leader>ds", group = "[D]ebugPrint [S]urround" },
 			{ "<leader>g", group = "[G]it / [G]odbolt" },
 			{ "<leader>gy", group = "[G]it [Y]ank" },
-			{ "<leader>gd", group = "[G]it [D]iff" },
+			{ "<leader>gd", group = "[G]it [D]iffview" },
 			{ "<leader>gl", group = "[G]it [L]ink" },
 			{ "<leader>h", group = "Git [H]unk" },
 			{ "<leader>l", group = "[L]oad" },

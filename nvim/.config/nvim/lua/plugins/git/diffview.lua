@@ -33,26 +33,27 @@ return {
 		{ "lifepillar/vim-solarized8", branch = "neovim" }, -- Pin to master branch
 	},
 	config = function()
+		local review = require("utils.diffview_review")
+		review.setup()
+
 		require("diffview").setup({
 			enhanced_diff_hl = true,
+			keymaps = review.diffview_keymaps(),
 		})
 
 		local function apply_diff2_winhl()
+			review.apply_highlights()
+
 			local view = require("diffview.lib").get_current_view()
 			if not view or not view.winopts or not view.winopts.diff2 then
 				return
 			end
 
-			-- GitHub-like light diff colors: red on left, green on right.
-			vim.api.nvim_set_hl(0, "DiffviewLeftDiffText", { bg = "#ffb3ad" })
-			vim.api.nvim_set_hl(0, "DiffviewRightDiffText", { bg = "#9fe8ad" })
-			vim.api.nvim_set_hl(0, "DiffviewDiffDeleteDim", { bg = "#ffe1d6" })
-			vim.api.nvim_set_hl(0, "DiffDelete", { bg = "#ffe1d6" })
-
 			-- Only for diff2 layouts:
-			-- left  changed lines -> DiffDelete color
-			-- right changed lines -> DiffAdd color
-			-- changed text chunks  -> brighter side-specific colors
+			-- left  deleted/changed lines -> red GitHub color
+			-- right added/changed lines   -> green GitHub color
+			-- added/deleted counterpart filler lines use Diffview's subtle delete-dim group
+			-- changed text chunks         -> brighter side-specific colors
 			view.winopts.diff2.a.winhl = {
 				"DiffAdd:DiffviewDiffAddAsDelete",
 				"DiffDelete:DiffviewDiffDeleteDim",
@@ -152,11 +153,9 @@ return {
 				end
 				vim.o.background = "light"
 				vim.cmd.colorscheme("solarized8_flat")
-				vim.api.nvim_set_hl(0, "DiffAdd", { bg = "#e6e9c1" })
-				vim.api.nvim_set_hl(0, "DiffChange", { bg = "#cecba1" })
-				vim.api.nvim_set_hl(0, "DiffText", { bg = "#c5e0dc", fg = "#323024", bold = true })
-				vim.api.nvim_set_hl(0, "DiffDelete", { bg = "#f4c2a2" })
+				review.apply_highlights()
 				apply_diff2_winhl()
+				review.refresh_visible()
 				refresh_ibl()
 			end,
 		})
@@ -202,68 +201,35 @@ return {
 		{
 			"<leader>gdp",
 			function()
-				-- Get the immediate parent branch (one level above)
+				-- Get the immediate parent branch from git-spice stack metadata.
 				local function get_parent_branch()
-					local current_branch = vim.fn.system("git branch --show-current"):gsub("%s+", "")
-					if current_branch == "" then
+					local git_spice_log_levels = { WRN = true, INF = true, ERR = true, FTL = true }
+
+					local function first_branch_line(lines)
+						for _, line in ipairs(lines or {}) do
+							line = vim.trim(line)
+							local first_token = line:match("^(%S+)")
+							if line ~= "" and not git_spice_log_levels[first_token] then
+								return line
+							end
+						end
+					end
+
+					if vim.fn.executable("git-spice") ~= 1 then
 						return nil
 					end
 
-					-- Get all local branches
-					local branches_output = vim.fn.system("git branch --list")
-					local branches = {}
-					for branch in branches_output:gmatch("[* ] ([^\n]+)") do
-						branch = branch:gsub("%s+", "")
-						if branch ~= current_branch then
-							table.insert(branches, branch)
-						end
-					end
-
-					local branch_tip = vim.fn.system("git rev-parse " .. current_branch):gsub("%s+", "")
-					if branch_tip == "" then
+					local lines = vim.fn.systemlist({ "git-spice", "--no-prompt", "down", "--dry-run" })
+					if vim.v.shell_error ~= 0 then
 						return nil
 					end
 
-					local closest_parent = nil
-					local shortest_dist = math.huge
-
-					-- Find the closest ancestor branch
-					for _, candidate in ipairs(branches) do
-						local candidate_tip = vim.fn.system("git rev-parse " .. candidate):gsub("%s+", "")
-						if candidate_tip == "" then
-							goto continue
-						end
-
-						-- Check if candidate is an ancestor of current branch
-						vim.fn.system("git merge-base --is-ancestor " .. candidate_tip .. " " .. branch_tip .. " 2>&1")
-						if vim.v.shell_error ~= 0 then
-							goto continue
-						end
-
-						-- Skip if current branch is an ancestor of candidate (would create cycle)
-						vim.fn.system("git merge-base --is-ancestor " .. branch_tip .. " " .. candidate_tip .. " 2>&1")
-						if vim.v.shell_error == 0 then
-							goto continue
-						end
-
-						-- Count commits between candidate and current branch
-						local dist_output =
-							vim.fn.system("git rev-list --count " .. candidate_tip .. ".." .. branch_tip .. " 2>&1")
-						local dist = tonumber(dist_output:match("%d+"))
-						if dist and dist < shortest_dist then
-							closest_parent = candidate
-							shortest_dist = dist
-						end
-
-						::continue::
-					end
-
-					return closest_parent
+					return first_branch_line(lines)
 				end
 
 				local parent = get_parent_branch()
 				if not parent then
-					vim.notify("Could not determine parent branch", vim.log.levels.WARN)
+					vim.notify("Could not determine git-spice parent branch", vim.log.levels.WARN)
 					return
 				end
 				diffview_open({ parent })
@@ -275,7 +241,7 @@ return {
 			"<leader>gdx",
 			"<cmd>DiffviewClose<cr>",
 			mode = { "n", "v" },
-			desc = "[G]it [D]iffview [X]Close",
+			desc = "[G]it [D]iffview [X] Close",
 		},
 		{
 			"<leader>gde",
@@ -295,7 +261,39 @@ return {
 				diffview_file_history()
 			end,
 			mode = { "n", "v" },
-			desc = "[G]it Diffview [F]ile History",
+			desc = "[G]it [D]iffview [F]ile History",
+		},
+		{
+			"<leader>gda",
+			function()
+				require("utils.diffview_review").add_comment()
+			end,
+			mode = "n",
+			desc = "[G]it [D]iffview [A]dd Review Comment",
+		},
+		{
+			"<leader>gda",
+			function()
+				require("utils.diffview_review").add_comment_visual()
+			end,
+			mode = "v",
+			desc = "[G]it [D]iffview [A]dd Review Comment",
+		},
+		{
+			"<leader>gdd",
+			function()
+				require("utils.diffview_review").delete_comment()
+			end,
+			mode = { "n", "v" },
+			desc = "[G]it [D]iffview [D]elete Review Comment",
+		},
+		{
+			"<leader>gdv",
+			function()
+				require("utils.diffview_review").toggle_file_viewed()
+			end,
+			mode = { "n", "v" },
+			desc = "[G]it [D]iffview Toggle File [V]iewed",
 		},
 	},
 }

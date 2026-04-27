@@ -42,7 +42,7 @@
 | Editing | debugprint.nvim | Debug print statements | [debugprint.lua](nvim/.config/nvim/lua/plugins/editing/debugprint.lua) |
 | Editing | kitty-scrollback.nvim | Kitty terminal integration | [kitty-scrollback.lua](nvim/.config/nvim/lua/plugins/editing/kitty-scrollback.lua) |
 | Git | gitsigns.nvim | Git signs in gutter | [gitsigns.lua](nvim/.config/nvim/lua/plugins/git/gitsigns.lua) |
-| Git | diffview.nvim | Git diff viewer | [diffview.lua](nvim/.config/nvim/lua/plugins/git/diffview.lua) |
+| Git | diffview.nvim | Diff viewer & local review workflow | [diffview.lua](nvim/.config/nvim/lua/plugins/git/diffview.lua) |
 | Git | gitlinker.nvim | Generate git links | [gitlinker.lua](nvim/.config/nvim/lua/plugins/git/gitlinker.lua) |
 | UI/Visual | gruvbox.nvim | Gruvbox color scheme | [colorscheme.lua](nvim/.config/nvim/lua/plugins/ui/colorscheme.lua) |
 | UI/Visual | vim-solarized8 | Solarized color scheme | [diffview.lua](nvim/.config/nvim/lua/plugins/git/diffview.lua) |
