@@ -35,6 +35,7 @@ return {
 	config = function()
 		local review = require("utils.diffview_review")
 		review.setup()
+		local previous_diffopt = nil
 
 		require("diffview").setup({
 			enhanced_diff_hl = true,
@@ -140,6 +141,9 @@ return {
 		vim.api.nvim_create_autocmd("User", {
 			pattern = "DiffviewViewOpened",
 			callback = function()
+				previous_diffopt = vim.o.diffopt
+				vim.opt.diffopt:remove({ "algorithm:myers", "algorithm:minimal", "algorithm:patience", "algorithm:histogram" })
+				vim.opt.diffopt:append({ "algorithm:histogram", "indent-heuristic" })
 				-- Check if this is a FileHistory view (don't close explorer for it)
 				local ok, view = pcall(function()
 					return require("diffview.lib").get_current_view()
@@ -162,6 +166,8 @@ return {
 		vim.api.nvim_create_autocmd("User", {
 			pattern = "DiffviewViewClosed",
 			callback = function()
+				vim.o.diffopt = previous_diffopt or vim.o.diffopt
+				previous_diffopt = nil
 				require("gruvbox").setup({
 					contrast = "hard",
 					overrides = {
