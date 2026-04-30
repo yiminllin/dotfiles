@@ -389,6 +389,7 @@ local function range_label(start_line, end_line)
 end
 
 local function refresh_buffer(bufnr, file, state)
+	bufnr = bufnr == 0 and vim.api.nvim_get_current_buf() or bufnr
 	if not file or not vim.api.nvim_buf_is_valid(bufnr) then
 		return
 	end
@@ -434,6 +435,15 @@ local function refresh_buffer(bufnr, file, state)
 		end
 	end
 
+end
+
+local function refresh_winbar(winid, file, state)
+	local escaped_file = file:gsub("%%", "%%%%")
+	if state.viewed[file] then
+		vim.wo[winid].winbar = "%#DiffviewReviewWinbarViewed# ✓ VIEWED %#DiffviewReviewWinbarFile# " .. escaped_file
+	else
+		vim.wo[winid].winbar = "%#DiffviewReviewWinbarUnviewed# ○ UNVIEWED %#DiffviewReviewWinbarFile# " .. escaped_file
+	end
 end
 
 function M.apply_highlights()
@@ -483,6 +493,9 @@ function M.apply_highlights()
 	set(0, "DiffviewReviewViewedLine", { bg = "#e6ffec" })
 	set(0, "DiffviewReviewViewedSign", { fg = "#1a7f37", bold = true })
 	set(0, "DiffviewReviewViewedVirt", { bg = "#e6ffec", fg = "#1a7f37", bold = true })
+	set(0, "DiffviewReviewWinbarFile", { bg = "#f6f8fa", fg = "#57606a" })
+	set(0, "DiffviewReviewWinbarUnviewed", { bg = "#fff8c5", fg = "#9a6700", bold = true })
+	set(0, "DiffviewReviewWinbarViewed", { bg = "#1a7f37", fg = "#ffffff", bold = true })
 end
 
 function M.refresh_visible()
@@ -499,6 +512,7 @@ function M.refresh_visible()
 		local file = file_for_buffer(bufnr, ctx, view)
 		if file then
 			refresh_buffer(bufnr, file, state)
+			refresh_winbar(winid, file, state)
 		end
 	end
 end
@@ -512,7 +526,9 @@ function M.refresh_current()
 		return
 	end
 
-	refresh_buffer(0, ctx.file, load_state(ctx))
+	local state = load_state(ctx)
+	refresh_buffer(0, ctx.file, state)
+	refresh_winbar(0, ctx.file, state)
 end
 
 function M.add_comment(opts)
@@ -657,6 +673,7 @@ function M.pick_unviewed_file()
 	}, function(entry)
 		if entry then
 			ctx.view:use_entry(entry)
+			vim.schedule(M.refresh_visible)
 		end
 	end)
 end
