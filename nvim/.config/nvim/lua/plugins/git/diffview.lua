@@ -295,5 +295,13 @@ return {
 			mode = { "n", "v" },
 			desc = "[G]it [D]iffview Toggle File [V]iewed",
 		},
+		{
+			"<leader>gdu",
+			function()
+				require("utils.diffview_review").pick_unviewed_file()
+			end,
+			mode = { "n", "v" },
+			desc = "[G]it [D]iffview Pick [U]nviewed File",
+		},
 	},
 }

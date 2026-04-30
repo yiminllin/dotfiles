@@ -633,6 +633,34 @@ function M.toggle_file_viewed()
 	end
 end
 
+function M.pick_unviewed_file()
+	local ctx = current_file_context()
+	if not require_active_diffview(ctx, "picking an unviewed file") or not require_repo_context(ctx, "picking an unviewed file") then
+		return
+	end
+
+	local state = load_state(ctx)
+	local entries = vim.tbl_filter(function(entry)
+		return entry.path and not state.viewed[normalize_file(entry.path)]
+	end, ctx.view.panel:ordered_file_list())
+
+	if #entries == 0 then
+		notify("No unviewed Diffview files")
+		return
+	end
+
+	vim.ui.select(entries, {
+		prompt = "Unviewed files",
+		format_item = function(entry)
+			return entry.path
+		end,
+	}, function(entry)
+		if entry then
+			ctx.view:use_entry(entry)
+		end
+	end)
+end
+
 function M.diffview_keymaps()
 	return {
 		view = {
@@ -640,9 +668,11 @@ function M.diffview_keymaps()
 			{ "x", "<leader>gda", M.add_comment_visual, { desc = "[G]it [D]iffview [A]dd Review Comment" } },
 			{ "n", "<leader>gdd", M.delete_comment, { desc = "[G]it [D]iffview [D]elete Review Comment" } },
 			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File [V]iewed" } },
+			{ "n", "<leader>gdu", M.pick_unviewed_file, { desc = "[G]it [D]iffview Pick [U]nviewed File" } },
 		},
 		file_panel = {
 			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File [V]iewed" } },
+			{ "n", "<leader>gdu", M.pick_unviewed_file, { desc = "[G]it [D]iffview Pick [U]nviewed File" } },
 		},
 	}
 end
@@ -677,6 +707,10 @@ function M.setup()
 	vim.api.nvim_create_user_command("DiffviewReviewToggleViewed", M.toggle_file_viewed, {
 		force = true,
 		desc = "Toggle the current Diffview file viewed state",
+	})
+	vim.api.nvim_create_user_command("DiffviewReviewUnviewed", M.pick_unviewed_file, {
+		force = true,
+		desc = "Pick an unviewed Diffview file",
 	})
 end
 
