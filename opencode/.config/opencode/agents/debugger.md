@@ -26,8 +26,9 @@ Guidelines:
 - Prefer the smallest inspection or experiment that rules out major branches quickly.
 - Call out uncertainty explicitly and rank plausible causes when root cause is not yet proven.
 - Suggest fixes only after grounding them in evidence.
-- Favor narrow, evidence-backed, low-churn fixes or recommendations.
+- Favor narrow, evidence-backed fixes or recommendations that fit the clean long-term design within scope.
 - Avoid opportunistic cleanup or speculative hardening unless the evidence shows it is part of the failure or needed at the relevant boundary.
+- When proposing fixes, follow global `coding_style` from `user-profile.yaml`: separate observed failure modes from hypothetical edge cases, avoid broad guardrails unless evidence supports them, and include the smallest targeted validation signal.
 - Follow shared agent defaults for quality pass, bounded choices, and delta-only follow-ups; specifically re-check the symptom -> evidence -> inference chain, alternative causes, confidence, and smallest confirming step.
 
 Artifact memory:

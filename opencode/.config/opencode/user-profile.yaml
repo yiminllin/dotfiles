@@ -15,6 +15,65 @@ defaults:
   review_quality_pass: explicit-silent-before-final
   skill_resolution: repo-then-system-then-global
 
+coding_style:
+  design_goal:
+    default: best_long_term_design_within_scope
+    guidance:
+      - Do not optimize only for minimum diff.
+      - Aim for the cleanest maintainable design that fits the task scope and PR boundary.
+      - Do not expand into unrelated architecture cleanup unless explicitly requested.
+      - Balance safety, reviewability, local conventions, churn, and user urgency.
+  tests:
+    default: lean_high_signal
+    guidance:
+      - Add tests only for real regressions, tricky logic, public contracts, or behavior hard to validate otherwise.
+      - Prefer one broader integration-style test over many narrow scaffolding tests.
+      - If adding multiple tests, first identify the minimal useful test set.
+      - Consolidate or remove overlapping or low-value tests introduced by this change or directly modified while implementing it.
+      - Do not remove existing tests unless explicitly in scope or redundant with preserved coverage.
+      - For nontrivial tests, prefer SETUP / TEST / VERIFY sections or an equivalent readable structure.
+  guardrails:
+    default: real_boundary_only
+    guidance:
+      - Avoid speculative validation, fallback paths, compatibility branches, custom errors, and defensive checks.
+      - Add guardrails only when they protect a real boundary, existing invariant, or observed failure mode.
+      - Do not remove existing guardrails unless explicitly in scope or redundant with preserved safety/invariant coverage.
+      - Prefer documenting assumptions over encoding every hypothetical edge case.
+  readability:
+    default: direct_top_down_low_indirection
+    guidance:
+      - Prefer straightforward local code over helpers or wrappers that do not reduce real complexity.
+      - Inline simple logic when that improves locality.
+      - Order touched code top-down where practical: public or high-level flow first, helpers later, tests last.
+      - Trim redundant logs, comments, imports, constants, state, stale names, and dead code introduced by this change or directly modified while implementing it before handoff.
+      - Treat behavior-preserving removal of code, tests, or guardrails introduced by this change as valid progress toward convergence.
+  documentation:
+    default: diagram_when_prose_insufficient
+    guidance:
+      - Prefer one top-level module, struct, or function doc explaining workflow or contract over scattered obvious comments.
+      - Use concise diagrams when inputs, outputs, state, structure, routing, ownership, or before/after behavior are hard to explain in a few sentences.
+      - Diagrams should include key intermediate components, show directionality, and remain readable in Markdown or GitHub.
+      - Comments should explain workflow, contract, or non-obvious ordering, not narrate obvious code.
+  pr_descriptions:
+    default: concise_flexible_visual_when_helpful
+    guidance:
+      - Use the repo PR template when available.
+      - For stacked PRs, keep the chain-level Reason for Change paragraph and context identical; the PR Tree arrow should be the only per-PR variation inside the Reason section.
+      - Put per-PR details in Description of Change.
+      - Use diagrams, tables, or before/after comparisons when they improve clarity, but keep the shape flexible.
+      - Verification should include exact commands or links when available, not vague CI claims.
+      - During PR babysitting, update concise progress tables with exact links and results instead of verbose logs.
+  final_cleanup_pass:
+    default: required_for_nontrivial_code
+    checklist:
+      - Can tests introduced by this change be removed or consolidated?
+      - Are new guardrails, fallbacks, and compatibility paths justified by real boundaries?
+      - Can task-scoped helpers or indirections introduced by this change be inlined?
+      - Is touched code ordered for top-down readability?
+      - Would a diagram or top-level doc clarify the flow?
+      - Are logs, comments, imports, constants, redundant state, stale names, and dead code introduced by this change trimmed?
+      - Can any added code be removed while preserving behavior?
+
 shared_agent_defaults:
   quality_pass:
     applies_to: non-trivial outputs

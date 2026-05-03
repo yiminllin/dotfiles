@@ -7,7 +7,7 @@ description: Generate consistent PR descriptions for chained/stacked GitHub PRs 
 
 ## Overview
 
-Generate draft PR bodies for an ordered PR chain. Reuse section structure and tone from a style reference PR, but default toward concrete `Reason for Change` paragraphs, a dock-in-loop-shaped hybrid `Description of Change` (short prose lead plus nested bullets), baked-in `L3 Nonfunctional` / no-release-notes defaults, a concise checklist-shaped `Verification` block that prefers `Unit Test`, `Manual Test`, or `CI` based on the actual evidence, and `PR Tree` included by default for multi-PR stacks.
+Generate draft PR bodies for an ordered PR chain. Reuse section structure and tone from a style reference PR while honoring global `coding_style.pr_descriptions` from `user-profile.yaml`: stacked PRs should keep `Reason for Change` identical across the chain, place PR-specific details in `Description of Change`, use diagrams/tables/before-after comparisons when they improve clarity, keep the shape flexible rather than forced, prefer exact verification commands/links over vague CI claims, and include `PR Tree` by default for multi-PR stacks.
 
 ## Workflow
 
@@ -34,13 +34,13 @@ python3 "$SKILL_DIR/scripts/generate_pr_chain_descriptions.py" \
 
 Important options:
 
-- `--reason "<text>"`: override the reason paragraph for the chain; prefer concrete symptom/problem plus mechanism/root-cause wording.
+- `--reason "<text>"`: override the shared reason paragraph for the whole chain; for stacked PRs, keep this text identical across PRs and put per-PR specifics in `Description of Change`.
 - `--context-link "<markdown-or-url>"`: append an optional context line in `Reason for Change`.
 - `--style-pr <pr>`: force a specific PR as style source.
 - `--write-dir <dir>`: write one file per PR as `pr_<number>.md`.
 - `--omit-pr-tree`: suppress the default `PR Tree` block for a multi-PR chain.
 - `--include-pr-tree`: backward-compatible force-include flag; mainly useful for single-PR generation or explicitness.
-- `--description-style hybrid|prose|bullets`: choose description rendering style; default is `hybrid`.
+- `--description-style hybrid|prose|bullets`: choose the script-rendered description style; default is `hybrid`. Manually rewrite to a diagram or table when that better explains the change.
 - `--tiny`: emit a shorter description for very small PRs or long chains.
 - `--include-snippets`: include short code/pseudocode snippets for illustration.
 - `--max-snippets <n>` and `--snippet-lines <n>`: control snippet count and length.
@@ -51,11 +51,11 @@ Important options:
 
 - Read `references/style-notes.md` and keep template order/shape consistent.
 - Tighten the generated reason paragraph so it states the concrete reviewer-visible problem and the mechanism/root cause changed in this PR.
-- Default to the hybrid `Description of Change` shape: short intro prose, then detailed nested bullets with semantically useful section labels.
-- Keep `PR Tree` by default for chains; only omit it when the user asks or it is clearly noise for reviewers.
+- Use the hybrid `Description of Change` shape as a useful default, not a hard requirement; adapt to the change and favor clarity.
+- For chains, keep the chain-level reason paragraph/context identical across PRs and keep `PR Tree` by default; only omit it when the user asks or it is clearly noise for reviewers.
 - If you include `PR Tree`, keep the ordering exactly aligned to the chain and keep `◀` on the current PR.
 - Ensure the baked-in `L3 Nonfunctional` / no-release-notes defaults still reflect reality for each PR.
-- Keep `Verification` shaped like a small checklist of `Unit Test`, `Manual Test`, and `CI`, analogous to `Criticality of Change`; check the item that best matches the actual proof unless more than one is clearly warranted.
+- Keep `Verification` concise and evidence-based; prefer exact commands, Baraza/GHA links, run tables, or concrete manual results over vague `CI` claims. Never return raw generated verification placeholders as final PR text.
 - For `Manual Test`, keep it concise: name the Phoenix scenario or workflow, add environment or mode only when it matters, summarize the result briefly, and include links when useful.
 - Use an indented fenced `bash` block only when command details are the real verification evidence.
 
@@ -72,11 +72,11 @@ Repeat for each PR in the chain.
 For each PR, generate:
 
 - Repository template sections in canonical order.
-- Reason paragraph, optional context link, and default-on `PR Tree` for chains.
-- Human-readable `Description of Change`, hybrid by default with prose-only and bullets-only modes still available.
+- Shared reason paragraph, optional context link, and default-on `PR Tree` for chains.
+- Human-readable `Description of Change`, flexible in final shape even though the script renders hybrid, prose-only, or bullets-only drafts.
 - More detailed nested bullets with reviewer-meaningful section labels where the diff supports them.
 - Optional illustrative snippets when requested.
-- Baked-in `L3 Nonfunctional` and unchecked release-notes defaults, plus a concise verification checklist covering `Unit Test`, `Manual Test`, and `CI`.
+- Baked-in `L3 Nonfunctional` and unchecked release-notes defaults where appropriate, plus concise exact verification evidence after manual review.
 
 Write files to:
 

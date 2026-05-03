@@ -123,9 +123,11 @@ Examples that usually need human input:
 
 - Work one actionable thread at a time.
 - Search and read all touched definitions and usages before editing.
-- Prefer the smallest coherent change that fully addresses the comment.
-- Add or adjust targeted tests when the comment points to a bug, regression, or behavior edge.
+- Prefer the smallest coherent change that fully addresses the comment while preserving the clean long-term design within the PR boundary.
+- Follow global `coding_style` from `user-profile.yaml`: avoid overfitting reviewer feedback with unnecessary compatibility, tests, guardrails, or indirection.
+- Add or adjust targeted tests only when the comment points to a real bug, regression, public contract, or behavior edge that benefits from coverage.
 - Run the narrowest relevant verification you can.
+- After edits, do a style cleanup pass in the touched scope: check whether the fix added avoidable tests, defensive code, helpers, comments, logs, or churn.
 - If a supposedly simple comment expands into a design question, stop and escalate instead of guessing.
 
 ### 6. Reply in-thread and resolve when appropriate
@@ -163,6 +165,7 @@ Reply guidance:
 - Start user-facing PR replies with `__Comment by Robot__`.
 - Keep replies short, concrete, and tied to the actual fix or rationale.
 - If you chose not to take a bot suggestion, explain why with code evidence.
+- If you intentionally avoid adding tests, guardrails, or compatibility code, keep the explanation concise and tied to the actual boundary or risk.
 - Resolve a review thread only when the concern is fully answered by the code change or explanation.
 - If a comment has multiple asks and only some are done, reply but leave the thread unresolved.
 
@@ -193,6 +196,7 @@ At the end, summarize:
 - which comments were addressed
 - which threads or comments were replied to or resolved
 - what verification you ran
+- any lean cleanup performed or intentionally skipped
 - which comments still need human input
 
 If the user wants more than comment handling after that, switch to a broader PR-management workflow.

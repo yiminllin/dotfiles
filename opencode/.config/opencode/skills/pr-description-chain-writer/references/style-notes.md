@@ -1,6 +1,6 @@
 # PR Chain Style Notes
 
-Use this shape for every PR body in a stack:
+Use this as a flexible reviewer-friendly starting point for PR bodies in a stack, not a rigid shape:
 
 1. Keep the repository template section order exactly:
    - `## Reason for Change`
@@ -9,23 +9,20 @@ Use this shape for every PR body in a stack:
    - `## Verification`
    - `## Release Notes`
 2. Under `Reason for Change`, include:
-    - One short paragraph that leads with the concrete symptom/problem or reviewer pain point.
-    - Prefer following with the mechanism/root cause this PR changes.
+    - The shared chain-level reason paragraph/context. For stacked PRs in one chain, keep this text identical across PRs.
     - Optional context link.
-    - Default-on `PR Tree` list for stacks, with all PR numbers and `◀` on the current PR.
-3. Start `Description of Change` with:
-    - A short prose lead (usually 1-2 sentences) that names what this PR changes.
-    - Then `In particular:` followed by detailed nested bullets.
-    - Keep top-level bullet labels semantically useful (for example: config resolution, graph/domain bring-up, inter-domain routing, validator guardrails, scenario plumbing) rather than generic catch-alls.
-    - Keep the bullets reviewer-focused: concrete behavior changes first, file/config listings second.
+    - Default-on `PR Tree` list for stacks, with all PR numbers and `◀` on the current PR as the only per-PR change in this section.
+3. Put per-PR specifics in `Description of Change`:
+    - A short prose lead (usually 1-2 sentences) is a good default when it clarifies what this PR changes.
+    - Use `In particular:` bullets, a diagram, a table, or a before/after comparison when that better explains the change.
+    - Keep top-level bullet labels semantically useful rather than generic catch-alls.
+    - Keep the content reviewer-focused: concrete behavior changes first, file/config listings second.
 4. Keep the repository template order unchanged, but default `Criticality of Change` to `L3 Nonfunctional` and default `Release Notes` to unchecked unless reality differs.
 5. In `Verification`, prefer concrete evidence over generic placeholders:
-    - Use:
-      - `[ ] Unit Test`
-      - `[ ] Manual Test`
-      - `[ ] CI`
-    - Check the item that best matches the actual proof unless more than one is clearly warranted.
-    - For `Manual Test`, keep it concise: scenario/workflow name, relevant mode/environment only if it matters, short result, and links when useful.
+    - Use exact commands, Baraza/GHA links, concise run tables, or concrete manual results when available.
+    - Avoid vague `CI` claims unless CI itself is the changed surface or the only meaningful evidence.
+    - Do not leave raw generated verification placeholders in final PR text.
+    - For manual tests, keep it concise: scenario/workflow name, relevant mode/environment only if it matters, short result, and links when useful.
     - Use an indented fenced `bash` block only when command details are the real verification evidence.
     - Avoid long prose or generic filler.
 6. Prefer concrete identifiers in prose or bullets:
@@ -33,4 +30,5 @@ Use this shape for every PR body in a stack:
     - Specific files only when they help reviewers.
 7. Maintain backward-compatible escape hatches:
     - `--omit-pr-tree` when stacked context is unnecessary.
-    - `--description-style prose` or `--description-style bullets` when the user explicitly wants a non-hybrid shape.
+    - `--description-style prose` or `--description-style bullets` when the user explicitly wants a non-hybrid script draft.
+    - Manually rewrite the generated draft into a diagram or table when that is clearer than prose/bullets.

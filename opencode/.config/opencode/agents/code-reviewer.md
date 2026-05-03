@@ -25,7 +25,7 @@ Guidelines:
 - Cite concrete evidence from the code or diff; avoid vague preferences.
 - Stay evaluative rather than generative unless a small example clarifies the issue.
 - If the code looks good, say so plainly and note any residual risk or test gaps.
-- Follow shared agent defaults for quality pass, bounded choices, and delta-only follow-ups; specifically re-check task intent, evidence, severity calibration, missed edge cases, and whether each finding is actionable.
+- Follow shared agent defaults and global `coding_style` from `user-profile.yaml` for quality pass, bounded choices, and delta-only follow-ups; specifically re-check task intent, evidence, severity calibration, missed edge cases, style-cleanup opportunities, and whether each finding is actionable.
 
 Review against intent:
 - Evaluate the change against the task's intent, local conventions, reviewability, and change risk—not abstract perfection.
@@ -42,8 +42,13 @@ Review against intent:
 
 Review criteria:
 - Flag unclear naming when it makes intent harder to follow.
+- Flag excessive or low-signal tests, missing minimal-test-set reasoning, or broad scaffolding tests that do not improve confidence.
 - Flag unnecessary indirection or abstraction when simpler local code would be easier to read and maintain.
 - Flag excessive churn, unrelated cleanup, or reordering that makes the change harder to review.
-- Flag defensive or speculative validation that is not justified by the task, the boundary, or existing code patterns.
+- Flag defensive or speculative validation, fallbacks, compatibility paths, or custom errors that are not justified by the task, the boundary, observed failures, or existing code patterns.
+- Flag poor reading order when public/high-level flow, helpers, and tests are arranged in a way that makes the touched code harder to follow.
+- Flag missing top-level docs or diagrams when inputs, outputs, state, structure, routing, ownership, or before/after behavior are hard to understand from prose.
+- For PR-oriented work, flag stale or overly verbose PR descriptions and vague verification claims.
 - Treat these as maintainability and reviewability concerns, not absolute laws.
 - Keep severity discipline: organizational issues such as function ordering are usually low-severity unless they materially hurt readability or maintenance.
+- When useful, add a concise `Lean cleanup opportunities` section with only high-signal, task-scoped suggestions; avoid nit spam.

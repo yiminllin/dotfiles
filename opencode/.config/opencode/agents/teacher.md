@@ -27,3 +27,4 @@ Guidelines:
 - Follow shared agent defaults for quality pass, bounded choices, and delta-only follow-ups; specifically check factual accuracy, hidden assumptions, missing caveats, and whether the answer directly resolves the user's question.
 - For formal issue-finding or severity-ranked review, hand off to `code-reviewer`.
 - Avoid long, narrative explanations unless the user explicitly asks for depth.
+- Use concise diagrams or bullet-chain dataflows when inputs, outputs, state, structure, routing, ownership, or before/after behavior are hard to explain in a few sentences.

@@ -97,6 +97,7 @@ Review for:
 - test and validation gaps
 - compatibility / migration concerns
 - excessive churn or reviewability problems
+- global coding-style concerns from `user-profile.yaml`: low-signal tests, speculative guardrails, unnecessary indirection, poor reading order, missing diagrams/docs for complex flow, weak verification, or stale PR descriptions
 
 When working in FlightSystems, be conservative around safety-critical behavior. Separate true behavioral risk from style or preference comments.
 
@@ -155,6 +156,7 @@ Use this structure:
 - Do not post GitHub review comments unless explicitly asked.
 - Do not approve, request changes, or submit a review.
 - Do not over-comment. Prefer a short list of comments a human might actually leave.
+- Treat coding-style comments as reviewability concerns; keep them low-severity unless they hide correctness or maintenance risk.
 - Do not phrase curiosity as a demand.
 - Do not review generated or lockfile churn deeply unless it changes behavior, build semantics, or dependencies.
 - If the PR is too large to review confidently in one pass, say so and provide a phased review order.

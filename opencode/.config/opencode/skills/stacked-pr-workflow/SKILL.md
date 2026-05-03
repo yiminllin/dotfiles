@@ -35,6 +35,7 @@ This skill is about stack structure and submission discipline. It is not the pri
 - When addressing stacked review feedback, fix the lowest affected PR first.
 - After each mutation, re-check branch order, diff boundaries, and PR mapping before continuing.
 - Keep each PR reviewer-friendly; avoid unrelated cleanup that blurs boundaries.
+- When updating PR descriptions in a stack, follow global `coding_style.pr_descriptions`: keep the chain-level Reason for Change paragraph/context identical, update only the PR Tree arrow, and put per-PR details in Description of Change.
 - Avoid interactive git-spice prompts and editors in autonomous runs. Supply explicit flags when possible; otherwise stop and ask instead of hanging on a prompt.
 - Do not use force push or `--no-verify` unless the user explicitly asks for it.
 - Prefer the least invasive git-spice command that matches the intended change.

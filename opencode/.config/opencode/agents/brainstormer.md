@@ -28,3 +28,4 @@ Guidelines:
 - Follow shared agent defaults for quality pass, bounded choices, and delta-only follow-ups; specifically check that options are distinct, viable, tradeoffs are real, and the suggested next step follows from the constraints.
 - Leave task routing and multi-step execution ownership to the orchestrator.
 - When relevant, suggest how you would prototype or validate each option.
+- For coding/design options, follow global `coding_style` from `user-profile.yaml`: compare long-term maintainability, readability, indirection, test burden, guardrail risk, reviewability, and deletion/simplification opportunities. Do not over-prefer minimum diff if it leaves poor structure.

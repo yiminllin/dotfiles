@@ -14,15 +14,13 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_REASON = (
-    "Describe the concrete symptom/problem this PR addresses and the mechanism or root cause "
-    "it changes."
+    "Describe the shared chain-level symptom/problem and context. For stacked PRs, keep "
+    "this reason identical across the chain and put per-PR specifics in Description of Change."
 )
 DEFAULT_CRITICALITY = """- [ ] L1 Major <!-- Impacts critical safety systems (e.g. Paraland, DAA, fault mgmt) -->
 - [ ] L2 Moderate <!-- Impacts production system, or safety-related testing -->
 - [x] L3 Nonfunctional <!-- Trivial to validate no impact on prod (e.g. docs, style, dev tool) -->"""
-DEFAULT_VERIFICATION = """- [ ] Unit Test
-- [ ] Manual Test
-- [ ] CI"""
+DEFAULT_VERIFICATION = """- [ ] TODO: add exact verification command, run link, or manual result"""
 DEFAULT_RELEASE_NOTES = """- [ ] Release Notes or Upgrade Instructions required
 
 <!-- If checked, replace this line with your release notes or upgrade instructions -->"""
@@ -1211,7 +1209,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--reason",
         default=None,
-        help="Override text for the Reason for Change paragraph (before PR Tree).",
+        help="Override shared Reason for Change text before PR Tree; for stacks, keep it identical across PRs.",
     )
     parser.add_argument(
         "--context-link",
@@ -1241,7 +1239,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         "--description-style",
         choices=("hybrid", "prose", "bullets"),
         default="hybrid",
-        help="Description of Change rendering style (default: hybrid).",
+        help="Description of Change script-rendered style (default: hybrid); manually rewrite to diagrams/tables when clearer.",
     )
     parser.add_argument(
         "--tiny",
