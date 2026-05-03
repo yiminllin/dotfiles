@@ -13,7 +13,10 @@ Run the approval-gated `/insights` workflow for shared OpenCode prompts, skills,
 - Do not write any prompt or config file under `~/dotfiles` until the user explicitly approves the exact change for a specific proposal.
 
 ## Default scope
-- Start narrow and prioritize `opencode/.config/opencode/agents/orchestrator.md`.
+- Start from the overall last-month OpenCode behavior across repos, root sessions, child/subagent sessions, skills, PR/coding workflows, debugging workflows, and prompt-tuning workflows.
+- Treat the aggregate history summary as a routing map, not as sufficient evidence by itself. Use it to identify dominant worktrees and workflow themes, then inspect representative raw root-session follow-ups before proposing changes.
+- In the default workflow, explicitly include `/Systems`, `~/dotfiles`, and their recorded worktrees when present in the scan. Do not let recent `/insights` or prompt-tuning sessions dominate unless raw root-session evidence shows they are the main issue.
+- After ranking evidence by confidence and actionability, keep target files narrow and prioritize `opencode/.config/opencode/agents/orchestrator.md` for orchestrator-specific behavior.
 - Optionally consider `~/dotfiles/opencode/.config/opencode/user-profile.yaml` when the issue is a stable user preference rather than an orchestrator-specific behavior.
 - If `$ARGUMENTS` is provided, treat it as a scope hint, but keep proposals narrow and approval-gated.
 
@@ -24,17 +27,35 @@ Run the approval-gated `/insights` workflow for shared OpenCode prompts, skills,
 - the current target prompt/profile file(s)
 
 ## Auto-collected recent local history
-Start from this evidence summary sampled across all local machine OpenCode history before weighing the current session. If the sample is thin or unavailable, say so explicitly and stay conservative.
+Start from this evidence summary scanned across all local machine OpenCode history before weighing the current session. Counts/category signals come from the full requested scan while displayed examples may be truncated. If the sample is thin or unavailable, say so explicitly and stay conservative.
 
 !`python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all`
 
 ## Workflow
 1. Inspect the auto-collected recent local history first, then compare it with the current session, explicit user feedback, and relevant note artifacts.
-2. Prefer the history summary's root-session follow-ups and other user-correction-like evidence over child-session task prompts. If evidence is weak, say so and either propose no change or ask for a better sample.
-3. Classify findings with this lightweight taxonomy: routing, autonomy, verbosity, artifact usage, safety, output format.
-4. Produce a comprehensive list of credible narrow proposals surfaced by the evidence, grouped or ordered by confidence and actionability. Prefer additive wording tweaks or a small shared-profile change over broad rewrites; do not cap the proposal list at three.
+2. Perform a raw-history correction pass before drafting proposals:
+   - Identify dominant non-trivial worktrees and themes from the aggregate summary.
+   - Inspect representative raw root-session follow-ups from those worktrees, prioritizing user corrections, repeated follow-up questions, and workflow-specific requests.
+   - Prefer root-session follow-ups and other user-correction-like evidence over child-session task prompts.
+   - Treat child/subagent prompts as workflow context unless independently supported by root user messages.
+   - Downweight recent `/insights`/prompt-tuning meta sessions unless they remain dominant after the raw worktree review.
+   - If raw evidence cannot be inspected, say so explicitly and keep proposals conservative.
+3. Build a broad behavior model across recent history, including:
+   - routing and subagent selection patterns
+   - autonomy vs clarification behavior
+   - validation and evidence-reporting habits
+   - artifact and memory usage
+   - safety and approval boundaries
+   - output format and verbosity
+   - coding-style, PR-review, and subagent-improvement feedback when present in recent history
+   - recurring domain workflows, such as PR chains, PR review comments, stacked branches, Jira ticket updates, Phoenix/HIL/SIL debugging, config/stow validation, and dotfiles review UI work
+   - recurring deterministic helper/script opportunities
+4. Classify findings with this lightweight taxonomy: routing, autonomy, verbosity, artifact usage, safety, output format, validation.
+5. Produce a comprehensive list of credible narrow proposals surfaced by the evidence, grouped or ordered by confidence and actionability. Prefer additive wording tweaks or a small shared-profile change over broad rewrites; do not cap the proposal list at three.
+   - Lead with proposals derived from recurring real workflows across the dominant worktrees, not with `/insights` mechanics.
+   - Put `/insights`-specific fixes in a separate subsection unless `/insights` is clearly the dominant issue in the raw worktree evidence.
    - When evidence shows repeated command sequences, data extraction, formatting, or validation steps, consider a narrow script/helper proposal as an alternative to changing agent wording.
-5. For each proposal, include:
+6. For each proposal, include:
    - proposal id
    - observed problem
    - evidence snippets or references
@@ -43,7 +64,7 @@ Start from this evidence summary sampled across all local machine OpenCode histo
    - expected behavior change
    - risks and confidence
    - if applicable, whether this is better as prompt guidance, a deterministic script/helper, or both
-6. Lead with analysis and proposals only. Do not apply edits yet.
+7. Lead with analysis and proposals only. Do not apply edits yet.
 
 ## Approval gate
 - Treat repo prompt/config writes under `~/dotfiles` as forbidden until the user has reviewed the exact proposed diff/change and then explicitly approved that exact change.
@@ -57,9 +78,11 @@ Start from this evidence summary sampled across all local machine OpenCode histo
 ## Response contract
 - First response after `/insights`:
   1. insight summary
-  2. comprehensive proposal list
-  3. recommended next step
-  4. reply options: `refine <proposal-id or focus>`, `reject <proposal-id or all>`, `show-diff <proposal-id>`
+  2. raw workflow evidence summary by dominant worktree/theme, including representative root follow-ups or clear caveats if raw evidence was unavailable
+  3. corrected comprehensive proposal list, led by broad workflow-derived OpenCode improvements and with `/insights`-specific fixes separated
+  4. deterministic helper/script opportunities
+  5. recommended next step
+  6. reply options: `refine <proposal-id or focus>`, `reject <proposal-id or all>`, `show-diff <proposal-id>`
 - Prefer chooser/dropdown-style reply options when available. Otherwise present short numbered options and accept compact replies (for example `1`, `2`, or `1+3`) instead of requiring exact command phrases.
 - On `refine`: revise the proposal set or wording only; do not edit `~/dotfiles`.
 - On `reject`: close the proposal and confirm that no repo prompt/config files were changed.
