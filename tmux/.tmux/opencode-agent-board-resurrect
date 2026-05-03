@@ -1,0 +1,304 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+BOARD_SCRIPT="$HOME/.tmux/opencode-agent-board"
+ENSURE_SCRIPT="$HOME/.tmux/opencode-agent-board-ensure"
+RESURRECT_SAVE_SCRIPT="$HOME/.tmux/plugins/tmux-resurrect/scripts/save.sh"
+
+disable_board_creation() {
+  tmux set-option -gq @opencode_agent_board_disabled 1
+}
+
+enable_board_creation() {
+  tmux set-option -gu @opencode_agent_board_disabled 2>/dev/null || true
+}
+
+kill_board_panes() {
+  tmux list-panes -a -F '#{pane_id}	#{@opencode_agent_board}	#{pane_title}	#{pane_start_command}' |
+    while IFS=$'\t' read -r pane_id board_flag pane_title start_command; do
+      if [[ "$board_flag" == 1 || "$pane_title" == "Agent Board" || "$start_command" == *"$BOARD_SCRIPT"* ]]; then
+        tmux kill-pane -t "$pane_id" 2>/dev/null || true
+      fi
+    done
+}
+
+last_resurrect_file() {
+  local resurrect_dir
+
+  resurrect_dir=$(tmux show-option -gqv @resurrect-dir)
+  resurrect_dir=${resurrect_dir:-$HOME/.tmux_resurrect}
+  resurrect_dir=${resurrect_dir/#\~/$HOME}
+  printf '%s/last' "$resurrect_dir"
+}
+
+resolved_resurrect_file() {
+  local last_dir last_file target
+
+  last_file=$(last_resurrect_file)
+  [[ -e "$last_file" ]] || return 0
+
+  if [[ -L "$last_file" ]]; then
+    last_dir=$(dirname "$last_file")
+    target=$(readlink "$last_file")
+    if [[ "$target" == /* ]]; then
+      printf '%s\n' "$target"
+    else
+      printf '%s/%s\n' "$last_dir" "$target"
+    fi
+  else
+    printf '%s\n' "$last_file"
+  fi
+}
+
+scrub_board_panes_from_saved_state() {
+  local resolved_file temp_file
+
+  resolved_file=$(resolved_resurrect_file)
+  [[ -n "$resolved_file" && -f "$resolved_file" ]] || return 0
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    tmux display-message 'python3 not found; Agent Board panes were not scrubbed from resurrect save'
+    return 0
+  fi
+
+  temp_file=$(mktemp "${resolved_file}.XXXXXX")
+  python3 - "$resolved_file" > "$temp_file" <<'PY'
+import re
+import sys
+from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set, Tuple
+
+
+@dataclass
+class LayoutNode:
+    width: int
+    height: int
+    x: int
+    y: int
+    pane_id: Optional[str] = None
+    split: Optional[str] = None
+    children: List["LayoutNode"] = field(default_factory=list)
+
+
+def parse_layout(layout: str) -> Optional[Tuple[str, LayoutNode]]:
+    match = re.match(r"([^,]+),(.*)", layout)
+    if not match:
+        return None
+
+    checksum, body = match.groups()
+    index = 0
+
+    def parse_node() -> LayoutNode:
+        nonlocal index
+        size_match = re.match(r"(\d+)x(\d+),(\d+),(\d+)", body[index:])
+        if not size_match:
+            raise ValueError(f"invalid layout near {body[index:]!r}")
+
+        width, height, x, y = map(int, size_match.groups())
+        index += size_match.end()
+
+        if index < len(body) and body[index] == ",":
+            index += 1
+            pane_match = re.match(r"\d+", body[index:])
+            if not pane_match:
+                raise ValueError(f"invalid pane id near {body[index:]!r}")
+            index += pane_match.end()
+            return LayoutNode(width, height, x, y, pane_id=pane_match.group(0))
+
+        if index >= len(body) or body[index] not in "[{":
+            raise ValueError(f"invalid split near {body[index:]!r}")
+
+        split = body[index]
+        close = "]" if split == "[" else "}"
+        index += 1
+
+        children = []
+        while True:
+            children.append(parse_node())
+            if index < len(body) and body[index] == ",":
+                index += 1
+                continue
+            if index < len(body) and body[index] == close:
+                index += 1
+                break
+            raise ValueError(f"invalid child separator near {body[index:]!r}")
+
+        return LayoutNode(width, height, x, y, split=split, children=children)
+
+    try:
+        root = parse_node()
+    except ValueError:
+        return None
+
+    if index != len(body):
+        return None
+    return checksum, root
+
+
+def allocate(total: int, current_sizes: List[int]) -> List[int]:
+    if not current_sizes:
+        return []
+
+    if sum(current_sizes) <= 0:
+        base = total // len(current_sizes)
+        sizes = [base] * len(current_sizes)
+    else:
+        sizes = [max(1, round(total * size / sum(current_sizes))) for size in current_sizes]
+
+    while sum(sizes) < total:
+        sizes[sizes.index(min(sizes))] += 1
+    while sum(sizes) > total and max(sizes) > 1:
+        sizes[sizes.index(max(sizes))] -= 1
+    return sizes
+
+
+def normalize(node: LayoutNode, width: int, height: int, x: int, y: int) -> LayoutNode:
+    node.width = width
+    node.height = height
+    node.x = x
+    node.y = y
+
+    if not node.children:
+        return node
+
+    if node.split == "[":
+        child_heights = allocate(height - len(node.children) + 1, [child.height for child in node.children])
+        child_y = y
+        for child, child_height in zip(node.children, child_heights):
+            normalize(child, width, child_height, x, child_y)
+            child_y += child_height + 1
+    else:
+        child_widths = allocate(width - len(node.children) + 1, [child.width for child in node.children])
+        child_x = x
+        for child, child_width in zip(node.children, child_widths):
+            normalize(child, child_width, height, child_x, y)
+            child_x += child_width + 1
+
+    return node
+
+
+def remove_top_board(layout: str) -> str:
+    parsed = parse_layout(layout)
+    if parsed is None:
+        return layout
+
+    checksum, root = parsed
+    if root.split != "[" or len(root.children) < 2:
+        return layout
+
+    board = root.children[0]
+    if board.children or board.x != root.x or board.y != root.y or board.width != root.width or board.height > 5:
+        return layout
+
+    root.children = root.children[1:]
+    promoted = root.children[0] if len(root.children) == 1 else root
+    normalize(promoted, root.width, root.height, root.x, root.y)
+    body = serialize(promoted)
+    return f"{layout_checksum(body)},{body}"
+
+
+def layout_checksum(body: str) -> str:
+    checksum = 0
+    for char in body:
+        checksum = (checksum >> 1) + ((checksum & 1) << 15)
+        checksum = (checksum + ord(char)) & 0xFFFF
+    return f"{checksum:04x}"
+
+
+def serialize(node: LayoutNode) -> str:
+    prefix = f"{node.width}x{node.height},{node.x},{node.y}"
+    if not node.children:
+        return f"{prefix},{node.pane_id}"
+
+    close = "]" if node.split == "[" else "}"
+    return f"{prefix}{node.split}{','.join(serialize(child) for child in node.children)}{close}"
+
+
+def is_board_pane(fields: List[str]) -> bool:
+    title = fields[6] if len(fields) > 6 else ""
+    command = fields[10] if len(fields) > 10 else ""
+    return title == "Agent Board" or "opencode-agent-board" in command
+
+
+path = sys.argv[1]
+lines = [line.rstrip("\n").split("\t") for line in open(path, encoding="utf-8")]
+board_indices: Dict[Tuple[str, str], Set[int]] = defaultdict(set)
+
+for fields in lines:
+    if fields[0] != "pane" or not is_board_pane(fields):
+        continue
+    board_indices[(fields[1], fields[2])].add(int(fields[5]))
+
+next_pane_index: Dict[Tuple[str, str], int] = defaultdict(int)
+pane_active_seen: Dict[Tuple[str, str], bool] = defaultdict(bool)
+pending_panes: List[List[str]] = []
+
+for fields in lines:
+    if fields[0] != "pane":
+        pending_panes.append(fields)
+        continue
+
+    key = (fields[1], fields[2])
+    if int(fields[5]) in board_indices[key]:
+        continue
+
+    fields = fields.copy()
+    fields[5] = str(next_pane_index[key])
+    next_pane_index[key] += 1
+    if fields[8] == "1":
+        pane_active_seen[key] = True
+    pending_panes.append(fields)
+
+for fields in pending_panes:
+    if fields[0] == "pane" and (fields[1], fields[2]) in board_indices and not pane_active_seen[(fields[1], fields[2])]:
+        fields[8] = "1"
+        pane_active_seen[(fields[1], fields[2])] = True
+
+for fields in pending_panes:
+    if fields[0] == "window" and (fields[1], fields[2]) in board_indices:
+        fields[6] = remove_top_board(fields[6])
+    print("\t".join(fields))
+PY
+  mv "$temp_file" "$resolved_file"
+}
+
+ensure_boards_for_all_sessions() {
+  tmux list-sessions -F '#{session_name}' |
+    while IFS= read -r session_name; do
+      [[ -n "$session_name" ]] || continue
+      "$ENSURE_SCRIPT" "$session_name" >/dev/null 2>&1 || true
+    done
+}
+
+pre_restore() {
+  disable_board_creation
+  kill_board_panes
+}
+
+post_restore() {
+  enable_board_creation
+  ensure_boards_for_all_sessions
+}
+
+save_without_boards() {
+  "$RESURRECT_SAVE_SCRIPT" "$@"
+  scrub_board_panes_from_saved_state
+}
+
+case "${1:-save}" in
+  pre-restore)
+    pre_restore
+    ;;
+  post-restore)
+    post_restore
+    ;;
+  save)
+    shift || true
+    save_without_boards "$@"
+    ;;
+  *)
+    save_without_boards "$@"
+    ;;
+esac

@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+separator=$'\034'
+refresh_interval=2
+current_pane=${TMUX_PANE:-$(tmux display-message -p '#{pane_id}')}
+
+declare -a rows=()
+declare -a target_panes=()
+declare -a target_sessions=()
+declare -a target_windows=()
+
+trim() {
+  local value=$1
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+shorten() {
+  local value=$1
+  local max_length=22
+
+  if (( ${#value} > max_length )); then
+    printf '%s…' "${value:0:max_length}"
+  else
+    printf '%s' "$value"
+  fi
+}
+
+agent_name() {
+  local pane_id=$1
+  local pane_title=$2
+  local name
+
+  name=$(tmux show-option -pv -t "$pane_id" @opencode_agent_name 2>/dev/null || true)
+  name=$(trim "$name")
+  pane_title=$(trim "$pane_title")
+  shorten "${name:-${pane_title:-UNNAMED $pane_id}}"
+}
+
+agent_state() {
+  local pane_id=$1
+  local content
+
+  content=$(tmux capture-pane -p -t "$pane_id" -S -6 -E - 2>/dev/null || true)
+  content="${content//$'\r'/}"
+
+  if [[ "${content,,}" == *"esc interrupt"* ]]; then
+    printf 'RUN'
+  else
+    printf 'WAIT'
+  fi
+}
+
+state_label() {
+  case $1 in
+    RUN) printf '\033[31m󰐊 RUN\033[0m' ;;
+    *) printf '\033[32m󰔟 WAIT\033[0m' ;;
+  esac
+}
+
+collect_agents() {
+  local -a waiting=()
+  local -a running=()
+  local entry is_board pane_id pane_index pane_title session_id session_name window_id window_index current_cmd start_cmd state
+
+  while IFS="$separator" read -r pane_id session_id session_name window_id window_index pane_index is_board pane_title current_cmd start_cmd; do
+    [[ "$is_board" == 1 ]] && continue
+    [[ "$current_cmd" == opencode || "$start_cmd" == *opencode* || "$pane_title" == "OC | "* || "$pane_title" == opencode* ]] || continue
+
+    state=$(agent_state "$pane_id")
+    entry="$session_name$separator$window_index$separator$pane_index$separator$pane_id$separator$session_id$separator$window_id$separator$state$separator$(agent_name "$pane_id" "$pane_title")"
+
+    if [[ "$state" == WAIT ]]; then
+      waiting+=("$entry")
+    else
+      running+=("$entry")
+    fi
+  done < <(
+    tmux list-panes -a \
+      -F "#{pane_id}${separator}#{session_id}${separator}#{session_name}${separator}#{window_id}${separator}#{window_index}${separator}#{pane_index}${separator}#{@opencode_agent_board}${separator}#{pane_title}${separator}#{pane_current_command}${separator}#{pane_start_command}" \
+      | sort -t"$separator" -k3,3 -k5,5n -k6,6n
+  )
+
+  ((${#waiting[@]})) && printf '%s\n' "${waiting[@]}"
+  ((${#running[@]})) && printf '%s\n' "${running[@]}"
+}
+
+render() {
+  local index=1
+  local name pane_id row session_id state window_id
+
+  rows=()
+  target_panes=()
+  target_sessions=()
+  target_windows=()
+
+  while IFS="$separator" read -r _ _ _ pane_id session_id window_id state name; do
+    [[ -n "$pane_id" ]] || continue
+
+    rows+=("$(printf '\033[1m[%s]\033[0m' "$index") $(state_label "$state") $name")
+    target_panes[$index]=$pane_id
+    target_sessions[$index]=$session_id
+    target_windows[$index]=$window_id
+    ((index++))
+
+    [[ $index -le 9 ]] || break
+  done < <(collect_agents)
+
+  printf '\033[H\033[2K'
+  if [[ ${#rows[@]} -eq 0 ]]; then
+    printf 'no OpenCode agents'
+    return
+  fi
+
+  printf '%s' "${rows[0]}"
+  for row in "${rows[@]:1}"; do
+    printf '  ║  %s' "$row"
+  done
+}
+
+jump_to_agent() {
+  local key=$1
+  local pane_id=${target_panes[$key]:-}
+  local session_id=${target_sessions[$key]:-}
+  local window_id=${target_windows[$key]:-}
+
+  [[ -n "$pane_id" && -n "$session_id" && -n "$window_id" ]] || return 0
+  tmux switch-client -t "$session_id" 2>/dev/null || return 0
+  tmux select-window -t "$window_id" 2>/dev/null || return 0
+  tmux select-pane -t "$pane_id" 2>/dev/null || return 0
+}
+
+while true; do
+  render
+
+  key=""
+  if read -rsn1 -t "$refresh_interval" key; then
+    case "$key" in
+      q) tmux kill-pane -t "$current_pane"; exit 0 ;;
+      [1-9]) jump_to_agent "$key" ;;
+    esac
+  fi
+done

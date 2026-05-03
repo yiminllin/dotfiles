@@ -289,6 +289,24 @@ fish_add_path -m $HOME/go/bin
 # opencode
 fish_add_path ~/.opencode/bin
 
+function opencode --description "Run OpenCode and name its tmux Agent Board entry"
+    if status is-interactive; and set -q TMUX_PANE; and command -q tmux
+        set -l current_name (tmux show-option -pv -t "$TMUX_PANE" @opencode_agent_name 2>/dev/null)
+        set -l prompt "OpenCode agent name"
+
+        if test -n "$current_name"
+            set prompt "$prompt [$current_name]"
+        end
+
+        read -P "$prompt: " agent_name
+        if test -n "$agent_name"
+            tmux set-option -pt "$TMUX_PANE" @opencode_agent_name "$agent_name" >/dev/null
+        end
+    end
+
+    command opencode $argv
+end
+
 # fzf
 fish_add_path -p $HOME/.fzf/bin
 
