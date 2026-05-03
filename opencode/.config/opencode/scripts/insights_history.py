@@ -82,6 +82,7 @@ DEFAULT_LOOKBACK_DAYS = 30
 DEFAULT_SESSION_EXAMPLES = 12
 DEFAULT_FOLLOWUP_EXAMPLES = 8
 DEFAULT_WORKTREE_EXAMPLES = 30
+DEFAULT_WORKTREE_FOLLOWUP_EXAMPLES = 3
 
 
 def positive_int(raw: str) -> int:
@@ -152,6 +153,15 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Worktree coverage rows to print; 0 hides rows. Counts still include "
             "every scanned worktree."
+        ),
+    )
+    parser.add_argument(
+        "--worktree-followup-examples",
+        type=non_negative_int,
+        default=DEFAULT_WORKTREE_FOLLOWUP_EXAMPLES,
+        help=(
+            "Root follow-up examples to print for each dominant worktree; 0 hides the section. "
+            "Counts still include every scanned message."
         ),
     )
     return parser.parse_args()
@@ -335,9 +345,9 @@ def aggregate_agent_counts(
 
 def collect_user_messages(
     cur: sqlite3.Cursor, session_ids: list[str]
-) -> tuple[list[dict], list[dict]]:
+) -> list[dict]:
     if not session_ids:
-        return [], []
+        return []
 
     grouped: dict[tuple[str, str], dict] = {}
     for session_id_chunk in chunks(session_ids):
@@ -376,6 +386,7 @@ def collect_user_messages(
                 continue
 
             key = (row["session_id"], row["message_id"])
+            synthetic = bool(message.get("synthetic") or part.get("synthetic"))
             entry = grouped.setdefault(
                 key,
                 {
@@ -386,12 +397,14 @@ def collect_user_messages(
                     "path": row["path"],
                     "project_worktree": row["project_worktree"],
                     "message_time": row["message_time"],
+                    "synthetic": False,
                     "chunks": [],
                 },
             )
+            entry["synthetic"] = bool(entry["synthetic"] or synthetic)
             entry["chunks"].append(text)
 
-    by_session: dict[str, list[dict]] = defaultdict(list)
+    all_messages: list[dict] = []
     for entry in grouped.values():
         text = " ".join(chunk.strip() for chunk in entry["chunks"] if chunk.strip())
         text = " ".join(text.split())
@@ -399,20 +412,26 @@ def collect_user_messages(
             continue
         entry["text"] = text
         del entry["chunks"]
-        by_session[entry["session_id"]].append(entry)
+        all_messages.append(entry)
 
-    all_messages: list[dict] = []
+    all_messages.sort(key=lambda item: item["message_time"] or 0, reverse=True)
+    return all_messages
+
+
+def collect_followups(messages: list[dict]) -> list[dict]:
+    by_session: dict[str, list[dict]] = defaultdict(list)
+    for message in messages:
+        by_session[message["session_id"]].append(message)
+
     followups: list[dict] = []
     for messages in by_session.values():
         ordered = sorted(messages, key=lambda item: item["message_time"] or 0)
         for index, message in enumerate(ordered):
-            all_messages.append(message)
             if index > 0:
                 followups.append(message)
 
-    all_messages.sort(key=lambda item: item["message_time"] or 0, reverse=True)
     followups.sort(key=lambda item: item["message_time"] or 0, reverse=True)
-    return all_messages, followups
+    return followups
 
 
 def category_counts(messages: list[dict]) -> Counter:
@@ -449,6 +468,44 @@ def message_example_lines(messages: list[dict], count: int) -> list[str]:
         f"`{shorten(message['session_title'], 60)}` — {format_session_location(message)}: {shorten(message['text'])}"
         for message in messages[:count]
     ]
+
+
+def worktree_followup_example_lines(
+    sessions: list[dict],
+    root_followups: list[dict],
+    per_worktree_count: int,
+) -> list[str]:
+    if per_worktree_count == 0:
+        return []
+
+    coverage: dict[str, Counter] = defaultdict(Counter)
+    for session in sessions:
+        coverage[worktree_label(session)][session_kind(session)] += 1
+
+    dominant_worktrees = [
+        location
+        for location, _ in sorted(
+            coverage.items(),
+            key=lambda item: (sum(item[1].values()), item[0]),
+            reverse=True,
+        )
+    ]
+
+    lines: list[str] = []
+    for location in dominant_worktrees:
+        messages = [
+            message
+            for message in root_followups
+            if worktree_label(message) == location
+        ]
+        if not messages:
+            continue
+        for message in messages[:per_worktree_count]:
+            lines.append(
+                f"{location}: [{format_time(message['message_time'])}] "
+                f"`{shorten(message['session_title'], 60)}` — {shorten(message['text'])}"
+            )
+    return lines
 
 
 def worktree_coverage_lines(sessions: list[dict], count: int) -> list[str]:
@@ -523,9 +580,14 @@ def main() -> int:
         root_agent_counts = aggregate_agent_counts(counts_by_session, root_sessions)
         child_agent_counts = aggregate_agent_counts(counts_by_session, child_sessions)
 
-        all_user_messages, followups = collect_user_messages(cur, session_ids)
-        root_messages = [message for message in all_user_messages if message.get("parent_id") is None]
-        child_messages = [message for message in all_user_messages if message.get("parent_id") is not None]
+        all_user_messages = collect_user_messages(cur, session_ids)
+        human_user_messages = [message for message in all_user_messages if not message.get("synthetic")]
+        synthetic_user_messages = [message for message in all_user_messages if message.get("synthetic")]
+        followups = collect_followups(human_user_messages)
+        synthetic_followups = collect_followups(synthetic_user_messages)
+
+        root_messages = [message for message in human_user_messages if message.get("parent_id") is None]
+        child_messages = [message for message in human_user_messages if message.get("parent_id") is not None]
         root_followups = [message for message in followups if message.get("parent_id") is None]
         child_followups = [message for message in followups if message.get("parent_id") is not None]
 
@@ -557,16 +619,21 @@ def main() -> int:
         )
         print(f"- session updated range: {session_time_range(sessions)}")
         print(
-            f"- user text messages scanned: {len(all_user_messages)} total "
+            f"- human user text messages scanned: {len(human_user_messages)} total "
             f"({len(root_messages)} root, {len(child_messages)} child/subagent)"
         )
         print(
-            f"- follow-ups found: {len(followups)} total "
+            f"- human follow-ups found: {len(followups)} total "
             f"({len(root_followups)} root, {len(child_followups)} child/subagent)"
         )
         print(
+            f"- synthetic user text messages separated: {len(synthetic_user_messages)} total "
+            f"({len(synthetic_followups)} follow-ups)"
+        )
+        print(
             "- display note: counts/categories scan all matching sessions; "
-            "examples below are truncated only for readability"
+            "examples below are truncated only for readability; synthetic user "
+            "messages are reported separately from feedback hints"
         )
         print()
 
@@ -587,12 +654,24 @@ def main() -> int:
             session_example_lines(child_sessions, args.session_examples),
         )
         print_list(
+            "Dominant worktree root follow-up examples",
+            worktree_followup_example_lines(
+                sessions,
+                root_followups,
+                args.worktree_followup_examples,
+            ),
+        )
+        print_list(
             "Root follow-up examples",
             message_example_lines(root_followups, args.followup_examples),
         )
         print_list(
             "Child/subagent task prompt examples",
             message_example_lines(child_messages, args.followup_examples),
+        )
+        print_list(
+            "Synthetic user message examples",
+            message_example_lines(synthetic_user_messages, args.followup_examples),
         )
 
         caveats = []
@@ -617,6 +696,10 @@ def main() -> int:
             caveats.append("message examples are display-truncated; scanning/counts were not capped")
         if not category_counts(combined_evidence) and sessions:
             caveats.append("no strong category signal detected in the scanned evidence messages")
+        if synthetic_user_messages:
+            caveats.append(
+                "synthetic user messages were separated from human feedback category hints"
+            )
         print_list("Evidence caveats", caveats)
         return 0
     except Exception as exc:

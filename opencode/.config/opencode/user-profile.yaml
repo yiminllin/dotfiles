@@ -7,7 +7,7 @@ defaults:
   plan_style: minimal-ordered-bullets
   implementation_bias: small-reviewable-changes
   clarification_style: minimum-needed
-  approval_for_prompt_edits: required
+  approval_for_prompt_edits: normal_opencode_permissions
   artifact_expectation: use-plans-and-designs-for-nontrivial-work
   selection_style: choice-first-when-available
   follow_up_style: delta-only
