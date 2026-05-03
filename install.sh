@@ -3,6 +3,9 @@
 set -e
 set -o pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUN_ONCHANGE="$SCRIPT_DIR/scripts/run_onchange.sh"
+
 ################################################################################
 # Install System Packages
 ################################################################################
@@ -19,6 +22,18 @@ is_fedora() {
 
 is_macos() {
     [ "$(uname -s)" = "Darwin" ]
+}
+
+run_manifest_step() {
+    local key="$1"
+    local manifest="$2"
+    shift 2
+
+    if [ -x "$RUN_ONCHANGE" ]; then
+        "$RUN_ONCHANGE" "$key" "$manifest" -- "$@"
+    else
+        "$@"
+    fi
 }
 
 ################################################################################
@@ -136,8 +151,8 @@ uv venv ~/.venv/neovim
 ################################################################################
 
 echo "Installing Cargo and UV packages"
-sed 's/#.*//;/^$/d' Cargofile | xargs -n1 cargo install
-sed 's/#.*//;/^$/d' Uvfile | xargs -n1 uv tool install
+run_manifest_step cargo-tools Cargofile bash -c "sed 's/#.*//;/^$/d' Cargofile | xargs -n1 cargo install"
+run_manifest_step uv-tools Uvfile bash -c "sed 's/#.*//;/^$/d' Uvfile | xargs -n1 uv tool install"
 # sed 's/#.*//;/^$/d' Luarocksfile | xargs -n1 luarocks install
 
 ################################################################################

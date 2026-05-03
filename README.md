@@ -1,5 +1,14 @@
 **Minimal install** (fish, nvim, tmux, fzf, rg only): `./install_minimal.sh`
 
+**Fast local validation** (no sudo/network by default):
+
+```bash
+scripts/check_dotfiles.sh
+```
+
+Optional tools such as Fish, Stylua, Stow, Lua, and OpenCode are used when
+available and reported as skipped when missing.
+
 (Only if on ubuntu docker)
 
 ```bash
@@ -127,3 +136,8 @@ fish ~/dotfiles/scripts/system_update.fish
 ```
 
 **Note:** Auto-update aborts on merge conflicts and requires manual resolution.
+
+Install and auto-update flows use `scripts/run_onchange.sh` for selected
+manifest-driven steps. Checksums are stored under `~/.cache/dotfiles/`; set
+`DOTFILES_RUN_ONCHANGE_FORCE=1` or remove the matching cache stamp to force a
+skipped step to run again.
