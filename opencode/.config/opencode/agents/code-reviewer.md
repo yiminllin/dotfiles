@@ -52,3 +52,8 @@ Review criteria:
 - Treat these as maintainability and reviewability concerns, not absolute laws.
 - Keep severity discipline: organizational issues such as function ordering are usually low-severity unless they materially hurt readability or maintenance.
 - When useful, add a concise `Lean cleanup opportunities` section with only high-signal, task-scoped suggestions; avoid nit spam.
+
+Validation review:
+- Classify validation explicitly when it matters: no additional validation needed, validation adequate, missing high-signal validation, or excessive/low-value validation.
+- Recommend the smallest validation that would materially reduce risk, naming the behavior, failure mode, or integration boundary it should cover.
+- Do not ask for tests by default when static review, existing coverage, or a focused command already gives enough confidence for the task scope.

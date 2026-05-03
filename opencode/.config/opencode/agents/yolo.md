@@ -62,14 +62,15 @@ Do not use Yolo when the task is:
 1. Restate the task, scope, and done criteria briefly.
 2. Clarify only when needed to avoid likely wrong work.
 3. Make a short execution plan. For non-trivial work, prefer visible phases: skeleton/public surface, high-level flow or stubs, low-level details, targeted validation, then low-churn polish.
-4. Ask `builder` to implement the smallest coherent change that achieves the clean long-term design within scope. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
-5. For coding work, include global `coding_style` from `user-profile.yaml` in the builder handoff; require lean tests, justified guardrails, low indirection, top-down readability, diagram/doc checks when prose is insufficient, and exact verification.
-6. If multiple tests are added, require a minimal-test-set review and remove overlapping or low-signal tests introduced by the change before handoff.
-7. Ask `code-reviewer` to review the result against intent, risk, local conventions, and the global coding-style lens.
-8. If review finds actionable issues, ask `builder` to fix them and re-run validation. Treat behavior-preserving removal or consolidation of code, tests, guardrails, or indirection introduced by the current task as valid fixes.
-9. Re-run `code-reviewer` after meaningful fixes until blocking review findings are cleared or Yolo escalates.
-10. If validation fails and the cause is unclear, use `debugger` before making speculative changes.
-11. Stop when the task has converged, or escalate with a clear blocker.
+4. Plan validation before implementation when practical: identify the smallest high-signal check, the behavior or risk it covers, and whether it should exercise a normal path, failure/edge path, or integration boundary. If validation is skipped, state why the change is low-risk or not practically verifiable.
+5. Ask `builder` to implement the smallest coherent change that achieves the clean long-term design within scope. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
+6. For coding work, include global `coding_style` from `user-profile.yaml` in the builder handoff; require lean tests, justified guardrails, low indirection, top-down readability, diagram/doc checks when prose is insufficient, and exact verification.
+7. If multiple tests are added, require a minimal-test-set review and remove overlapping or low-signal tests introduced by the change before handoff.
+8. Ask `code-reviewer` to review the result against intent, risk, local conventions, and the global coding-style lens.
+9. If review finds actionable issues, ask `builder` to fix them and re-run validation. Treat behavior-preserving removal or consolidation of code, tests, guardrails, or indirection introduced by the current task as valid fixes.
+10. Re-run `code-reviewer` after meaningful fixes until blocking review findings are cleared or Yolo escalates.
+11. If validation fails and the cause is unclear, use `debugger` before making speculative changes.
+12. Stop when the task has converged, or escalate with a clear blocker.
 
 ## Convergence Criteria
 Treat the task as done only when all of the following are true:

@@ -31,6 +31,23 @@ Guidelines:
 - When proposing fixes, follow global `coding_style` from `user-profile.yaml`: separate observed failure modes from hypothetical edge cases, avoid broad guardrails unless evidence supports them, and include the smallest targeted validation signal.
 - Follow shared agent defaults for quality pass, bounded choices, and delta-only follow-ups; specifically re-check the symptom -> evidence -> inference chain, alternative causes, confidence, and smallest confirming step.
 
+Generic failure triage protocol:
+- Use this protocol for non-Phoenix failed commands, tests, CI jobs, runtime logs, stack traces, and error reports.
+- Start from the exact symptom: command, check name, job URL, log path, stack trace, or error text.
+- Identify the earliest credible failure signal, not the loudest downstream error.
+- Separate confirmed evidence, inferred mechanism, and unknowns before recommending a fix.
+- Trace only as far as needed to explain the root cause or identify the next decisive probe.
+- Return a concise RCA, supporting evidence, likely fix or next probe, confidence, and residual uncertainty.
+- If the failure is Phoenix/HIL/SIL-specific, follow the loaded Phoenix skill or handoff contract instead of treating it as generic CI triage.
+
+Dotfiles environment/config debugging:
+- Use this protocol for OpenCode, tmux, fish, stow, devcontainer, shell startup, symlink, Neovim plugin config, or environment propagation issues in the dotfiles setup.
+- Identify the active runtime path and the stowed repo source path; do not assume they are the same file unless the symlink/state proves it.
+- Check shell startup order, tmux environment propagation, container-vs-host differences, and tool-specific config loading before changing files.
+- Preserve exact observed signals: command output, env var names, symlink targets, config paths, current shell, tmux/session state, and container/host context.
+- Avoid destructive stow/adopt, reset, clean, or config-replacement operations without explicit user approval.
+- Prefer narrow, reversible fixes and state whether a restart/reload/new shell/new OpenCode session is needed to observe the change.
+
 Artifact memory:
 - Determine a stable `repo-key` for the current workspace. Prefer the canonical git remote repo name (the last path component of the remote URL, without `.git`) when it cleanly identifies the repository; otherwise use the repo root basename.
 - Before deep debugging, check `~/notes/projects/<repo-key>/bugs/` for similar confirmed bugs when the symptoms seem relevant.

@@ -1,6 +1,6 @@
 ---
 name: code-explainer
-description: Trace and explain call paths and code behavior across multi-language repositories. Use when asked to show a call graph, find callers/callees, locate entry points, explain how a function/module works, summarize code flow, or explain an error message with evidence.
+description: Trace and explain call paths and code behavior across multi-language repositories. Use when asked to show a call graph, find callers/callees, locate entry points, map a subsystem, find where behavior lives, identify safe edit locations, explain how a function/module works, summarize code flow, or explain an error message with evidence.
 ---
 
 # Code Explainer
@@ -26,6 +26,7 @@ Accept any of the following as the starting point:
 - Directory path
 - Module/package name (language inferred when possible)
 - Error message / log snippet / stack trace
+- Behavior or change request, e.g. "where should this change go?" or "map this subsystem before editing"
 
 If the request is ambiguous, ask only one short clarifying question (e.g., "Do you want the whole module, or just a specific file?").
 
@@ -48,6 +49,18 @@ If the request is ambiguous, ask only one short clarifying question (e.g., "Do y
 5. Trace the shortest confirmed call path from entrypoint to the error site; mark inferred edges as "likely."
 6. Summarize “why this error happens” in one paragraph, then list concrete input sources that can cause it with file references.
 7. If multiple sites emit the same error message, enumerate them and explain how to disambiguate (call site, log tags, error codes).
+
+### Repo-map / change-location workflow (use before implementation or when asked where behavior lives)
+
+1. Restate the requested behavior or planned change and the assumed subsystem boundary.
+2. Identify likely entry points: public API, CLI, config, route, UI action, job/worker, test fixture, or message/event source.
+3. Map the shortest relevant flow through layers: caller/adapter -> orchestration/wiring -> core logic -> persistence/external IO/side effects.
+4. List owning files and symbols by layer, with confidence labels.
+5. Identify guardrails, validation checkpoints, state transitions, and branch conditions that could change the edit location or risk.
+6. Recommend likely safe edit locations and what each location would affect; separate confirmed edit points from likely candidates.
+7. Call out unknowns and the fastest next read/search/test to resolve each one.
+
+Do not propose a broad redesign. The goal is a compact map and safe-change guidance, not implementation.
 
 ## Search strategy
 
@@ -111,6 +124,7 @@ Stop expanding when:
 - Dependencies and boundaries (table)
 - Inputs/Outputs/Side effects (table or bullets)
 - Call paths (only if needed; confirmed/likely)
+- Repo map / safe edit locations (only for change-location requests)
 - Terminology (plain-language definitions)
 - Error analysis (only when user provides an error/log/stack trace)
 - Evidence (short snippets or line-number references)
