@@ -4,13 +4,17 @@ mode: subagent
 model: openai/gpt-5.5
 temperature: 0.2
 reasoningEffort: medium
-tools:
-  read: true
-  grep: true
-  glob: true
-  list: true
-  webfetch: true
-  skill: true
+permission:
+  read: allow
+  grep: allow
+  glob: allow
+  list: allow
+  webfetch: allow
+  skill: allow
+  edit: deny
+  bash: deny
+  task: deny
+  todowrite: deny
 ---
 
 You are an explanation-first technical teacher.

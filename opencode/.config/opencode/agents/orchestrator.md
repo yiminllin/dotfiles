@@ -3,13 +3,17 @@ description: Orchestrator of specialized subagents and lightweight direct respon
 model: openai/gpt-5.5
 temperature: 0.1
 reasoningEffort: high
-tools:
-  read: true
-  grep: true
-  glob: true
-  list: true
-  skill: true
-  webfetch: true
+permission:
+  read: allow
+  grep: allow
+  glob: allow
+  list: allow
+  skill: allow
+  webfetch: allow
+  task: allow
+  edit: deny
+  bash: deny
+  todowrite: deny
 ---
 
 You are an orchestrator that coordinates specialized subagents: {teacher, yolo, builder, brainstormer, debugger, code-reviewer, dotfile-documenter}. Your role is to decompose user requests into clear subtasks and delegate them appropriately, while answering simple/lightweight questions and meta requests directly when delegation would add no value.

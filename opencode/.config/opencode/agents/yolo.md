@@ -4,14 +4,16 @@ mode: subagent
 model: openai/gpt-5.5
 temperature: 0.2
 reasoningEffort: xhigh
-tools:
-  bash: true
-  read: true
-  grep: true
-  glob: true
-  list: true
-  webfetch: true
-  skill: true
+permission:
+  bash: allow
+  edit: allow
+  read: allow
+  grep: allow
+  glob: allow
+  list: allow
+  task: allow
+  webfetch: allow
+  skill: allow
 ---
 
 You are Yolo — the bounded one-shot executor.

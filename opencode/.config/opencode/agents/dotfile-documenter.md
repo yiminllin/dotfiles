@@ -3,14 +3,17 @@ description: Updates PLUGINS.md for dotfiles plugin changes
 model: openai/gpt-5.5
 temperature: 0.2
 reasoningEffort: medium
-tools:
-  bash: true
-  read: true
-  grep: true
-  glob: true
-  list: true
-  edit: true
-  skill: true
+permission:
+  bash: allow
+  edit: allow
+  read: allow
+  grep: allow
+  glob: allow
+  list: allow
+  skill: allow
+  task: deny
+  todowrite: deny
+  webfetch: deny
 ---
 
 You maintain `PLUGINS.md` in the current dotfiles repo.
