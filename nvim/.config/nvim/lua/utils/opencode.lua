@@ -5,9 +5,10 @@ local WINDOW_PANE_FORMAT = table.concat({
 	"#{pane_id}",
 	"#{pane_left}",
 	"#{pane_current_command}",
+	"#{@opencode_agent_board}",
 	"#{pane_start_command}",
 }, "\t")
-local OPENCODE_LAUNCH_COMMAND = [[tmux set-option -pt "$TMUX_PANE" allow-passthrough off; exec fish -l -c 'exec opencode']]
+local OPENCODE_LAUNCH_COMMAND = [[tmux set-option -pt "$TMUX_PANE" allow-passthrough off; exec fish -l -c '__opencode_prompt_agent_name --required; and exec opencode']]
 
 local function run_tmux(args)
 	local result = vim.system(vim.list_extend({ "tmux" }, args), { text = true }):wait()
@@ -56,12 +57,14 @@ local function inspect_window_for_opencode()
 	local panes = {}
 	for _, line in ipairs(vim.split(panes_output, "\n", { trimempty = true })) do
 		local parts = vim.split(line, "\t", { plain = true })
-		table.insert(panes, {
-			pane_id = parts[1],
-			pane_left = tonumber(parts[2]) or 0,
-			current_command = parts[3] or "",
-			start_command = parts[4] or "",
-		})
+		if parts[4] ~= "1" then
+			table.insert(panes, {
+				pane_id = parts[1],
+				pane_left = tonumber(parts[2]) or 0,
+				current_command = parts[3] or "",
+				start_command = parts[5] or "",
+			})
+		end
 	end
 
 	if #panes == 1 then
@@ -219,15 +222,13 @@ function M.create_window_or_prompt()
 	end
 
 	if inspection.decision == "notify" then
+		vim.notify(inspection.message, vim.log.levels.WARN, { title = "OpenCode" })
 		return
 	end
-
-	local original_pane_id = inspection.context.pane_id
 
 	if inspection.decision == "create" then
 		local _, create_err = run_tmux({
 			"split-window",
-			"-d",
 			"-h",
 			"-P",
 			"-F",
@@ -241,14 +242,10 @@ function M.create_window_or_prompt()
 			return
 		end
 
-		local focused, focus_err = focus_pane(original_pane_id)
-		if not focused then
-			vim.notify("Failed to restore pane focus: " .. focus_err, vim.log.levels.ERROR, { title = "OpenCode" })
-		end
-
 		return
 	end
 
+	local original_pane_id = inspection.context.pane_id
 	local target = inspection.target
 
 	vim.ui.input({ prompt = "OpenCode Prompt: " }, function(prompt)

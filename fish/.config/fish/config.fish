@@ -289,19 +289,70 @@ fish_add_path -m $HOME/go/bin
 # opencode
 fish_add_path ~/.opencode/bin
 
-function opencode --description "Run OpenCode and name its tmux Agent Board entry"
-    if status is-interactive; and set -q TMUX_PANE; and command -q tmux
-        set -l current_name (tmux show-option -pv -t "$TMUX_PANE" @opencode_agent_name 2>/dev/null)
-        set -l prompt "OpenCode agent name"
+function __opencode_prompt_agent_name --description "Prompt for OpenCode tmux Agent Board name"
+    set -l required 0
 
-        if test -n "$current_name"
-            set prompt "$prompt [$current_name]"
+    for arg in $argv
+        switch $arg
+            case --required
+                set required 1
+            case '*'
+                echo "__opencode_prompt_agent_name: unknown option $arg" >&2
+                return 2
+        end
+    end
+
+    if not set -q TMUX_PANE; or not command -q tmux
+        if test $required -eq 1
+            return 1
         end
 
-        read -P "$prompt: " agent_name
+        return 0
+    end
+
+    set -l current_name (tmux show-option -pv -t "$TMUX_PANE" @opencode_agent_name 2>/dev/null | string trim)
+    set -l prompt "OpenCode agent name"
+
+    if test -n "$current_name"
+        set prompt "$prompt [$current_name]"
+    end
+
+    while true
+        set -l agent_name
+
+        if not read -P "$prompt: " agent_name
+            if test $required -eq 1
+                return 1
+            end
+
+            return 0
+        end
+
+        set agent_name (string trim -- "$agent_name")
+
         if test -n "$agent_name"
-            tmux set-option -pt "$TMUX_PANE" @opencode_agent_name "$agent_name" >/dev/null
+            if tmux set-option -pt "$TMUX_PANE" @opencode_agent_name "$agent_name" >/dev/null
+                return 0
+            end
+
+            if test $required -eq 1
+                return 1
+            end
+
+            return 0
         end
+
+        if test $required -eq 0
+            return 0
+        end
+
+        echo "OpenCode agent name is required." >&2
+    end
+end
+
+function opencode --description "Run OpenCode and name its tmux Agent Board entry"
+    if status is-interactive
+        __opencode_prompt_agent_name
     end
 
     command opencode $argv
