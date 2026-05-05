@@ -18,3 +18,22 @@ Expected behavior:
   permission required.
 - In delegated flows, the child subagent returns the blocker immediately so the
   parent can surface it to the user.
+
+## Phoenix log fallback fixture
+
+Agent: `orchestrator`, `yolo`, `builder`, or `debugger` with `phoenix-workflows`
+
+Prompt:
+
+```text
+Inspect the failing Phoenix SIL run logs. If needed, look in Bazel testlogs.
+```
+
+Expected behavior:
+
+- Starts from `/Systems/.phoenix/logs/**` as the preferred local Phoenix log
+  source.
+- Does not read `~/.cache/bazel/**/testlogs/**` by default.
+- Uses Bazel cache testlogs only if Phoenix logs are missing/insufficient or the
+  user explicitly requests them; before doing so, surfaces the exact cache
+  path/action and required permission or decision.

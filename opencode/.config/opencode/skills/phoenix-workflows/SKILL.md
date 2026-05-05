@@ -44,6 +44,12 @@ If AWS auth is stale, use `$aws-sso-login` first when it is available from repo/
 
 If the request is ambiguous between local SIL and real HIL, ask which mode they want. Do not assume hardware.
 
+## Phoenix log source priority
+
+For Phoenix SIL/HIL runs or local Phoenix log inspection, start with `/Systems/.phoenix/logs/**` as the preferred local log source. Do not read `~/.cache/bazel/**/testlogs/**` by default; use Bazel cache testlogs only when Phoenix logs are missing/insufficient or the user explicitly asks for them.
+
+Before attempting a Bazel cache fallback, stop and surface the exact cache path/action and required permission or decision instead of waiting behind an external-directory prompt.
+
 ## Workflow selection
 
 First classify the request into one mode:
@@ -63,7 +69,7 @@ If a request spans multiple modes, start with the safest read-only one.
 For `run-sil-scenario`, `run-no-sync-scenario`, and `run-flakiness-check`:
 
 1. Before launching Phoenix, confirm whether the run itself needs confirmation under the normal safety gates.
-2. After a successful local run, resolve the produced log directory. Prefer the run-specific directory when available; otherwise fall back to `.phoenix/logs/latest/`.
+2. After a successful local run, resolve the produced log directory under `/Systems/.phoenix/logs/`. Prefer the run-specific directory when available; otherwise fall back to `/Systems/.phoenix/logs/latest/`.
 3. If `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, upload that log directory with `$upload_local_log_to_s3` when available; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh`.
 4. When upload output includes a Baraza link, capture it from the upload output. If `TMUX` is set and `tmux` is available, copy it into the tmux buffer with `tmux set-buffer -- "$baraza_link"`.
 5. Include the final S3 path and Baraza link in the response when upload succeeds, and say whether the tmux copy happened.
@@ -83,8 +89,8 @@ zml -z "/path/to/compute_a.zml.zst" print '*GPS*'
 
 Useful local Phoenix log roots:
 
-- `.phoenix/logs/latest/`
-- `.phoenix/logs/by_scenario/<scenario>/`
+- `/Systems/.phoenix/logs/latest/`
+- `/Systems/.phoenix/logs/by_scenario/<scenario>/`
 
 If `zml` is not available and the user wants CLI inspection, the checked-in setup in `tools/zml/README.md` is:
 
@@ -202,7 +208,7 @@ If the user wants comparison metrics rather than manual log inspection, the chec
 
 This expects `HONEYCOMB_API_KEY` for upload.
 
-For repeated runs, inspect `by_scenario/<scenario>` rather than relying only on `latest`.
+For repeated runs, inspect `/Systems/.phoenix/logs/by_scenario/<scenario>` rather than relying only on `latest`.
 
 ## 5) fetch-hil-logs
 
@@ -324,8 +330,8 @@ Local HTF/pytest exports go to `${HTF_OUTPUT_DIRECTORY:-~/runner_output}` and ar
 
 For Phoenix SIL runs:
 
-- inspect `.phoenix/logs/latest/.../compute_{a,b}.zml[.zst]`
-- inspect `.phoenix/logs/by_scenario/<scenario>/...`
+- inspect `/Systems/.phoenix/logs/latest/.../compute_{a,b}.zml[.zst]`
+- inspect `/Systems/.phoenix/logs/by_scenario/<scenario>/...`
 - inspect `validators/**/*_results.json`
 - inspect service `*_stdout.txt` and `*_stderr.txt`
 
@@ -336,7 +342,7 @@ For fetched or CI HIL logs:
 - inspect validator JSON before deep-diving into ZML
 - use service stderr/stdout to find the failing component, then use `zml` to inspect the relevant compute logs
 
-If the user wants local visualization, `ash/scenarios/README.md` documents the `fs:///...` LogPlots path shape for `.phoenix/logs/latest/...`.
+If the user wants local visualization, `ash/scenarios/README.md` documents the `fs:///...` LogPlots path shape for `/Systems/.phoenix/logs/latest/...`.
 
 If the user wants a shareable LogPlots link from a local Phoenix log directory, use `$upload_local_log_to_s3` when available; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly.
 
