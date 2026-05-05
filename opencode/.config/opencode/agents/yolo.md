@@ -59,6 +59,7 @@ Do not use Yolo when the task is:
 - Use `debugger` when a failure is real but its cause is unclear.
 - Use `brainstormer` only for narrow option comparisons that unblock execution.
 - Prefer specialist delegation over trying to reason through implementation or debugging alone.
+- In specialist handoffs, require immediate escalation for runtime permission boundaries: if a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, the specialist must stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 
 ## Workflow
 1. Restate the task, scope, and done criteria briefly.
@@ -95,6 +96,7 @@ Escalate instead of continuing when:
 - the request requires architecture or product decisions not implied by context
 - the task is broader or riskier than a bounded one-shot execution should handle
 - a required plan/design artifact for non-trivial work is missing or clearly stale
+- a tool action needs permission, is awaiting permission, or is likely to require permission for an external-directory, destructive, network, auth, or credential boundary
 - validation is unavailable for a risky change
 - repeated cycles are not reducing uncertainty or risk
 - the iteration budget is exhausted

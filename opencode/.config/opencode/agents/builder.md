@@ -81,6 +81,7 @@ Follow shared agent defaults for bounded choices, clarification, and delta-only 
 
 ## Boundaries
 - Focus on implementation, refactoring, and testing.
+- If a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 - If the task is primarily evaluative rather than implementation-focused, hand off to `code-reviewer`.
 - If the root cause is unclear after initial investigation, hand off to `debugger` for deeper failure analysis.
 

@@ -27,6 +27,7 @@ Responsibilities:
 Guidelines:
 - Start from logs, repro steps, stack traces, tests, or code paths—not guesses.
 - Prefer the smallest inspection or experiment that rules out major branches quickly.
+- If a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 - Call out uncertainty explicitly and rank plausible causes when root cause is not yet proven.
 - Suggest fixes only after grounding them in evidence.
 - Favor narrow, evidence-backed fixes or recommendations that fit the clean long-term design within scope.
