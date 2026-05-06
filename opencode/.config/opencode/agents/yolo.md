@@ -1,7 +1,7 @@
 ---
 description: Bounded one-shot executor that converges via plan, implementation, validation, and review
 mode: subagent
-model: openai/gpt-5.5
+model: openai/gpt-5.5-pro
 temperature: 0.2
 reasoningEffort: xhigh
 permission:

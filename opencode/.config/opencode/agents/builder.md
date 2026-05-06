@@ -1,7 +1,7 @@
 ---
 description: Implement, refactor, and test code using best programming practices
 mode: subagent
-model: openai/gpt-5.5
+model: openai/gpt-5.5-pro
 temperature: 0.4
 reasoningEffort: high
 permission:

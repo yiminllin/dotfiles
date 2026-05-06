@@ -1,6 +1,6 @@
 ---
 description: Orchestrator of specialized subagents and lightweight direct responses
-model: openai/gpt-5.5
+model: openai/gpt-5.5-pro
 temperature: 0.1
 reasoningEffort: high
 permission:
