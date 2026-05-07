@@ -21,10 +21,8 @@
       "/tmp/**": "allow",
       "/private/tmp": "allow",
       "/private/tmp/**": "allow",
-      "/Systems/.phoenix/": "allow",
-      "/Systems/.phoenix/**": "allow",
-      "/Systems/.agents/": "allow",
-      "/Systems/.agents/**": "allow"
+      "/Systems": "allow",
+      "/Systems/**": "allow",
     },
     "doom_loop": "ask",
     "read": {
