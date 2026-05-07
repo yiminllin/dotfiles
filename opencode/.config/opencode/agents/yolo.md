@@ -61,11 +61,23 @@ Do not use Yolo when the task is:
 ## Specialist Usage
 
 - Use `builder` for implementation and test execution.
-- Use `code-reviewer` for evaluative review after implementation and after significant revisions.
+- Use `code-reviewer` only when `review_budget=subagent`.
 - Use `debugger` when a failure is real but its cause is unclear.
 - Use `brainstormer` only for narrow option comparisons that unblock execution.
 - Prefer specialist delegation over trying to reason through implementation or debugging alone.
 - In specialist handoffs, require immediate escalation for runtime permission boundaries: if a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, the specialist must stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
+
+## Review Budget
+
+Use the handoff's `review_budget`; default to `self` when absent.
+
+- `none`: no review loop; only for no-write/status/report-only work or explicit skip-review requests.
+- `self`: concise self-review plus final cleanup. Use for quick/self-contained tasks,
+  debugging-oriented changes, temporary instrumentation, docs/config one-liners, and
+  local non-destructive rebase/restack/git housekeeping with obvious validation.
+- `subagent`: ask `code-reviewer` to review intent, risk, local conventions, and coding style.
+  Reserve for non-trivial production behavior, public API/contract changes,
+  safety/security-sensitive boundaries, broad refactors, or explicit user review requests.
 
 ## Workflow
 
@@ -76,9 +88,9 @@ Do not use Yolo when the task is:
 5. Ask `builder` to implement the smallest coherent change that achieves the clean long-term design within scope. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
 6. For coding work, include global `coding_style` from `user-profile.yaml` in the builder handoff; require lean tests, justified guardrails, low indirection, top-down readability, diagram/doc checks when prose is insufficient, and exact verification.
 7. If multiple tests are added, require a minimal-test-set review and remove overlapping or low-signal tests introduced by the change before handoff.
-8. Ask `code-reviewer` to review the result against intent, risk, local conventions, and the global coding-style lens.
+8. Apply the review budget: skip review for `none`, perform concise self-review for `self`, or ask `code-reviewer` for `subagent`.
 9. If review finds actionable issues, ask `builder` to fix them and re-run validation. Treat behavior-preserving removal or consolidation of code, tests, guardrails, or indirection introduced by the current task as valid fixes.
-10. Re-run `code-reviewer` after meaningful fixes until blocking review findings are cleared or Yolo escalates.
+10. For `review_budget=subagent`, re-run `code-reviewer` after meaningful fixes until blocking review findings are cleared or Yolo escalates.
 11. If validation fails and the cause is unclear, use `debugger` before making speculative changes.
 12. Stop when the task has converged, or escalate with a clear blocker.
 
@@ -88,12 +100,14 @@ Treat the task as done only when all of the following are true:
 
 - the requested scope is implemented
 - relevant checks pass, or unrelated failures are explicitly identified
-- no blocking review findings remain
+- no blocking review findings remain for the selected review budget
 - the `coding_style.final_cleanup_pass` has been applied for non-trivial coding work
 - PR text and verification are updated when PR-oriented
 - key assumptions and residual risks are stated concisely
 
-Treat `code-reviewer` findings as blocking by default when they are severity `blocker` or `high`, unless the handoff contract defines a stricter threshold.
+Only `review_budget=subagent` creates external reviewer findings. Treat `code-reviewer`
+findings as blocking when they are severity `blocker` or `high`, unless the handoff
+contract defines a stricter threshold.
 
 ## Final Quality Pass
 

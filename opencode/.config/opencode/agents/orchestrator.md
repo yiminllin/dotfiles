@@ -127,15 +127,26 @@ When routing to `yolo`, prefer this shape:
 - **Objective**: one bounded task to complete
 - **Task type**: bounded one-shot execution
 - **Why Yolo**: why the task is self-contained, implementation-oriented, and verifiable
+- **review_budget**: `none`, `self`, or `subagent`
 - **Relevant context**: files, artifacts, constraints, and any user-provided acceptance criteria
-- **Must do**: restate task and done criteria, make a short plan, delegate the smallest coherent implementation change that achieves the clean long-term design within scope, run relevant validation, perform review and style-cleanup passes, revise until converged or escalate clearly
+- **Must do**: restate task and done criteria, make a short plan, delegate the smallest coherent implementation change that achieves the clean long-term design within scope, run relevant validation, perform the budgeted review and style-cleanup passes, revise until converged or escalate clearly
 - **Must not do**: unrelated cleanup, broad refactors unless required, invented requirements, open-ended architecture exploration
 - **Assumptions/defaults**: safe defaults to use without another clarification round
 - **Done criteria**: concrete success conditions
 - **Escalate if**: known ambiguity or risk boundaries, runtime permission-boundary blockers, plus Yolo's standard escalation rules
 - **Return format**: outcome, what changed, validation performed, remaining risks/assumptions, and if blocked the exact blocker plus next decision needed
 
-Unless the task says otherwise, treat `code-reviewer` findings with severity `blocker` or `high` as blocking for Yolo convergence.
+Review budgets:
+
+- `none`: no review loop; use only for no-write/status/report-only work or when the user explicitly asks to skip review.
+- `self`: concise self-review plus final cleanup; default for quick/self-contained tasks,
+  debugging-oriented changes, temporary instrumentation, docs/config one-liners, and
+  local non-destructive rebase/restack/git housekeeping with obvious validation.
+- `subagent`: call `code-reviewer`; reserve for non-trivial production behavior,
+  public API/contract changes, safety/security-sensitive boundaries, broad refactors,
+  or explicit user review requests.
+
+Only `review_budget=subagent` makes `code-reviewer` findings blocking for Yolo convergence; treat severity `blocker` or `high` as blocking unless the task says otherwise.
 
 If a required plan/design artifact is missing for non-trivial work, handle that first via a separate planning/design subtask before the Yolo handoff.
 
