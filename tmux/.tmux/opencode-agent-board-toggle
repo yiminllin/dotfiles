@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+separator=$'\034'
+ensure_script="$HOME/.tmux/opencode-agent-board-ensure"
+resize_script="$HOME/.tmux/opencode-agent-board-resize"
+focus_main_script="$HOME/.tmux/opencode-pane-focus-main"
+
+window_id=$(tmux display-message -p '#{window_id}')
+session_name=$(tmux display-message -p '#{session_name}')
+active_pane=$(tmux display-message -p '#{pane_id}')
+
+board_pane_for_window() {
+  local window=$1
+  local pane_id pane_index pane_top board_flag
+
+  while IFS="$separator" read -r pane_top pane_index pane_id board_flag; do
+    [[ "$board_flag" == 1 ]] || continue
+    printf '%s' "$pane_id"
+    return 0
+  done < <(
+    tmux list-panes -t "$window" \
+      -F "#{pane_top}${separator}#{pane_index}${separator}#{pane_id}${separator}#{@opencode_agent_board}" 2>/dev/null \
+      | sort -t"$separator" -k1,1n -k2,2n || true
+  )
+}
+
+is_board_pane() {
+  [[ "$(tmux show-option -pv -t "$1" @opencode_agent_board 2>/dev/null || true)" == 1 ]]
+}
+
+if is_board_pane "$active_pane"; then
+  "$focus_main_script" "$window_id" >/dev/null 2>&1 || true
+  exit 0
+fi
+
+board_pane=$(board_pane_for_window "$window_id")
+if [[ -z "$board_pane" ]]; then
+  "$ensure_script" "$session_name" "$window_id" >/dev/null 2>&1 || true
+  board_pane=$(board_pane_for_window "$window_id")
+fi
+
+[[ -n "$board_pane" ]] || exit 0
+"$resize_script" apply-window "$window_id" >/dev/null 2>&1 || true
+tmux select-pane -t "$board_pane" 2>/dev/null || true
