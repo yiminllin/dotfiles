@@ -5,6 +5,8 @@
     "skill": "allow",
     "external_directory": {
       "*": "ask",
+      "~/vscode/": "allow",
+      "~/vscode/**": "allow",
       "~/notes/": "allow",
       "~/notes/**": "allow",
       "~/dotfiles/": "allow",
