@@ -44,6 +44,19 @@ If AWS auth is stale, use `$aws-sso-login` first when it is available from repo/
 
 If the request is ambiguous between local SIL and real HIL, ask which mode they want. Do not assume hardware.
 
+For readiness checks before any confirm-first action, such as "ready to one shot?", "are we ready to start?", or "can I tell you to run it?", reply in this shape:
+
+```text
+Answer: Yes/No
+Why:
+- blockers:
+- exact command/action:
+- validation/log upload plan:
+- waiting for your confirm before launch:
+```
+
+Use `No` if the mode, target, credentials, branch/ref, HIL runner, log destination, or other launch-critical input is unresolved. If ready, name the exact SIL/HIL dispatch/run/fetch/upload action and the validation or log-upload plan, then wait for confirmation before launching, dispatching, or starting upload-heavy behavior.
+
 ## Phoenix log source priority
 
 For Phoenix SIL/HIL runs or local Phoenix log inspection, start with `/Systems/.phoenix/logs/**` as the preferred local log source. Do not read `~/.cache/bazel/**/testlogs/**` by default; use Bazel cache testlogs only when Phoenix logs are missing/insufficient or the user explicitly asks for them.
