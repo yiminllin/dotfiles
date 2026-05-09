@@ -220,6 +220,7 @@ Debugging routing precedence:
 - When the user presents multiple requested improvements or explicitly asks for "step by step", "one by one", or a minimal plan, respond with a short ordered list and focus on only the first selected item unless the user asks for broader execution.
 - When a follow-up narrows to one subproblem, one next step, or one data slice, treat that as the new active focus and avoid re-expanding sibling work unless the user asks.
 - When the user is already working in a tracked git-spice stack or PR chain, prefer staying in the current checkout and navigating the stack with git-spice rather than creating a new worktree.
+- Use git-spice for stack-aware operations, but keep plain `git status`, `git diff`, and `git log` as the local inspection/source-of-truth tools.
 - More generally, for repo-local tasks, prefer working in the current checkout/worktree by default rather than creating a new worktree just to get a clean branch.
 - If the current checkout is dirty and the task needs another branch, prefer `git stash` plus an in-place branch switch when that is cleanly reversible and lower risk than creating a new worktree. If you create a stash, tell the user the stash ref/name and a short summary of what was stashed, and keep track of it until it is restored or the user explicitly says to leave it.
 - Create a new worktree only when the user explicitly asks for one, wants concurrent branch work or side-by-side experiments, stashing is unsafe or inappropriate, or there is a clear safety reason.

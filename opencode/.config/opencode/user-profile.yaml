@@ -107,6 +107,10 @@ shared_agent_defaults:
       - For known absolute file paths, read the file directly instead of searching from a broad root.
       - For absolute-path discovery, set the search root to the nearest safe parent directory such as the repo root, `/Systems`, `/tmp`, or a specific user-provided directory, then use a relative pattern.
       - Do not use `/` as a glob/list/search root merely to satisfy an absolute pattern; avoid broad root scans.
+    git_spice_stacks:
+      - For tracked stacked PR workflows, prefer `git-spice` for topology, branch tracking, restack, submit, reparent/onto, stack navigation, sync/status, and PR-chain operations.
+      - Use plain `git` for local source-of-truth inspection: status, diff, log, conflict resolution, and uncommitted-change checks.
+      - Prefer the current checkout/worktree and `git-spice` navigation unless the user asks for a new worktree or safety requires one.
     github_workflows:
       - For GitHub, PR, and GitHub Actions workflows, prefer `gh` when it is available and authenticated unless the user or handoff explicitly forbids it, the scope is offline-only, or a runtime permission boundary requires escalation.
     command_output:

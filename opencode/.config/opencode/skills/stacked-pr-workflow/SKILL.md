@@ -31,6 +31,7 @@ This skill is about stack structure and submission discipline. It is not the pri
 - Stop if unrelated local changes are mixed in; ask whether to stash, split, or commit them first.
 - Treat tracking, reparenting, restack, squash, and submit operations as stateful history-shaping actions.
 - Prefer canonical `git-spice` commands in instructions; local aliases like `gs`, `gsl`, `gsur`, and `gsus` are conveniences, not the canonical interface.
+- Plain `git` is fine for local inspection and branch creation; `git-spice` owns stack tracking and topology.
 - Do not rely on GitHub UI alone; verify PR boundaries locally with `git diff`, `git log`, and `git-spice log long`.
 - When addressing stacked review feedback, fix the lowest affected PR first.
 - After each mutation, re-check branch order, diff boundaries, and PR mapping before continuing.
@@ -103,7 +104,16 @@ Summarize:
 
 ## 2) track-branches
 
-Use this when branches already exist but are not yet tracked by git-spice.
+Use this when branches already exist but are not yet tracked by git-spice, or immediately after creating a new stack branch with plain `git`.
+
+Create and track a new branch:
+
+```bash
+git switch -c <branch>
+git-spice branch track <branch> --base <base-branch>
+```
+
+Use `git checkout -b <branch>` instead of `git switch -c <branch>` when that better matches the local Git version or repo habit. Include `--base` when the intended parent is known or important.
 
 Track one branch:
 
