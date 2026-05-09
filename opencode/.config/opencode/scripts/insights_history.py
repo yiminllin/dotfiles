@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sqlite3
 import textwrap
 from collections import Counter, defaultdict
@@ -124,6 +125,65 @@ PERMISSION_STALL_KEYWORDS = (
     "expired credential",
 )
 
+TOOL_PATTERN_RULES = (
+    {
+        "label": "git",
+        "regexes": (r"(^|[;&|({}\s])git(\s|$)",),
+        "tool_names": (),
+    },
+    {
+        "label": "git-spice/gs",
+        "regexes": (r"(^|[;&|({}\s])(git-spice|gs)(\s|$)",),
+        "tool_names": (),
+    },
+    {
+        "label": "gh",
+        "regexes": (r"(^|[;&|({}\s])gh(\s|$)",),
+        "tool_names": (),
+    },
+    {
+        "label": "zml",
+        "regexes": (r"\bzml\b",),
+        "tool_names": (),
+    },
+    {
+        "label": "bazel test",
+        "regexes": (r"(^|[;&|({}\s])bazel\s+test(\s|$)",),
+        "tool_names": (),
+    },
+    {
+        "label": "aws s3/upload/S3",
+        "regexes": (r"(^|[;&|({}\s])aws\s+s3(\s|$)|s3://|\bs3\b|\bupload(ed)?\b",),
+        "tool_names": (),
+    },
+    {
+        "label": "python ad hoc/plotting",
+        "regexes": (r"(^|[;&|({}\s])python3?(\s|$)|\bmatplotlib\b|\bplotting?\b",),
+        "tool_names": (),
+    },
+    {
+        "label": "tmux",
+        "regexes": (r"(^|[;&|({}\s])tmux(\s|$)",),
+        "tool_names": (),
+    },
+    {
+        "label": "rg",
+        "regexes": (r"(^|[;&|({}\s])rg(\s|$)",),
+        "tool_names": ("grep",),
+    },
+    {
+        "label": "jq",
+        "regexes": (r"(^|[;&|({}\s])jq(\s|$)",),
+        "tool_names": (),
+    },
+)
+
+BROAD_ROOT_COMMAND_RE = re.compile(
+    r"(^|[;&|({}\s])(find|rg|grep|ls|du|fd)\s+[^;&|]*?(^|\s)(/|/proc)(\s|$)"
+)
+SUSPICIOUS_TOOL_DURATION_MS = 5 * 60 * 1000
+STALE_TOOL_AGE_MS = 5 * 60 * 1000
+
 DEFAULT_LOOKBACK_DAYS = 30
 DEFAULT_SESSION_EXAMPLES = 12
 DEFAULT_FOLLOWUP_EXAMPLES = 8
@@ -155,12 +215,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=("summary", "raw-corrections", "latency"),
+        choices=("summary", "raw-corrections", "latency", "tool-patterns"),
         default="summary",
         help=(
             "Report mode: summary preserves the default /insights output; "
             "raw-corrections prints root raw evidence for aggregate correction; "
-            "latency classifies local time sinks and model-setting evidence."
+            "latency classifies local time sinks and model-setting evidence; "
+            "tool-patterns reports repeated command/tool payload patterns."
         ),
     )
     parser.add_argument(
@@ -715,12 +776,15 @@ def worktree_coverage_lines(sessions: list[dict], count: int) -> list[str]:
 def keyword_message_lines(messages: list[dict], keywords: tuple[str, ...], count: int) -> list[str]:
     if count == 0:
         return []
-    matches = [
+    return message_example_lines(keyword_matches(messages, keywords), count)
+
+
+def keyword_matches(messages: list[dict], keywords: tuple[str, ...]) -> list[dict]:
+    return [
         message
         for message in messages
         if any(keyword in message["text"].lower() for keyword in keywords)
     ]
-    return message_example_lines(matches, count)
 
 
 def top_category_label(messages: list[dict]) -> str:
@@ -741,6 +805,7 @@ def tool_part_summary(parts: list[dict]) -> tuple[Counter, Counter, list[dict]]:
             continue
         tool = data.get("tool") or "unknown-tool"
         state = data.get("state") if isinstance(data.get("state"), dict) else {}
+        metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
         status = state.get("status") or "unknown-status"
         duration_ms = None
         if part.get("time_created") and part.get("time_updated"):
@@ -750,13 +815,159 @@ def tool_part_summary(parts: list[dict]) -> tuple[Counter, Counter, list[dict]]:
             "tool": tool,
             "status": status,
             "duration_ms": duration_ms,
-            "exit": (state.get("metadata") or {}).get("exit"),
-            "output": str((state.get("metadata") or {}).get("output") or ""),
+            "input": state.get("input") if isinstance(state.get("input"), dict) else {},
+            "exit": metadata.get("exit"),
+            "output": str(metadata.get("output") or state.get("output") or ""),
         }
         tool_counts[tool] += 1
         status_counts[status] += 1
         tool_parts.append(tool_part)
     return tool_counts, status_counts, tool_parts
+
+
+def compact_payload(value: object) -> str:
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return str(value or "")
+
+
+def tool_payload(part: dict) -> str:
+    input_data = part.get("input") if isinstance(part.get("input"), dict) else {}
+    if part.get("tool") == "bash" and input_data.get("command"):
+        return str(input_data["command"])
+    if input_data:
+        return compact_payload(input_data)
+    return part.get("tool") or "unknown-tool"
+
+
+def tool_payload_key(part: dict) -> str:
+    return f"{part.get('tool') or 'unknown-tool'}: {tool_payload(part)}"
+
+
+def regex_matches(text: str, regexes: tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    return any(re.search(regex, lowered) for regex in regexes)
+
+
+def tool_part_matches_pattern(part: dict, rule: dict) -> bool:
+    if part.get("tool") in rule["tool_names"]:
+        return True
+    return regex_matches(tool_payload(part), rule["regexes"])
+
+
+def tool_pattern_summary_lines(tool_parts: list[dict], messages: list[dict]) -> list[str]:
+    lines: list[str] = []
+    for rule in TOOL_PATTERN_RULES:
+        matching_parts = [part for part in tool_parts if tool_part_matches_pattern(part, rule)]
+        payload_counts = Counter(tool_payload_key(part) for part in matching_parts)
+        mention_count = sum(1 for message in messages if regex_matches(message["text"], rule["regexes"]))
+        repeated_payloads = sum(1 for count in payload_counts.values() if count > 1)
+        lines.append(
+            f"{rule['label']}: actual tool payloads={len(matching_parts)}; "
+            f"unique payloads={len(payload_counts)}; repeated payloads={repeated_payloads}; "
+            f"weaker text mentions={mention_count}"
+        )
+    return lines
+
+
+def top_payload_samples(tool_parts: list[dict], count: int) -> list[str]:
+    if count == 0:
+        return []
+    lines: list[str] = []
+    for rule in TOOL_PATTERN_RULES:
+        payload_counts = Counter(
+            tool_payload_key(part)
+            for part in tool_parts
+            if tool_part_matches_pattern(part, rule)
+        )
+        for payload, payload_count in sorted(payload_counts.items(), key=lambda item: (-item[1], item[0]))[:count]:
+            lines.append(f"{rule['label']}: {payload_count}× {shorten(payload, 180)}")
+    return lines
+
+
+def text_mention_samples(messages: list[dict], count: int) -> list[str]:
+    if count == 0:
+        return []
+    lines: list[str] = []
+    for rule in TOOL_PATTERN_RULES:
+        matches = [message for message in messages if regex_matches(message["text"], rule["regexes"])]
+        for message in matches[:count]:
+            lines.append(
+                f"{rule['label']}: `{shorten(message['session_title'], 60)}` — "
+                f"{format_session_location(message)}: {shorten(message['text'], 140)}"
+            )
+    return lines
+
+
+def broad_root_value(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    cleaned = value.strip()
+    return cleaned == "/" or cleaned == "/proc" or cleaned.startswith("/proc/")
+
+
+def broad_root_scan_parts(tool_parts: list[dict]) -> list[dict]:
+    matches: list[dict] = []
+    for part in tool_parts:
+        input_data = part.get("input") if isinstance(part.get("input"), dict) else {}
+        if any(broad_root_value(input_data.get(field)) for field in ("path", "filePath")):
+            matches.append(part)
+            continue
+        if part.get("tool") == "bash" and BROAD_ROOT_COMMAND_RE.search(tool_payload(part).lower()):
+            matches.append(part)
+    return matches
+
+
+def permission_stall_tool_parts(tool_parts: list[dict]) -> list[dict]:
+    matches: list[dict] = []
+    for part in tool_parts:
+        text = " ".join(
+            str(value)
+            for value in (
+                part.get("tool"),
+                part.get("status"),
+                part.get("output"),
+            )
+        ).lower()
+        strict_completed_keywords = (
+            "auth error",
+            "not authenticated",
+            "permission denied",
+            "approval required",
+        )
+        if part.get("status") == "completed" and not part.get("exit"):
+            continue
+        keywords = strict_completed_keywords if part.get("status") == "completed" else PERMISSION_STALL_KEYWORDS
+        if any(keyword in text for keyword in keywords):
+            matches.append(part)
+    return matches
+
+
+def running_or_stale_tool_parts(tool_parts: list[dict], now_ms: int) -> list[dict]:
+    matches: list[dict] = []
+    for part in tool_parts:
+        if part.get("status") in {"completed", "error"}:
+            continue
+        last_updated = part.get("time_updated") or part.get("time_created") or now_ms
+        age_ms = max(0, now_ms - last_updated)
+        if age_ms >= STALE_TOOL_AGE_MS or part.get("status") in {"running", "pending"}:
+            matches.append({**part, "age_ms": age_ms})
+    return matches
+
+
+def suspicious_long_tool_parts(tool_parts: list[dict]) -> list[dict]:
+    return [
+        part
+        for part in tool_parts
+        if isinstance(part.get("duration_ms"), int) and part["duration_ms"] >= SUSPICIOUS_TOOL_DURATION_MS
+    ]
+
+
+def tool_call_line(part: dict) -> str:
+    return (
+        f"{duration_label(part.get('duration_ms'))} {part.get('tool')} {part.get('status')} — "
+        f"`{shorten(part.get('session_title') or '', 60)}`: {shorten(tool_payload(part), 120)}"
+    )
 
 
 def tool_duration_lines(tool_parts: list[dict], count: int) -> list[str]:
@@ -778,29 +989,11 @@ def permission_stall_lines(tool_parts: list[dict], messages: list[dict], count: 
     if count == 0:
         return []
     lines: list[str] = []
-    for part in tool_parts:
-        text = " ".join(
-            str(value)
-            for value in (
-                part.get("tool"),
-                part.get("status"),
-                part.get("output"),
-            )
-        ).lower()
-        strict_completed_keywords = (
-            "auth error",
-            "not authenticated",
-            "permission denied",
-            "approval required",
+    for part in permission_stall_tool_parts(tool_parts):
+        lines.append(
+            f"tool {part['tool']} {part['status']} — `{shorten(part['session_title'], 60)}`: "
+            f"{shorten(part.get('output') or '', 100)}"
         )
-        if part.get("status") == "completed" and not part.get("exit"):
-            continue
-        keywords = strict_completed_keywords if part.get("status") == "completed" else PERMISSION_STALL_KEYWORDS
-        if any(keyword in text for keyword in keywords):
-            lines.append(
-                f"tool {part['tool']} {part['status']} — `{shorten(part['session_title'], 60)}`: "
-                f"{shorten(part.get('output') or '', 100)}"
-            )
         if len(lines) >= count:
             return lines
     for line in keyword_message_lines(messages, PERMISSION_STALL_KEYWORDS, count - len(lines)):
@@ -826,6 +1019,46 @@ def long_span_lines(sessions: list[dict], min_minutes: int, count: int) -> list[
     ]
 
 
+def first_tool_sample(parts: list[dict]) -> str:
+    if not parts:
+        return "none"
+    ranked = sorted(
+        parts,
+        key=lambda item: (item.get("duration_ms") or 0, item.get("time_updated") or 0),
+        reverse=True,
+    )
+    return tool_call_line(ranked[0])
+
+
+def stuck_pattern_diagnostic_lines(
+    tool_parts: list[dict],
+    root_messages: list[dict],
+    root_followups: list[dict],
+    now_ms: int,
+) -> list[str]:
+    broad_root = broad_root_scan_parts(tool_parts)
+    permission_tools = permission_stall_tool_parts(tool_parts)
+    permission_mentions = keyword_matches(root_messages, PERMISSION_STALL_KEYWORDS)
+    running_stale = running_or_stale_tool_parts(tool_parts, now_ms)
+    suspicious_long = suspicious_long_tool_parts(tool_parts)
+    correction_mentions = keyword_matches(root_followups, CORRECTION_KEYWORDS)
+    easy_task_mentions = keyword_matches(root_messages, EASY_TASK_KEYWORDS)
+    return [
+        f"broad root scans (/ or /proc): {len(broad_root)}; sample={first_tool_sample(broad_root)}",
+        (
+            f"permission/auth stalls: {len(permission_tools)} tool payloads, "
+            f"{len(permission_mentions)} root text mentions; sample={first_tool_sample(permission_tools)}"
+        ),
+        f"running/stale tool calls: {len(running_stale)}; sample={first_tool_sample(running_stale)}",
+        (
+            f"suspicious long tool calls (>= {duration_label(SUSPICIOUS_TOOL_DURATION_MS)}): "
+            f"{len(suspicious_long)}; sample={first_tool_sample(suspicious_long)}"
+        ),
+        f"repeated correction-like root follow-ups: {len(correction_mentions)}",
+        f"easy-task root prompts: {len(easy_task_mentions)}",
+    ]
+
+
 def model_setting_evidence_line(assistant_messages: list[dict]) -> str:
     model_counts = Counter(message.get("model_id") for message in assistant_messages if message.get("model_id"))
     reasoning_messages = [
@@ -844,6 +1077,47 @@ def model_setting_evidence_line(assistant_messages: list[dict]) -> str:
         f"{strength}: model metadata={models}; "
         f"assistant messages with reasoning-token evidence={len(reasoning_messages)}"
     )
+
+
+def print_tool_patterns_report(
+    args: argparse.Namespace,
+    sessions: list[dict],
+    selection_meta: dict,
+    since_ms: int,
+    until_ms: int,
+    messages: list[dict],
+    parts: list[dict],
+) -> None:
+    root_sessions = [session for session in sessions if session_kind(session) == "root"]
+    child_sessions = [session for session in sessions if session_kind(session) == "child"]
+    _, status_counts, tool_parts = tool_part_summary(parts)
+
+    print("Command/tool pattern evidence")
+    if args.scope == "worktree":
+        normalized = normalize_path(args.worktree, allow_relative=True) or args.worktree
+        print(f"- scope: worktree {normalized}")
+        print(
+            "- matched project/worktree: "
+            f"{', '.join(selection_meta.get('matched_projects', [])) or 'none'}"
+        )
+        print(
+            "- matched session directory/path: "
+            f"{', '.join(selection_meta.get('matched_locations', [])) or 'none'}"
+        )
+    else:
+        print("- scope: all local OpenCode sessions")
+    print(
+        f"- lookback: last {args.lookback_days} days by time_updated "
+        f"({format_time(since_ms)} to {format_time(until_ms)})"
+    )
+    print(f"- sessions scanned: {len(sessions)} total ({len(root_sessions)} root, {len(child_sessions)} child/subagent)")
+    print(f"- tool calls scanned: {len(tool_parts)}; status={dict(status_counts.most_common())}")
+    print("- evidence note: actual counts use tool part inputs; text mentions are weaker user-message evidence")
+    print()
+
+    print_list("Tracked command/tool patterns", tool_pattern_summary_lines(tool_parts, messages))
+    print_list("Actual payload samples", top_payload_samples(tool_parts, args.followup_examples))
+    print_list("Weaker text mention samples", text_mention_samples(messages, args.followup_examples))
 
 
 def print_raw_corrections_report(
@@ -933,6 +1207,10 @@ def print_latency_report(
     print(f"- model-setting evidence: {model_setting_evidence_line(assistant_messages)}")
     print()
     print_list("Tool calls by tool", [f"{tool}: {count}" for tool, count in tool_counts.most_common()])
+    print_list(
+        "Stuck-pattern diagnostics",
+        stuck_pattern_diagnostic_lines(tool_parts, root_messages, root_followups, until_ms),
+    )
     print_list("Longest tool call examples", tool_duration_lines(tool_parts, args.followup_examples))
     print_list("Long session spans", long_span_lines(sessions, args.long_span_minutes, args.session_examples))
     print_list("Permission/auth stall hints", permission_stall_lines(tool_parts, root_messages, args.followup_examples))
@@ -1012,6 +1290,19 @@ def main() -> int:
                 root_evidence,
                 child_evidence,
                 root_followups,
+            )
+            return 0
+
+        if args.mode == "tool-patterns":
+            parts = collect_parts(cur, session_ids)
+            print_tool_patterns_report(
+                args,
+                sessions,
+                selection_meta,
+                since_ms,
+                until_ms,
+                human_user_messages,
+                parts,
             )
             return 0
 

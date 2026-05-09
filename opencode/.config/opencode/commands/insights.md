@@ -35,6 +35,7 @@ Additional bounded helper modes are available when needed:
 ```sh
 python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode raw-corrections --scope worktree --worktree "$PWD" --followup-examples 5
 python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode latency --scope all --followup-examples 5 --session-examples 5
+python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode tool-patterns --scope all --followup-examples 5
 ```
 
 ## Workflow
@@ -58,7 +59,7 @@ python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode latency --sc
    - output format and verbosity
    - coding-style, PR-review, and subagent-improvement feedback when present in recent history
    - recurring domain workflows, such as PR chains, PR review comments, stacked branches, Jira ticket updates, Phoenix/HIL/SIL debugging, config/stow validation, and dotfiles review UI work
-   - recurring deterministic helper/script opportunities
+   - recurring deterministic helper/script opportunities; use `--mode tool-patterns` when repeated command/tool payloads may justify a narrow helper/script instead of prompt wording
    - latency or time-sink patterns when the user mentions speed, thrash, repeated corrections, slow tool use, subagent fanout, or model/reasoning settings
    - When latency is in scope, use `insights_history.py --mode latency` if local history is available and explicitly label model-setting evidence as `supported`, `weak`, or `absent` rather than implying configuration causality from timing alone.
 4. Classify findings with this lightweight taxonomy: routing, autonomy, verbosity, artifact usage, safety, output format, validation.
