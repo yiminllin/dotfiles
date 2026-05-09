@@ -24,6 +24,8 @@ The default output should include:
 
 Prefer high-signal comments over exhaustive commentary.
 
+For complex or unfamiliar subsystems, optionally add a short plain-English subsystem map with 1-2 concrete examples before the file reading order. Keep it explanatory, not a substitute for review findings.
+
 ## Workflow
 
 ### 1. Resolve PR context
@@ -61,6 +63,8 @@ Before reviewing details, identify:
 - Generated, dependency, lockfile, formatting-only, or mechanical churn.
 
 For stacked PRs, make the diff boundary explicit so the user knows whether the review is against the PR base, `develop`, or another stack branch.
+
+If the subsystem is unfamiliar or the change spans several layers, sketch the flow in plain English: entry point -> core behavior -> persistence/runtime side effect -> tests/validation. Include small examples only when they help the reviewer understand why the suggested reading order makes sense.
 
 ### 3. Build a file reading order
 
@@ -135,6 +139,9 @@ Use this structure:
 
 ## PR structure overview
 - <brief structure of the change by subsystem/flow>
+
+## Optional subsystem map / examples
+- <only include when helpful for unfamiliar or multi-layer changes>
 
 ## Suggested human review order
 1. `path/to/file.rs` — <why read first> [read carefully]

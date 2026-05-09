@@ -64,6 +64,14 @@ First classify the request into one mode:
 
 If a request spans multiple modes, start with the safest read-only one.
 
+For complex Phoenix/SIL explanations, start with a tiny dataflow map before prose. Label each step as `mocked/simulated input or state`, `real runtime plumbing`, or `authoritative output/log`, for example:
+
+```text
+scenario config (mocked/simulated) -> Phoenix orchestration/services (real runtime plumbing) -> validators/ZML/test_record (authoritative output)
+```
+
+For failure triage, do not make causal RCA claims without pass/fail contrast or equivalent differential evidence. If only the failing run is available, say what the current evidence supports and what it does not prove.
+
 ## Default post-run upload for local SIL runs
 
 For `run-sil-scenario`, `run-no-sync-scenario`, and `run-flakiness-check`:
@@ -342,6 +350,8 @@ For fetched or CI HIL logs:
 - inspect validator JSON before deep-diving into ZML
 - use service stderr/stdout to find the failing component, then use `zml` to inspect the relevant compute logs
 
+For root-cause requests, treat high-level result tables as symptom summaries unless they identify the earliest causal signal. Inspect lower-level harness, Phoenix, ZML, or journal logs earlier when validator/error summaries do not distinguish cause from downstream effect.
+
 If the user wants local visualization, `ash/scenarios/README.md` documents the `fs:///...` LogPlots path shape for `/Systems/.phoenix/logs/latest/...`.
 
 If the user wants a shareable LogPlots link from a local Phoenix log directory, use `$upload_local_log_to_s3` when available; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly.
@@ -355,3 +365,4 @@ When using this skill, reply with:
 - the safest next read-only step
 - any confirmation needed before launching Phoenix, repeated flakiness runs, or real HIL
 - if a local Phoenix run was executed and uploaded, the final S3 path and Baraza link, plus whether the tmux buffer copy happened
+- for RCA-style answers, concise evidence labels: `this proves/supports ...` and `this does not prove ...`

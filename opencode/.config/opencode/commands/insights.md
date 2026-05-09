@@ -30,6 +30,13 @@ Start from this deterministic local evidence summary scanned across all local ma
 
 !`python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all`
 
+Additional bounded helper modes are available when needed:
+
+```sh
+python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode raw-corrections --scope worktree --worktree "$PWD" --followup-examples 5
+python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode latency --scope all --followup-examples 5 --session-examples 5
+```
+
 ## Workflow
 1. Inspect the auto-collected recent local history first, then compare it with the current session, explicit user feedback, and relevant note artifacts. Do not recursively delegate this same `/insights` request back to `orchestrator` or re-run `/insights` as a substitute for the local history script/bounded DB scan.
 2. Perform a raw-history correction pass before drafting proposals:
@@ -37,7 +44,10 @@ Start from this deterministic local evidence summary scanned across all local ma
    - Inspect representative raw root-session follow-ups from those worktrees, prioritizing user corrections, repeated follow-up questions, and workflow-specific requests.
    - Prefer root-session follow-ups and other user-correction-like evidence over child-session task prompts.
    - Treat child/subagent prompts as workflow context unless independently supported by root user messages.
+   - Raw evidence from the current session, explicit user corrections, or current worktree root follow-ups overrides aggregate category hints when they conflict.
+   - Do not let aggregate/meta categories dominate concrete current-session evidence; use aggregate categories to find where to inspect, not to overrule the inspected raw messages.
    - Downweight recent `/insights`/prompt-tuning meta sessions unless they remain dominant after the raw worktree review.
+   - Use `insights_history.py --mode raw-corrections` when worktree matching or aggregate/raw disagreement is in question; it checks both `project.worktree` and `session.directory/path`.
    - If raw evidence cannot be inspected, say so explicitly and keep proposals conservative.
 3. Build a broad behavior model across recent history, including:
    - routing and subagent selection patterns
@@ -49,6 +59,8 @@ Start from this deterministic local evidence summary scanned across all local ma
    - coding-style, PR-review, and subagent-improvement feedback when present in recent history
    - recurring domain workflows, such as PR chains, PR review comments, stacked branches, Jira ticket updates, Phoenix/HIL/SIL debugging, config/stow validation, and dotfiles review UI work
    - recurring deterministic helper/script opportunities
+   - latency or time-sink patterns when the user mentions speed, thrash, repeated corrections, slow tool use, subagent fanout, or model/reasoning settings
+   - When latency is in scope, use `insights_history.py --mode latency` if local history is available and explicitly label model-setting evidence as `supported`, `weak`, or `absent` rather than implying configuration causality from timing alone.
 4. Classify findings with this lightweight taxonomy: routing, autonomy, verbosity, artifact usage, safety, output format, validation.
 5. Produce a comprehensive list of credible narrow proposals surfaced by the evidence, grouped or ordered by confidence and actionability. Prefer additive wording tweaks or a small shared-profile change over broad rewrites; do not cap the proposal list at three.
    - Lead with proposals derived from recurring real workflows across the dominant worktrees, not with `/insights` mechanics.

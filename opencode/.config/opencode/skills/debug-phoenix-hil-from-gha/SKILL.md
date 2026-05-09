@@ -9,6 +9,8 @@ description: Debug Phoenix HIL failures from GitHub Actions (URL or English run 
 
 Given a GitHub Actions HIL job URL, identify the primary failure cause and explain it with artifact and code evidence.
 
+For RCA requests, use symptom summaries to choose where to look, not as the causal answer. Do not claim root cause without pass/fail contrast or equivalent differential evidence; if only the failing run is available, label the conclusion as likely/inferred and name the missing comparison.
+
 ## Auth failure handling
 
 - On `gh` auth failure, stop and ask the user to authenticate (`gh auth login`) before continuing.
@@ -176,6 +178,7 @@ find "$OUT_DIR" -maxdepth 3 -type f | sort
      - `FAIL_TEST` / `FAIL_VALIDATORS`
    - Treat failure reasons/error table as higher-signal than prior LLM summaries in logs.
    - If the summary only shows infra-style failures such as `SIMULATION_FAILED`, `FAIL_TEST`, or teardown failures while validators passed, inspect `test_log_0.log` first for the earliest harness exception before reading later `SIGTERM` noise.
+   - If the user asked for root cause and this pass only identifies a broad symptom table, immediately inspect the relevant lower-level harness, Phoenix, ZML, or journal logs from step 8 before making any causal claim.
 
 ```bash
 rg -n "=== FAILURE REASONS ===|Error Code|FAIL_TEST|FAIL_VALIDATORS|unexpected-alarms" /tmp/hil_job.log
@@ -343,6 +346,7 @@ rg -n "<ALARM_OR_ERROR_NAME>" ash p2_zip p2_droid p2_dock gnc p2_validation
      - Validator-only regression
      - Infra/system failure
    - Do not blame validators unless raw logs contradict the validator output.
+   - Use pass/fail contrast, known-good vs failing traces, or equivalent differential evidence before stating causality. Without contrast, say `likely` and list the missing confirming comparison.
    - Propose fixes only when supported by evidence; otherwise list concrete next checks.
 
 ## Output contract
@@ -356,13 +360,14 @@ Always respond with this structure:
 3. `Potential fixes`
    - Immediate mitigation, durable fix, and verification ideas.
 4. `Artifacts and steps used`
-   - Compact table listing artifact/command and what it proved.
+   - Compact table listing artifact/command, `this proves/supports`, and `does not prove`.
 
 Keep it concise. Prefer short evidence-backed statements over broad speculation.
 
 ## Evidence rules
 
 - Do not claim root cause without at least one artifact signal and one code reference.
+- Label decisive evidence as `this proves/supports ...` and important limits as `this does not prove ...`.
 - If data is insufficient, state `unknown` and list missing artifacts needed.
 - For multiple simultaneous failures, identify one primary blocker and clearly mark secondary effects.
 - In safety-critical contexts, never suggest bypassing alarms/validators without explicit user request.

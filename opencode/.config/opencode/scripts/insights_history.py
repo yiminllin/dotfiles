@@ -9,6 +9,7 @@ import sqlite3
 import textwrap
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 
 CATEGORY_KEYWORDS = {
@@ -78,11 +79,57 @@ CATEGORY_KEYWORDS = {
     ),
 }
 
+CORRECTION_KEYWORDS = (
+    "actually",
+    "not what i asked",
+    "you missed",
+    "incorrect",
+    "wrong",
+    "instead",
+    "don't",
+    "do not",
+    "no,",
+    "please focus",
+    "too much",
+    "too broad",
+)
+
+EASY_TASK_KEYWORDS = (
+    "quick",
+    "tiny",
+    "small",
+    "simple",
+    "one command",
+    "status",
+    "explain",
+    "example",
+    "where is",
+    "what does",
+    "how does",
+)
+
+PERMISSION_STALL_KEYWORDS = (
+    "permission denied",
+    "permission prompt",
+    "requires permission",
+    "requires approval",
+    "approval required",
+    "forbidden",
+    "not allowed",
+    "not permitted",
+    "auth error",
+    "authentication failed",
+    "not authenticated",
+    "credential expired",
+    "expired credential",
+)
+
 DEFAULT_LOOKBACK_DAYS = 30
 DEFAULT_SESSION_EXAMPLES = 12
 DEFAULT_FOLLOWUP_EXAMPLES = 8
 DEFAULT_WORKTREE_EXAMPLES = 30
 DEFAULT_WORKTREE_FOLLOWUP_EXAMPLES = 3
+DEFAULT_LONG_SPAN_MINUTES = 30
 
 
 def positive_int(raw: str) -> int:
@@ -105,6 +152,16 @@ def parse_args() -> argparse.Namespace:
             "Summarize all local OpenCode sessions in the lookback window for /insights. "
             "Scanning is uncapped; example counts only control display length."
         )
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("summary", "raw-corrections", "latency"),
+        default="summary",
+        help=(
+            "Report mode: summary preserves the default /insights output; "
+            "raw-corrections prints root raw evidence for aggregate correction; "
+            "latency classifies local time sinks and model-setting evidence."
+        ),
     )
     parser.add_argument(
         "--db-path",
@@ -164,6 +221,12 @@ def parse_args() -> argparse.Namespace:
             "Counts still include every scanned message."
         ),
     )
+    parser.add_argument(
+        "--long-span-minutes",
+        type=positive_int,
+        default=DEFAULT_LONG_SPAN_MINUTES,
+        help="Minimum session duration to report in --mode latency; defaults to 30",
+    )
     return parser.parse_args()
 
 
@@ -175,6 +238,12 @@ def safe_json_loads(raw: str | None) -> dict:
     except Exception:
         return {}
     return loaded if isinstance(loaded, dict) else {}
+
+
+def readonly_sqlite_connection(db_path: str) -> sqlite3.Connection:
+    path = os.path.abspath(os.path.expanduser(db_path))
+    uri = f"file:{quote(path)}?mode=ro"
+    return sqlite3.connect(uri, uri=True)
 
 
 def shorten(text: str, width: int = 160) -> str:
@@ -193,6 +262,19 @@ def session_time_range(sessions: list[dict]) -> str:
     if not timestamps:
         return "none"
     return f"{format_time(min(timestamps))} to {format_time(max(timestamps))}"
+
+
+def duration_label(duration_ms: int | None) -> str:
+    if duration_ms is None:
+        return "unknown"
+    seconds = duration_ms // 1000
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h{minutes:02d}m"
+    if minutes:
+        return f"{minutes}m{seconds:02d}s"
+    return f"{seconds}s"
 
 
 def chunks(items: list[str], size: int = 500) -> list[list[str]]:
@@ -418,6 +500,103 @@ def collect_user_messages(
     return all_messages
 
 
+def collect_assistant_messages(cur: sqlite3.Cursor, session_ids: list[str]) -> list[dict]:
+    if not session_ids:
+        return []
+
+    messages: list[dict] = []
+    for session_id_chunk in chunks(session_ids):
+        placeholders = ",".join("?" for _ in session_id_chunk)
+        rows = cur.execute(
+            f"""
+        select
+          s.title as session_title,
+          s.parent_id,
+          s.directory,
+          s.path,
+          p.worktree as project_worktree,
+          m.session_id,
+          m.time_created as message_time,
+          m.data as message_data
+        from message m
+        join session s on s.id = m.session_id
+        join project p on p.id = s.project_id
+        where m.session_id in ({placeholders})
+        order by m.time_created desc
+        """,
+            session_id_chunk,
+        ).fetchall()
+
+        for row in rows:
+            message = safe_json_loads(row["message_data"])
+            if message.get("role") != "assistant":
+                continue
+            tokens = message.get("tokens") if isinstance(message.get("tokens"), dict) else {}
+            messages.append(
+                {
+                    "session_id": row["session_id"],
+                    "session_title": row["session_title"],
+                    "parent_id": row["parent_id"],
+                    "directory": row["directory"],
+                    "path": row["path"],
+                    "project_worktree": row["project_worktree"],
+                    "message_time": row["message_time"],
+                    "agent": message.get("agent"),
+                    "model_id": message.get("modelID"),
+                    "provider_id": message.get("providerID"),
+                    "reasoning_tokens": tokens.get("reasoning"),
+                }
+            )
+    messages.sort(key=lambda item: item["message_time"] or 0, reverse=True)
+    return messages
+
+
+def collect_parts(cur: sqlite3.Cursor, session_ids: list[str]) -> list[dict]:
+    if not session_ids:
+        return []
+
+    parts: list[dict] = []
+    for session_id_chunk in chunks(session_ids):
+        placeholders = ",".join("?" for _ in session_id_chunk)
+        rows = cur.execute(
+            f"""
+        select
+          s.title as session_title,
+          s.parent_id,
+          s.directory,
+          s.path,
+          p.worktree as project_worktree,
+          part.session_id,
+          part.time_created,
+          part.time_updated,
+          part.data as part_data
+        from part
+        join session s on s.id = part.session_id
+        join project p on p.id = s.project_id
+        where part.session_id in ({placeholders})
+        order by part.time_created desc
+        """,
+            session_id_chunk,
+        ).fetchall()
+
+        for row in rows:
+            data = safe_json_loads(row["part_data"])
+            parts.append(
+                {
+                    "session_id": row["session_id"],
+                    "session_title": row["session_title"],
+                    "parent_id": row["parent_id"],
+                    "directory": row["directory"],
+                    "path": row["path"],
+                    "project_worktree": row["project_worktree"],
+                    "time_created": row["time_created"],
+                    "time_updated": row["time_updated"],
+                    "data": data,
+                }
+            )
+    return parts
+
+
 def collect_followups(messages: list[dict]) -> list[dict]:
     by_session: dict[str, list[dict]] = defaultdict(list)
     for message in messages:
@@ -533,6 +712,234 @@ def worktree_coverage_lines(sessions: list[dict], count: int) -> list[str]:
     return lines
 
 
+def keyword_message_lines(messages: list[dict], keywords: tuple[str, ...], count: int) -> list[str]:
+    if count == 0:
+        return []
+    matches = [
+        message
+        for message in messages
+        if any(keyword in message["text"].lower() for keyword in keywords)
+    ]
+    return message_example_lines(matches, count)
+
+
+def top_category_label(messages: list[dict]) -> str:
+    counts = category_counts(messages)
+    if not counts:
+        return "none"
+    category, count = counts.most_common(1)[0]
+    return f"{category}: {count}"
+
+
+def tool_part_summary(parts: list[dict]) -> tuple[Counter, Counter, list[dict]]:
+    tool_counts: Counter[str] = Counter()
+    status_counts: Counter[str] = Counter()
+    tool_parts: list[dict] = []
+    for part in parts:
+        data = part["data"]
+        if data.get("type") != "tool":
+            continue
+        tool = data.get("tool") or "unknown-tool"
+        state = data.get("state") if isinstance(data.get("state"), dict) else {}
+        status = state.get("status") or "unknown-status"
+        duration_ms = None
+        if part.get("time_created") and part.get("time_updated"):
+            duration_ms = max(0, part["time_updated"] - part["time_created"])
+        tool_part = {
+            **part,
+            "tool": tool,
+            "status": status,
+            "duration_ms": duration_ms,
+            "exit": (state.get("metadata") or {}).get("exit"),
+            "output": str((state.get("metadata") or {}).get("output") or ""),
+        }
+        tool_counts[tool] += 1
+        status_counts[status] += 1
+        tool_parts.append(tool_part)
+    return tool_counts, status_counts, tool_parts
+
+
+def tool_duration_lines(tool_parts: list[dict], count: int) -> list[str]:
+    if count == 0:
+        return []
+    ranked = sorted(
+        tool_parts,
+        key=lambda item: (item.get("duration_ms") is not None, item.get("duration_ms") or 0),
+        reverse=True,
+    )
+    return [
+        f"{duration_label(part.get('duration_ms'))} {part['tool']} {part['status']} — "
+        f"`{shorten(part['session_title'], 60)}` — {format_session_location(part)}"
+        for part in ranked[:count]
+    ]
+
+
+def permission_stall_lines(tool_parts: list[dict], messages: list[dict], count: int) -> list[str]:
+    if count == 0:
+        return []
+    lines: list[str] = []
+    for part in tool_parts:
+        text = " ".join(
+            str(value)
+            for value in (
+                part.get("tool"),
+                part.get("status"),
+                part.get("output"),
+            )
+        ).lower()
+        strict_completed_keywords = (
+            "auth error",
+            "not authenticated",
+            "permission denied",
+            "approval required",
+        )
+        if part.get("status") == "completed" and not part.get("exit"):
+            continue
+        keywords = strict_completed_keywords if part.get("status") == "completed" else PERMISSION_STALL_KEYWORDS
+        if any(keyword in text for keyword in keywords):
+            lines.append(
+                f"tool {part['tool']} {part['status']} — `{shorten(part['session_title'], 60)}`: "
+                f"{shorten(part.get('output') or '', 100)}"
+            )
+        if len(lines) >= count:
+            return lines
+    for line in keyword_message_lines(messages, PERMISSION_STALL_KEYWORDS, count - len(lines)):
+        lines.append(f"user mention — {line}")
+    return lines
+
+
+def long_span_lines(sessions: list[dict], min_minutes: int, count: int) -> list[str]:
+    if count == 0:
+        return []
+    threshold_ms = min_minutes * 60 * 1000
+    ranked = []
+    for session in sessions:
+        if not session.get("time_created") or not session.get("time_updated"):
+            continue
+        duration_ms = session["time_updated"] - session["time_created"]
+        if duration_ms >= threshold_ms:
+            ranked.append((duration_ms, session))
+    ranked.sort(reverse=True, key=lambda item: item[0])
+    return [
+        f"{duration_label(duration_ms)} `{shorten(session['title'], 70)}` — {format_session_location(session)}"
+        for duration_ms, session in ranked[:count]
+    ]
+
+
+def model_setting_evidence_line(assistant_messages: list[dict]) -> str:
+    model_counts = Counter(message.get("model_id") for message in assistant_messages if message.get("model_id"))
+    reasoning_messages = [
+        message
+        for message in assistant_messages
+        if isinstance(message.get("reasoning_tokens"), int) and message["reasoning_tokens"] > 0
+    ]
+    if model_counts and reasoning_messages:
+        strength = "supported"
+    elif model_counts or reasoning_messages:
+        strength = "weak"
+    else:
+        strength = "absent"
+    models = ", ".join(f"{model}: {count}" for model, count in model_counts.most_common(5)) or "none"
+    return (
+        f"{strength}: model metadata={models}; "
+        f"assistant messages with reasoning-token evidence={len(reasoning_messages)}"
+    )
+
+
+def print_raw_corrections_report(
+    args: argparse.Namespace,
+    sessions: list[dict],
+    selection_meta: dict,
+    since_ms: int,
+    until_ms: int,
+    root_evidence: list[dict],
+    child_evidence: list[dict],
+    root_followups: list[dict],
+) -> None:
+    print("Raw-history correction evidence")
+    if args.scope == "worktree":
+        normalized = normalize_path(args.worktree, allow_relative=True) or args.worktree
+        print(f"- scope: worktree {normalized}")
+        print(
+            "- worktree matching fields: project.worktree and session.directory/path "
+            "are all considered"
+        )
+        print(
+            "- matched project/worktree: "
+            f"{', '.join(selection_meta.get('matched_projects', [])) or 'none'}"
+        )
+        print(
+            "- matched session directory/path: "
+            f"{', '.join(selection_meta.get('matched_locations', [])) or 'none'}"
+        )
+    else:
+        print("- scope: all local OpenCode sessions")
+    print(
+        f"- lookback: last {args.lookback_days} days by time_updated "
+        f"({format_time(since_ms)} to {format_time(until_ms)})"
+    )
+    print(f"- sessions scanned: {len(sessions)}")
+    print(f"- aggregate top category: {top_category_label(root_evidence + child_evidence)}")
+    print(f"- root raw top category: {top_category_label(root_evidence)}")
+    print("- correction rule: current/root raw evidence overrides aggregate categories when they conflict")
+    print()
+    print_list("Worktree/location coverage", worktree_coverage_lines(sessions, args.worktree_examples))
+    print_list(
+        "Dominant worktree root follow-up examples",
+        worktree_followup_example_lines(sessions, root_followups, args.worktree_followup_examples),
+    )
+    print_list("Root correction-like follow-ups", keyword_message_lines(root_followups, CORRECTION_KEYWORDS, args.followup_examples))
+    print_list("Root raw evidence examples", message_example_lines(root_evidence, args.followup_examples))
+
+
+def print_latency_report(
+    args: argparse.Namespace,
+    sessions: list[dict],
+    selection_meta: dict,
+    since_ms: int,
+    until_ms: int,
+    messages: list[dict],
+    assistant_messages: list[dict],
+    parts: list[dict],
+) -> None:
+    root_sessions = [session for session in sessions if session_kind(session) == "root"]
+    child_sessions = [session for session in sessions if session_kind(session) == "child"]
+    root_messages = [message for message in messages if message.get("parent_id") is None]
+    root_followups = collect_followups(root_messages)
+    tool_counts, status_counts, tool_parts = tool_part_summary(parts)
+    task_tool_count = tool_counts.get("task", 0)
+
+    print("Latency and time-sink evidence")
+    if args.scope == "worktree":
+        normalized = normalize_path(args.worktree, allow_relative=True) or args.worktree
+        print(f"- scope: worktree {normalized}")
+        print(
+            "- matched project/worktree: "
+            f"{', '.join(selection_meta.get('matched_projects', [])) or 'none'}"
+        )
+        print(
+            "- matched session directory/path: "
+            f"{', '.join(selection_meta.get('matched_locations', [])) or 'none'}"
+        )
+    else:
+        print("- scope: all local OpenCode sessions")
+    print(
+        f"- lookback: last {args.lookback_days} days by time_updated "
+        f"({format_time(since_ms)} to {format_time(until_ms)})"
+    )
+    print(f"- sessions scanned: {len(sessions)} total ({len(root_sessions)} root, {len(child_sessions)} child/subagent)")
+    print(f"- tool calls: {sum(tool_counts.values())} total; status={dict(status_counts.most_common())}")
+    print(f"- subagent fanout: {len(child_sessions)} child sessions; task tool calls={task_tool_count}")
+    print(f"- model-setting evidence: {model_setting_evidence_line(assistant_messages)}")
+    print()
+    print_list("Tool calls by tool", [f"{tool}: {count}" for tool, count in tool_counts.most_common()])
+    print_list("Longest tool call examples", tool_duration_lines(tool_parts, args.followup_examples))
+    print_list("Long session spans", long_span_lines(sessions, args.long_span_minutes, args.session_examples))
+    print_list("Permission/auth stall hints", permission_stall_lines(tool_parts, root_messages, args.followup_examples))
+    print_list("Repeated correction hints", keyword_message_lines(root_followups, CORRECTION_KEYWORDS, args.followup_examples))
+    print_list("Easy-task keyword hints", keyword_message_lines(root_messages, EASY_TASK_KEYWORDS, args.followup_examples))
+
+
 def print_unavailable(args: argparse.Namespace, since_ms: int, until_ms: int, reason: str) -> None:
     print("Recent local history evidence")
     if args.scope == "worktree":
@@ -561,7 +968,7 @@ def main() -> int:
         return 0
 
     try:
-        conn = sqlite3.connect(args.db_path)
+        conn = readonly_sqlite_connection(args.db_path)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -594,6 +1001,34 @@ def main() -> int:
         root_evidence = root_followups if len(root_followups) >= 2 else root_messages
         child_evidence = child_followups if len(child_followups) >= 2 else child_messages
         combined_evidence = root_evidence + child_evidence
+
+        if args.mode == "raw-corrections":
+            print_raw_corrections_report(
+                args,
+                sessions,
+                selection_meta,
+                since_ms,
+                until_ms,
+                root_evidence,
+                child_evidence,
+                root_followups,
+            )
+            return 0
+
+        if args.mode == "latency":
+            assistant_messages = collect_assistant_messages(cur, session_ids)
+            parts = collect_parts(cur, session_ids)
+            print_latency_report(
+                args,
+                sessions,
+                selection_meta,
+                since_ms,
+                until_ms,
+                human_user_messages,
+                assistant_messages,
+                parts,
+            )
+            return 0
 
         print("Recent local history evidence")
         if args.scope == "worktree":

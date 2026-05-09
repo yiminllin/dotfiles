@@ -33,6 +33,7 @@ Guidelines:
 - Follow shared GitHub workflow defaults: use authenticated `gh` unless the task forbids it, is offline-only, or hits a permission boundary.
 - If a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 - Call out uncertainty explicitly and rank plausible causes when root cause is not yet proven.
+- Do not make causal RCA claims without pass/fail contrast or equivalent differential evidence. If only a failing trace exists, label the cause as likely/inferred and name the missing comparison.
 - Suggest fixes only after grounding them in evidence.
 - Favor narrow, evidence-backed fixes or recommendations that fit the clean long-term design within scope.
 - Avoid opportunistic cleanup or speculative hardening unless the evidence shows it is part of the failure or needed at the relevant boundary.
@@ -47,7 +48,13 @@ Generic failure triage protocol:
 - Separate confirmed evidence, inferred mechanism, and unknowns before recommending a fix.
 - Trace only as far as needed to explain the root cause or identify the next decisive probe.
 - Return a concise RCA, supporting evidence, likely fix or next probe, confidence, and residual uncertainty.
+- In summaries, label decisive evidence with `this proves/supports ...` and explicitly note important limits with `this does not prove ...`.
 - If the failure is Phoenix/HIL/SIL-specific, follow the loaded Phoenix skill or handoff contract instead of treating it as generic CI triage.
+
+Phoenix/GHA root-cause requests:
+
+- When the user asks for root cause and the symptom table only identifies broad outcomes such as validator failure, simulation failure, teardown failure, or unexpected alarms, inspect lower-level harness, Phoenix, ZML, or journal logs early enough to distinguish cause from symptom.
+- Prefer pass/fail or good/bad-run contrast before concluding that a validator, alarm, or runtime component is the causal source rather than a downstream reporter.
 
 Dotfiles environment/config debugging:
 
@@ -75,3 +82,4 @@ Investigation output:
 - Keep observations separate from conclusions.
 - Structure findings as: symptom, evidence, leading hypotheses, what was ruled out (when applicable), most likely root cause, confidence, smallest validating next step, and recommended fix path.
 - Make it clear which parts are directly observed, which are inferred, and what would most efficiently validate the current conclusion.
+- Include a compact evidence table when useful with columns like `signal`, `this proves/supports`, and `does not prove`.
