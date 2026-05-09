@@ -24,7 +24,7 @@ The default output should include:
 
 Prefer high-signal comments over exhaustive commentary.
 
-For complex or unfamiliar subsystems, optionally add a short plain-English subsystem map with 1-2 concrete examples before the file reading order. Keep it explanatory, not a substitute for review findings.
+For complex or unfamiliar subsystems, or when the user asks for explanation, begin with toddler terminology and a small diagram before the normal review order/comments. Keep simple PRs concise.
 
 ## Workflow
 
@@ -35,7 +35,13 @@ Accept either:
 - a PR number, e.g. `52370`
 - a PR URL, e.g. `https://github.com/ZiplineTeam/FlightSystems/pull/52370`
 
-Use GitHub CLI for PR context:
+Prefer building PR context once with the deterministic helper when it is available, especially for a PR number or URL:
+
+```sh
+python3 "$HOME/.config/opencode/scripts/github_pr_context.py" <pr> --include-comments
+```
+
+For the current branch PR, omit `<pr>`. Use `--format markdown` only when a compact human-readable packet is more useful than JSON. If the helper is unavailable, fall back to direct GitHub CLI commands:
 
 ```sh
 gh pr view <pr> --json number,url,title,body,author,baseRefName,headRefName,isDraft,mergeStateStatus,reviewDecision,commits,files,additions,deletions
@@ -64,7 +70,7 @@ Before reviewing details, identify:
 
 For stacked PRs, make the diff boundary explicit so the user knows whether the review is against the PR base, `develop`, or another stack branch.
 
-If the subsystem is unfamiliar or the change spans several layers, sketch the flow in plain English: entry point -> core behavior -> persistence/runtime side effect -> tests/validation. Include small examples only when they help the reviewer understand why the suggested reading order makes sense.
+If the subsystem is unfamiliar, the change spans several layers, or the user asks for explanation/easy terminology/examples, first explain the moving pieces in toddler terminology plus a small diagram. Then continue with the normal review boundary, file order, suggested comments, and validation notes. Include small examples only when they help the reviewer understand why the suggested reading order makes sense.
 
 ### 3. Build a file reading order
 
@@ -140,8 +146,8 @@ Use this structure:
 ## PR structure overview
 - <brief structure of the change by subsystem/flow>
 
-## Optional subsystem map / examples
-- <only include when helpful for unfamiliar or multi-layer changes>
+## Optional toddler terminology / subsystem map
+- <only include when helpful for unfamiliar, multi-layer, or explanation-focused requests; include a tiny diagram>
 
 ## Suggested human review order
 1. `path/to/file.rs` — <why read first> [read carefully]
