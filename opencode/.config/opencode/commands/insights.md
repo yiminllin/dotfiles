@@ -26,7 +26,7 @@ Run the `/insights` workflow for shared OpenCode prompts, skills, and workflow m
 - the current target prompt/profile file(s)
 
 ## Auto-collected recent local history
-Start from this deterministic local evidence summary scanned across all local machine OpenCode history before weighing the current session. Counts/category signals come from the full requested scan while displayed examples may be truncated. If the script is unavailable, use a bounded operator-style local database scan before analysis; if neither can be inspected, say so explicitly and stay conservative.
+Start from this deterministic local evidence summary scanned across all local machine OpenCode history before weighing the current session. Counts/category signals come from the full requested scan while displayed examples may be truncated. The helper defaults to `$HOME/.local/share/opencode/opencode.db`; if the script is unavailable, do not grep/search for the history database path, and instead use that path or an explicit `--db-path` for a bounded read-only SQLite scan. If neither can be inspected, say so explicitly and stay conservative.
 
 !`python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all`
 
