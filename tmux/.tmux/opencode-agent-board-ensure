@@ -12,29 +12,47 @@ fi
 
 ensure_board() (
   local window_id=$1
-  local active_pane board_flag lock_name new_pane
+  local active_pane board_flag board_flags lock_name new_pane start_command start_commands window_name
 
   lock_name="opencode_agent_board_${window_id//[^A-Za-z0-9]/_}"
   tmux wait-for -L "$lock_name"
   trap 'tmux wait-for -U "$lock_name"' EXIT
 
-  if [[ "$(tmux display-message -p -t "$window_id" '#{window_name}')" == "session-finder" ]]; then
+  if ! window_name=$(tmux display-message -p -t "$window_id" '#{window_name}' 2>/dev/null); then
+    return 0
+  fi
+
+  if [[ "$window_name" == "session-finder" ]]; then
+    return 0
+  fi
+
+  if ! start_commands=$(tmux list-panes -t "$window_id" -F '#{pane_start_command}' 2>/dev/null); then
     return 0
   fi
 
   while IFS= read -r start_command; do
     [[ "$start_command" == *tmux-session-finder* || "$start_command" == *tmux-sessionizer* ]] && return 0
-  done < <(tmux list-panes -t "$window_id" -F '#{pane_start_command}')
+  done <<< "$start_commands"
+
+  if ! board_flags=$(tmux list-panes -t "$window_id" -F '#{@opencode_agent_board}' 2>/dev/null); then
+    return 0
+  fi
 
   while IFS= read -r board_flag; do
     [[ "$board_flag" == 1 ]] && return 0
-  done < <(tmux list-panes -t "$window_id" -F '#{@opencode_agent_board}')
+  done <<< "$board_flags"
 
-  active_pane=$(tmux display-message -p -t "$window_id" '#{pane_id}')
-  new_pane=$(tmux split-window -t "$window_id" -b -f -v -l 1 -d -P -F '#{pane_id}' "$board_script")
-  tmux set-option -pt "$new_pane" @opencode_agent_board 1 >/dev/null
-  tmux select-pane -t "$new_pane" -T 'Agent Board'
-  tmux select-pane -t "$active_pane"
+  if ! active_pane=$(tmux display-message -p -t "$window_id" '#{pane_id}' 2>/dev/null); then
+    return 0
+  fi
+
+  if ! new_pane=$(tmux split-window -t "$window_id" -b -f -v -l 1 -d -P -F '#{pane_id}' "$board_script" 2>/dev/null); then
+    return 0
+  fi
+
+  tmux set-option -pt "$new_pane" @opencode_agent_board 1 >/dev/null 2>&1 || true
+  tmux select-pane -t "$new_pane" -T 'Agent Board' 2>/dev/null || true
+  tmux select-pane -t "$active_pane" 2>/dev/null || true
 )
 
 if [[ -n "$target_window" ]]; then
@@ -42,5 +60,5 @@ if [[ -n "$target_window" ]]; then
 else
   while IFS= read -r window_id; do
     ensure_board "$window_id"
-  done < <(tmux list-windows -t "$session_name" -F '#{window_id}')
+  done < <(tmux list-windows -t "$session_name" -F '#{window_id}' 2>/dev/null || true)
 fi
