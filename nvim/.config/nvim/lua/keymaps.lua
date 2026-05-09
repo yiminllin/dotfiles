@@ -45,6 +45,9 @@ end)
 local function cycle_layout()
 	local wins = vim.api.nvim_tabpage_list_wins(0)
 	if #wins ~= 2 then
+		if vim.env.TMUX and vim.env.TMUX ~= "" then
+			vim.system({ "tmux", "run-shell", "-b", "~/.tmux/cycle-layouts.sh" })
+		end
 		return
 	end
 

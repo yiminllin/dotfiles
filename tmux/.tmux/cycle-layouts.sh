@@ -1,12 +1,30 @@
 #!/bin/bash
 # Cycle through layouts for left/right panes
 
-original_pane_index=$(tmux display-message -p "#{pane_index}")
+separator=$'\034'
+original_pane_id=$(tmux display-message -p "#{pane_id}")
 
-# Assume zeroth pane is the leftmost pane
-tmux select-pane -t 0
+target_pane=""
+target_top=""
+target_left=""
+while IFS="$separator" read -r pane_top pane_left pane_id board_flag; do
+  [[ "$board_flag" == 1 ]] && continue
+
+  if [[ -z "$target_pane" ]]; then
+    target_pane=$pane_id
+    target_top=$pane_top
+    target_left=$pane_left
+  elif (( pane_top > target_top || (pane_top == target_top && pane_left < target_left) )); then
+    target_pane=$pane_id
+    target_top=$pane_top
+    target_left=$pane_left
+  fi
+done < <(tmux list-panes -F "#{pane_top}${separator}#{pane_left}${separator}#{pane_id}${separator}#{@opencode_agent_board}")
+
+[[ -n "$target_pane" ]] || exit 0
+
 window_width=$(tmux display-message -p "#{window_width}")
-pane_width=$(tmux display-message -p "#{pane_width}")
+pane_width=$(tmux display-message -p -t "$target_pane" "#{pane_width}")
 
 # Categorize the window width as
 #     w0  w1  w2
@@ -18,11 +36,11 @@ pane_center_distance=$(( pane_width - w1 ))
 pane_center_abs_distance=${pane_center_distance#-}  # Absoluate value by str manipulation
 
 if (( pane_center_abs_distance <= 1 )); then
-  tmux resize-pane -x $w2
+  tmux resize-pane -t "$target_pane" -x $w2
 elif (( $pane_width <= $w1 )); then
-  tmux resize-pane -x $w1
+  tmux resize-pane -t "$target_pane" -x $w1
 else
-  tmux resize-pane -x $w0
+  tmux resize-pane -t "$target_pane" -x $w0
 fi
 
-tmux select-pane -t $original_pane_index
+tmux select-pane -t "$original_pane_id"
