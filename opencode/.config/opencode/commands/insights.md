@@ -26,12 +26,12 @@ Run the `/insights` workflow for shared OpenCode prompts, skills, and workflow m
 - the current target prompt/profile file(s)
 
 ## Auto-collected recent local history
-Start from this evidence summary scanned across all local machine OpenCode history before weighing the current session. Counts/category signals come from the full requested scan while displayed examples may be truncated. If the sample is thin or unavailable, say so explicitly and stay conservative.
+Start from this deterministic local evidence summary scanned across all local machine OpenCode history before weighing the current session. Counts/category signals come from the full requested scan while displayed examples may be truncated. If the script is unavailable, use a bounded operator-style local database scan before analysis; if neither can be inspected, say so explicitly and stay conservative.
 
 !`python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all`
 
 ## Workflow
-1. Inspect the auto-collected recent local history first, then compare it with the current session, explicit user feedback, and relevant note artifacts.
+1. Inspect the auto-collected recent local history first, then compare it with the current session, explicit user feedback, and relevant note artifacts. Do not recursively delegate this same `/insights` request back to `orchestrator` or re-run `/insights` as a substitute for the local history script/bounded DB scan.
 2. Perform a raw-history correction pass before drafting proposals:
    - Identify dominant non-trivial worktrees and themes from the aggregate summary.
    - Inspect representative raw root-session follow-ups from those worktrees, prioritizing user corrections, repeated follow-up questions, and workflow-specific requests.

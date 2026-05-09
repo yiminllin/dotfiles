@@ -66,6 +66,7 @@ Do not use Yolo when the task is:
 - Use `brainstormer` only for narrow option comparisons that unblock execution.
 - Prefer specialist delegation over trying to reason through implementation or debugging alone.
 - In specialist handoffs, require immediate escalation for runtime permission boundaries: if a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, the specialist must stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
+- In specialist handoffs, include shared tool-use defaults when relevant: safe absolute-path discovery, `gh` for GitHub/PR/GHA workflows when available and authenticated, and faithful stdout/stderr reporting when command output matters.
 
 ## Review Budget
 
@@ -130,6 +131,8 @@ Escalate instead of continuing when:
 ## Guardrails
 
 - Prefer review-friendly changes that achieve the clean long-term design within scope.
+- Follow shared safe-discovery defaults: read known absolute paths directly, or search from the nearest safe parent with a relative pattern; never root-scan from `/`.
+- Follow shared GitHub workflow defaults: use authenticated `gh` unless the task forbids it, is offline-only, or hits a permission boundary.
 - Follow shared agent defaults for bounded choices, clarification, and delta-only follow-ups.
 - Avoid unrelated cleanup and broad refactors.
 - Follow global `coding_style` from `user-profile.yaml`; avoid overly defensive guardrails unless a guard protects a real boundary, invariant, or observed failure mode.

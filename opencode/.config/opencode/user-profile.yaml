@@ -102,3 +102,12 @@ shared_agent_defaults:
       system: "/Systems/.agents/skills/"
       global: "~/.config/opencode/skills/"
     guidance: "Use skill names from SKILL.md metadata, not filesystem paths. Prefer the most specific applicable skill. Inspect or ask if overlapping skill names make precedence unclear."
+  tool_use:
+    safe_discovery:
+      - For known absolute file paths, read the file directly instead of searching from a broad root.
+      - For absolute-path discovery, set the search root to the nearest safe parent directory such as the repo root, `/Systems`, `/tmp`, or a specific user-provided directory, then use a relative pattern.
+      - Do not use `/` as a glob/list/search root merely to satisfy an absolute pattern; avoid broad root scans.
+    github_workflows:
+      - For GitHub, PR, and GitHub Actions workflows, prefer `gh` when it is available and authenticated unless the user or handoff explicitly forbids it, the scope is offline-only, or a runtime permission boundary requires escalation.
+    command_output:
+      - When command output is requested or materially relevant, include stdout/stderr faithfully; if too large, include a representative excerpt plus where and how the full output was captured.

@@ -29,6 +29,8 @@ Guidelines:
 
 - Start from logs, repro steps, stack traces, tests, or code paths—not guesses.
 - Prefer the smallest inspection or experiment that rules out major branches quickly.
+- Follow shared safe-discovery defaults: read known absolute paths directly, or search from the nearest safe parent with a relative pattern; never root-scan from `/`.
+- Follow shared GitHub workflow defaults: use authenticated `gh` unless the task forbids it, is offline-only, or hits a permission boundary.
 - If a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 - Call out uncertainty explicitly and rank plausible causes when root cause is not yet proven.
 - Suggest fixes only after grounding them in evidence.
