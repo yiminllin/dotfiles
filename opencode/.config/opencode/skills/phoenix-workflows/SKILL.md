@@ -14,7 +14,7 @@ Use this skill for Zipline-internal Phoenix requests that involve:
 - fetching Phoenix/HIL artifacts from S3
 - launching a Phoenix HIL run locally or through the checked-in GitHub workflow
 
-If the user gives a failing GitHub Actions run/job URL and wants root-cause analysis for one attempt, prefer `$debug-phoenix-hil-from-gha`. If they specifically want to upload a local Phoenix log directory and generate a LogPlots link, prefer `$upload_local_log_to_s3` when it is available from repo/system skill roots such as `.agents/skills/` or `/Systems/.agents/skills/`; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly.
+If the user asks for read-only HIL/GHA evidence collection, recent HIL run lookup, preset sync-check, artifact inspection, or root-cause analysis for one GitHub Actions run/job attempt, prefer `$phoenix-hil-gha`. If they specifically want to upload a local Phoenix log directory and generate a LogPlots link, prefer `$upload_local_log_to_s3` when it is available from repo/system skill roots such as `.agents/skills/` or `/Systems/.agents/skills/`; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly.
 
 For local Phoenix SIL runs, if `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, treat post-run log upload, Baraza-link capture from upload output, and Baraza-link return as the default behavior unless the user opts out. Do not apply this default to HIL runs unless the user explicitly asks.
 

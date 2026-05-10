@@ -203,8 +203,8 @@ If a required plan/design artifact is missing for non-trivial work, handle that 
 
 Debugging routing precedence:
 
-1. For Phoenix HIL failures from GitHub Actions, load `debug-phoenix-hil-from-gha` before delegating.
-2. For Phoenix SIL/no_sync scenarios, HIL workflow launches, or local Phoenix log inspection, load `phoenix-workflows` before delegating.
+1. For read-only Phoenix HIL/GHA workflows and questions—GHA HIL failures, HIL job sourcing, artifact/evidence packet generation, recent HIL run lookup, or HIL preset sync-check—load `phoenix-hil-gha` before delegating.
+2. For Phoenix SIL/no_sync/local scenario handling, HIL workflow launches/execution, or local Phoenix log inspection unrelated to GHA HIL evidence packets, load `phoenix-workflows` before delegating.
 3. For dotfiles environment/config-loading issues involving OpenCode, tmux, fish, stow, devcontainers, shell startup, symlinks, Neovim plugin config, or env propagation, route to `debugger` and include active runtime path vs stowed repo source path checks in the handoff.
 4. For generic failed commands, tests, CI/GHA jobs, runtime logs, stack traces, or error reports, route to `debugger` with exact commands, check names, job URLs, log paths, and observed symptoms.
 5. For a lightweight "what does this error mean?" explanation without a full debugging request, prefer direct explanation or `code-explainer` when code tracing is needed.
