@@ -5,6 +5,7 @@ set -euo pipefail
 separator=$'\034'
 refresh_interval=2
 current_pane=${TMUX_PANE:-$(tmux display-message -p '#{pane_id}')}
+current_window_id=$(tmux display-message -p -t "$current_pane" '#{window_id}' 2>/dev/null || true)
 
 declare -a rows=()
 declare -a target_panes=()
@@ -74,6 +75,8 @@ collect_agents() {
   local -a running=()
   local entry is_board pane_id pane_index pane_title session_id session_name window_id window_index current_cmd start_cmd state
 
+  [[ -n "$current_window_id" ]] || return 0
+
   while IFS="$separator" read -r pane_id session_id session_name window_id window_index pane_index is_board pane_title current_cmd start_cmd; do
     [[ "$is_board" == 1 ]] && continue
     is_opencode_values "$pane_title" "$current_cmd" "$start_cmd" || continue
@@ -87,7 +90,7 @@ collect_agents() {
       running+=("$entry")
     fi
   done < <(
-    tmux list-panes -a \
+    tmux list-panes -t "$current_window_id" \
       -F "#{pane_id}${separator}#{session_id}${separator}#{session_name}${separator}#{window_id}${separator}#{window_index}${separator}#{pane_index}${separator}#{@opencode_agent_board}${separator}#{pane_title}${separator}#{pane_current_command}${separator}#{pane_start_command}" \
       | sort -t"$separator" -k3,3 -k5,5n -k6,6n
   )
@@ -98,9 +101,7 @@ collect_agents() {
 
 render() {
   local index=1
-  local current_window_id index_label name name_label pane_id row session_id state window_id
-
-  current_window_id=$(tmux display-message -p -t "$current_pane" '#{window_id}' 2>/dev/null || true)
+  local index_label name name_label pane_id row session_id state window_id
 
   rows=()
   target_panes=()

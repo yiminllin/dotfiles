@@ -4,20 +4,25 @@ set -euo pipefail
 
 separator=$'\034'
 
-resize_window_boards() {
+resize_window_boards() (
   local window=$1
-  local pane_id board_flag
+  local lock_name pane_id pane_height board_flag
 
   [[ -n "$window" ]] || return 0
   [[ "$(tmux display-message -p -t "$window" '#{window_zoomed_flag}' 2>/dev/null || true)" != 1 ]] || return 0
 
-  while IFS="$separator" read -r pane_id board_flag; do
+  lock_name="opencode_agent_board_resize_${window//[^A-Za-z0-9]/_}"
+  tmux wait-for -L "$lock_name"
+  trap 'tmux wait-for -U "$lock_name"' EXIT
+
+  while IFS="$separator" read -r pane_id pane_height board_flag; do
     [[ "$board_flag" == 1 ]] || continue
+    [[ "$pane_height" == 1 ]] && continue
     tmux resize-pane -t "$pane_id" -y 1 >/dev/null 2>&1 || true
   done < <(
-    tmux list-panes -t "$window" -F "#{pane_id}${separator}#{@opencode_agent_board}" 2>/dev/null || true
+    tmux list-panes -t "$window" -F "#{pane_id}${separator}#{pane_height}${separator}#{@opencode_agent_board}" 2>/dev/null || true
   )
-}
+)
 
 case ${1:-apply-window} in
   apply-window)
