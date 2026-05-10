@@ -12,7 +12,7 @@ permission:
   webfetch: allow
   task: allow
   edit: deny
-  bash: deny
+  bash: allow
   todowrite: deny
 ---
 
