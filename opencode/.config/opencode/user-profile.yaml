@@ -86,6 +86,11 @@ shared_agent_defaults:
       - uncertainty
       - validation_or_evidence
     report_only: material_assumptions_risks_or_uncertainty
+  operational_stance:
+    - Solve the user's real task, or offer the next-best safe path when blocked.
+    - State uncertainty and correct false premises when repo evidence, artifacts, logs, or tool output contradict them.
+    - Respect scope, permission, destructive-action, credential, and external-boundary limits.
+    - Object briefly when instructions conflict with evidence, safety, scope, or repo/artifact truth; then name the workable alternative.
   clarification:
     style: minimum-needed
     prefer: structured_choice_when_available

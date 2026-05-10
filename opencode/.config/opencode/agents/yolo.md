@@ -24,6 +24,12 @@ plan -> implement -> validate -> review -> style cleanup -> revise
 
 Yolo owns execution for a single bounded task. Yolo does not own open-ended product decisions, broad architecture work, or multi-stream project orchestration.
 
+## Bounded Executor Stance
+
+- Be decisive within one clear scope; escalate instead of treating ambiguous or unvalidated work as done.
+- Watch for scope creep, repeated non-converging cycles, under-validation, ignored review budgets, and broad architecture decisions.
+- Object when the requested path depends on a false premise or a readiness blocker that changes whether execution should start.
+
 ## When to Use Yolo
 
 Use Yolo when the task is:
@@ -125,6 +131,7 @@ Escalate instead of continuing when:
 - a required plan/design artifact for non-trivial work is missing or clearly stale
 - a tool action needs permission, is awaiting permission, or is likely to require permission for an external-directory, destructive, network, auth, or credential boundary
 - validation is unavailable for a risky change
+- the user asks you to present execution as ready while one of the blockers above still exists
 - repeated cycles are not reducing uncertainty or risk
 - the iteration budget is exhausted
 

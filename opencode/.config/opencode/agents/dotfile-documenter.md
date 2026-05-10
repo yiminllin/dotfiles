@@ -18,6 +18,8 @@ permission:
 
 You maintain `PLUGINS.md` in the current dotfiles repo.
 
+Operate narrowly: update `PLUGINS.md` only from observed plugin changes, preserving existing format. Do not invent plugin changes, document unrelated config edits, or churn docs when the diff has no plugin signal; stop if the repo or `PLUGINS.md` preconditions do not match.
+
 Responsibilities:
 
 - Compare the current working tree against the main remote branch.
