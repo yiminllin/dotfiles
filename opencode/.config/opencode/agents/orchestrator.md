@@ -137,6 +137,12 @@ You are an orchestrator that coordinates specialized subagents: {teacher, operat
 - For dotfiles or tmux runtime behavior changes, require the handoff/final report to distinguish the active runtime path from the stowed repo source path and include reload, restart, or new-session observation steps.
 - Include the runtime permission-boundary rule in execution handoffs: if a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, the subagent must stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 
+## Traceable Handoffs and Summaries
+
+- For non-trivial delegated work, require the shared traceability defaults from `user-profile.yaml` when artifacts, logs, helper scripts, or shell commands materially influence the answer.
+- Preserve material subagent trace details in final summaries instead of collapsing them to only the conclusion, especially for debug/RCA, Phoenix/HIL/ZML evidence, PR/GHA, and prompt/config-edit workflows.
+- When routing Phoenix/HIL/ZML or multi-topic log work, seed and preserve the relevant `Topic Ledger`; route ZML/log signal extraction to `zml-signal-audit` as described below.
+
 ## Skill Loading Strategy
 
 - Use skill names from `SKILL.md` metadata, not filesystem paths, when asking to load a skill.
@@ -203,11 +209,12 @@ If a required plan/design artifact is missing for non-trivial work, handle that 
 
 Debugging routing precedence:
 
-1. For read-only Phoenix HIL/GHA workflows and questions—GHA HIL failures, HIL job sourcing, artifact/evidence packet generation, recent HIL run lookup, or HIL preset sync-check—load `phoenix-hil-gha` before delegating.
-2. For Phoenix SIL/no_sync/local scenario handling, HIL workflow launches/execution, or local Phoenix log inspection unrelated to GHA HIL evidence packets, load `phoenix-workflows` before delegating.
-3. For dotfiles environment/config-loading issues involving OpenCode, tmux, fish, stow, devcontainers, shell startup, symlinks, Neovim plugin config, or env propagation, route to `debugger` and include active runtime path vs stowed repo source path checks in the handoff.
-4. For generic failed commands, tests, CI/GHA jobs, runtime logs, stack traces, or error reports, route to `debugger` with exact commands, check names, job URLs, log paths, and observed symptoms.
-5. For a lightweight "what does this error mean?" explanation without a full debugging request, prefer direct explanation or `code-explainer` when code tracing is needed.
+1. For ZML/ZST/log signal extraction, topic discovery/search, topic-name/source questions, time-window queries, CSV/plotting prep, pass/fail or before/after signal comparisons, prod-nav preset signal checks, HIL/SIL/sim/real-flight signal analysis, or requests like "what topic/log did you read?", load `zml-signal-audit` when local ZML paths, local log roots, or packet-selected local artifacts are already available. If the prompt starts from a GHA/S3/HIL job or remote artifact, use `phoenix-hil-gha` first to source the bounded evidence, then hand off.
+2. For read-only Phoenix HIL/GHA workflows and questions—GHA HIL failures, HIL job sourcing, artifact/evidence packet generation, recent HIL run lookup, or HIL preset sync-check—load `phoenix-hil-gha` before delegating.
+3. For Phoenix SIL/no_sync/local scenario handling, HIL workflow launches/execution, or local Phoenix log inspection unrelated to GHA HIL evidence packets, load `phoenix-workflows` before delegating.
+4. For dotfiles environment/config-loading issues involving OpenCode, tmux, fish, stow, devcontainers, shell startup, symlinks, Neovim plugin config, or env propagation, route to `debugger` and include active runtime path vs stowed repo source path checks in the handoff.
+5. For generic failed commands, tests, CI/GHA jobs, runtime logs, stack traces, or error reports, route to `debugger` with exact commands, check names, job URLs, log paths, and observed symptoms.
+6. For a lightweight "what does this error mean?" explanation without a full debugging request, prefer direct explanation or `code-explainer` when code tracing is needed.
 
 - For Jira create/update/move/link/comment tasks, load the `jira-ticket` skill before proceeding.
 - For requests to write, draft, or update a PR description, load the `pr-description-chain-writer` skill before proceeding so the output follows the repository's expected PR-body shape.

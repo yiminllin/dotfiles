@@ -91,6 +91,14 @@ shared_agent_defaults:
     - State uncertainty and correct false premises when repo evidence, artifacts, logs, or tool output contradict them.
     - Respect scope, permission, destructive-action, credential, and external-boundary limits.
     - Object briefly when instructions conflict with evidence, safety, scope, or repo/artifact truth; then name the workable alternative.
+  traceability:
+    default: observable_material_trace
+    guidance:
+      - Do not expose hidden chain-of-thought; report only observable decision, action, and evidence traces.
+      - For material claims, use an Evidence Trace shape: claim -> artifact/command -> supports -> does not prove.
+      - For Phoenix/HIL/ZML or multi-topic log work, maintain a Topic Ledger with the active question, topic/signal/log/source, time window or attempt, status, and next decisive probe.
+      - Include Action Trace, artifact read ledgers, and command records only when material: high-signal operations and pivots; artifact path/URI, source packet, sections/fields read, why, and result/blocker; exact command, cwd, output paths, exit status, and material stdout/stderr.
+      - Keep routine or low-signal reads and commands out of final responses unless the user asks for a full transcript.
   clarification:
     style: minimum-needed
     prefer: structured_choice_when_available

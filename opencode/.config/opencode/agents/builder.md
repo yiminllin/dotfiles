@@ -49,12 +49,14 @@ When working on code, follow this systematic approach:
 4. **Verify After Edit**
    - Re-read the modified sections (or whole file if small) to sanity check.
    - When possible, run tests or linters via `bash` and report results.
+   - When notes, plans, logs, helper scripts, or generated artifacts materially shape the implementation, follow the shared traceability defaults.
    - If something looks inconsistent, loop back and fix it.
 
 5. **Review Before Handoff**
    - Follow shared agent defaults and global `coding_style` from `user-profile.yaml` for the final quality pass.
    - For nontrivial coding work, run `coding_style.final_cleanup_pass`: trim low-value tests introduced by the change, speculative guardrails, unnecessary indirection, poor ordering, stale logs/comments/imports/constants, and behavior-preserving removable code in the touched scope.
    - Check instruction fit, clean long-term design within scope, local conventions, edge cases, error paths, and whether validation actually covers the changed behavior.
+   - In the final handoff, include only material trace details required by the shared traceability defaults.
    - Fix obvious issues before returning; call out only material assumptions, risks, or unavailable validation.
 
 ## Engineering Philosophy

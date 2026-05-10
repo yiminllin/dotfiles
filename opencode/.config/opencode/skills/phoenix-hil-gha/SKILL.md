@@ -1,6 +1,6 @@
 ---
 name: phoenix-hil-gha
-description: Handle Phoenix HIL/GHA workflows: source recent HIL jobs, summarize exact GitHub Actions runs/jobs, generate evidence packets, check preset sync against /Systems, inspect artifacts, and debug failures when requested with handoff to ZML signal audit for deeper signal analysis.
+description: "Handle Phoenix HIL/GHA workflows: source recent HIL jobs, summarize exact GitHub Actions runs/jobs, generate evidence packets, check preset sync against /Systems, inspect artifacts, and debug failures when requested with handoff to `zml-signal-audit` for deeper signal analysis."
 ---
 
 # Phoenix HIL/GHA Workflows
@@ -32,7 +32,7 @@ Use symptom summaries to choose where to look, not as the causal answer. Do not 
 | Pass/fail GHA regression comparison | Summarize exact failing and passing job/run packets before source inspection. | `summarize "$FAIL_JOB" --format both`; `summarize "$PASS_JOB" --format both` | Compare `test_record.json`, log summaries, mission context, and `Key S3 artifacts`; inspect code/config only for supported differences. |
 | Deeper failure RCA with code references | Start from packet evidence, then inspect only needed logs/ZML and source files. | Bounded download from packet S3 root; `rg` failing validator/alarm in logs and source | RCA `TL;DR`, `Detailed analysis`, `Potential fixes`, `Artifacts and steps used`. |
 | Bounded artifact download for selected job evidence | Download only selected job evidence needed for a claim. | Use packet `Key S3 artifacts`/S3 root; `aws s3 cp/sync` into `/tmp/hil_<run>_<job>` | State artifact path, scope limit, and what it proves/does not prove. |
-| ZML signal audit/pass-fail handoff | When validator/log evidence points to signal behavior, stop ad-hoc spelunking and hand off. | Pass selected job URL, packet path, key S3 rows, validator/alarm names, and question | Handoff packet; no unsupported signal RCA claim. |
+| ZML signal audit/pass-fail handoff | When validator/log evidence points to signal behavior, load `zml-signal-audit` and stop ad-hoc spelunking. | Pass selected job URL, packet path, key S3 rows, validator/alarm names, selected local ZML paths if already downloaded, source-type context, and question | Handoff packet with Topic Ledger seed; no unsupported signal RCA claim. |
 | PR/Jira/verification evidence packet | Collect links/status/evidence for review or ticket context only. | `summarize`/`recent` packets plus relevant PR/Jira links provided by user | Evidence-only packet; do not edit PR/Jira unless a separate request/skill handles it. |
 | Status/rate-limit/auth blocker reporting | Surface blocker from preflight or packet and stop safely. | `gh auth status`, packet `blockers`, command stderr/status | Exact blocker, affected workflow, and user action/decision needed. |
 
@@ -41,6 +41,14 @@ Use symptom summaries to choose where to look, not as the causal answer. Do not 
 - Preferred input for exact handling: `https://github.com/ZiplineTeam/FlightSystems/actions/runs/<run_id>/job/<job_id>`.
 - Run URLs, S3 roots, local `test_record.json`, and local logs are valid for summarization when the user asks for evidence collection rather than root-cause debugging.
 - English descriptions are allowed only long enough to resolve exact candidate job(s). If multiple candidates match, stop and ask the user to pick one exact `job_url`/`gha_url` before root-cause analysis.
+
+## Traceability contract
+
+- Follow the shared traceability defaults from `user-profile.yaml` for evidence packets, RCA responses, and handoffs.
+- For Phoenix/HIL/ZML questions, keep the `Topic Ledger` grounded in the exact job/run attempt, log/source artifact, validator/alarm/topic/signal, time window when known, status, and next decisive probe.
+- Preserve material packet paths, JSON/Markdown fields, helper invocations, output paths, exit status, and stdout/stderr excerpts when they affect conclusions or blockers.
+- For debug/RCA claims, include an `Evidence Trace` for material claims.
+- Preserve these ledgers in handoffs to `debugger` or `zml-signal-audit`; do not reduce them to a conclusion-only summary.
 
 ## Canonical helper
 
@@ -134,7 +142,7 @@ Common high-signal artifacts:
 - `*.zml` / `*.zml.zst`: compute, droid, dock, and world logs used by validators.
 - Journal content often appears as `journalctl_log` topics inside ZML streams rather than standalone text files.
 
-If a failure points to ZML signal behavior, hand off to the ZML signal audit workflow instead of doing broad ad-hoc signal spelunking. Pass the selected job URL, packet JSON/Markdown path, relevant `Key S3 artifacts` rows, validator/alarm names, and the specific question to answer.
+If a failure points to ZML signal behavior, load `zml-signal-audit` instead of doing broad ad-hoc signal spelunking. Pass the selected job URL, packet JSON/Markdown path, relevant `Key S3 artifacts` rows, validator/alarm names, selected local ZML paths if already downloaded, source-type context, the specific question to answer, and the current Topic Ledger.
 
 ```bash
 command -v aws >/dev/null || { echo "aws CLI not found; use packet blockers or install aws before artifact download"; exit 1; }
@@ -181,6 +189,8 @@ For evidence-only packet generation or recent-job sourcing, respond with:
    - Compact bullets or tables for key S3 artifacts, Mission context, `test_record.json`, and high-signal log summary lines.
 3. `Next steps`
    - Only concrete follow-ups needed to resolve blockers, disambiguate candidates, or start deeper debugging.
+4. `Artifacts and commands used`
+   - Compact artifact read ledger plus exact helper/script commands, output paths, exit status, and material blockers.
 
 For PR/Jira/verification contexts, include provided links/status/evidence in the packet summary, but do not edit external systems. For auth, rate-limit, status, or permission blockers, return the exact blocker, affected route, and requested user action.
 
@@ -193,7 +203,9 @@ For requested failure debugging/root-cause analysis, respond with:
 3. `Potential fixes`
    - Immediate mitigation, durable fix, and verification ideas.
 4. `Artifacts and steps used`
-   - Compact table listing artifact/command, `this proves/supports`, and `does not prove`.
+   - Compact artifact read ledger and command records.
+5. `Topic Ledger` and `Evidence Trace`
+   - Include the active topic/log/source ledger and a claim-to-evidence table with `this proves/supports` and `does not prove`.
 
 Keep both response shapes concise. Prefer short evidence-backed statements over broad speculation.
 

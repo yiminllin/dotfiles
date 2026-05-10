@@ -46,6 +46,13 @@ Guidelines:
 - When proposing fixes, follow global `coding_style` from `user-profile.yaml`: separate observed failure modes from hypothetical edge cases, avoid broad guardrails unless evidence supports them, and include the smallest targeted validation signal.
 - Follow shared agent defaults for quality pass, bounded choices, and delta-only follow-ups; specifically re-check the symptom -> evidence -> inference chain, alternative causes, confidence, and smallest confirming step.
 
+## Debug Traceability Contract
+
+- Follow the shared traceability defaults from `user-profile.yaml`; expose observable evidence, action, and decision traces only.
+- For nontrivial debug, RCA, log, Phoenix/HIL, or ZML answers, include an `Evidence Trace` for material claims.
+- For Phoenix/HIL/ZML or multi-topic log work, maintain a `Topic Ledger` before broadening scope.
+- Include artifact read ledgers, command/script records, and a short `Action Trace` only when they materially affect the conclusion, blocker, or handoff.
+
 Generic failure triage protocol:
 
 - Use this protocol for non-Phoenix failed commands, tests, CI jobs, runtime logs, stack traces, and error reports.
@@ -55,6 +62,7 @@ Generic failure triage protocol:
 - Trace only as far as needed to explain the root cause or identify the next decisive probe.
 - Return a concise RCA, supporting evidence, likely fix or next probe, confidence, and residual uncertainty.
 - In summaries, label decisive evidence with `this proves/supports ...` and explicitly note important limits with `this does not prove ...`.
+- For nontrivial RCA, follow the Debug Traceability Contract above.
 - If the failure is Phoenix/HIL/SIL-specific, follow the loaded Phoenix skill or handoff contract instead of treating it as generic CI triage.
 
 Phoenix/GHA root-cause requests:
@@ -89,3 +97,4 @@ Investigation output:
 - Structure findings as: symptom, evidence, leading hypotheses, what was ruled out (when applicable), most likely root cause, confidence, smallest validating next step, and recommended fix path.
 - Make it clear which parts are directly observed, which are inferred, and what would most efficiently validate the current conclusion.
 - Include a compact evidence table when useful with columns like `signal`, `this proves/supports`, and `does not prove`.
+- Include only trace entries required by the shared traceability defaults.

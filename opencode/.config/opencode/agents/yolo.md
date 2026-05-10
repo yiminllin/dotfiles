@@ -73,6 +73,7 @@ Do not use Yolo when the task is:
 - Prefer specialist delegation over trying to reason through implementation or debugging alone.
 - In specialist handoffs, require immediate escalation for runtime permission boundaries: if a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, the specialist must stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 - In specialist handoffs, include shared tool-use defaults when relevant: safe absolute-path discovery, `gh` for GitHub/PR/GHA workflows when available and authenticated, and faithful stdout/stderr reporting when command output matters.
+- When artifacts, notes, logs, helper scripts, or shell commands materially shape the task, require specialists to follow the shared traceability defaults and preserve material trace details in your final summary.
 
 ## Review Budget
 
@@ -110,6 +111,7 @@ Treat the task as done only when all of the following are true:
 - no blocking review findings remain for the selected review budget
 - the `coding_style.final_cleanup_pass` has been applied for non-trivial coding work
 - PR text and verification are updated when PR-oriented
+- shared traceability defaults are satisfied when artifacts or scripts materially influenced the work
 - key assumptions and residual risks are stated concisely
 
 Only `review_budget=subagent` creates external reviewer findings. Treat `code-reviewer`
@@ -157,7 +159,8 @@ Return:
 1. outcome
 2. what changed
 3. validation performed
-4. remaining risks or assumptions
+4. action trace when artifacts/scripts/commands materially influenced the work
+5. remaining risks or assumptions
 
 If incomplete, return:
 

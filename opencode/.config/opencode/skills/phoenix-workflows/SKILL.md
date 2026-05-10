@@ -14,7 +14,7 @@ Use this skill for Zipline-internal Phoenix requests that involve:
 - fetching Phoenix/HIL artifacts from S3
 - launching a Phoenix HIL run locally or through the checked-in GitHub workflow
 
-If the user asks for read-only HIL/GHA evidence collection, recent HIL run lookup, preset sync-check, artifact inspection, or root-cause analysis for one GitHub Actions run/job attempt, prefer `$phoenix-hil-gha`. If they specifically want to upload a local Phoenix log directory and generate a LogPlots link, prefer `$upload_local_log_to_s3` when it is available from repo/system skill roots such as `.agents/skills/` or `/Systems/.agents/skills/`; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly.
+If the user asks for read-only HIL/GHA evidence collection, recent HIL run lookup, preset sync-check, artifact inspection, or root-cause analysis for one GitHub Actions run/job attempt, prefer `$phoenix-hil-gha`. After SIL/sim/HIL logs are collected locally, if they ask for ZML signal extraction, topic-name/source lookup, time-window extraction, CSV/plotting prep, pass/fail or before/after signal comparison, prod-nav preset signal checks, or "what topic/log did you read?", prefer `$zml-signal-audit` and keep GHA/S3 discovery out of that handoff. If they specifically want to upload a local Phoenix log directory and generate a LogPlots link, prefer `$upload_local_log_to_s3` when it is available from repo/system skill roots such as `.agents/skills/` or `/Systems/.agents/skills/`; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly.
 
 For local Phoenix SIL runs, if `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, treat post-run log upload, Baraza-link capture from upload output, and Baraza-link return as the default behavior unless the user opts out. Do not apply this default to HIL runs unless the user explicitly asks.
 
@@ -84,6 +84,13 @@ scenario config (mocked/simulated) -> Phoenix orchestration/services (real runti
 ```
 
 For failure triage, do not make causal RCA claims without pass/fail contrast or equivalent differential evidence. If only the failing run is available, say what the current evidence supports and what it does not prove.
+
+## Traceability for Phoenix/ZML/HIL evidence
+
+- Follow the shared traceability defaults from `user-profile.yaml` for nontrivial inspection, evidence, and RCA-style answers.
+- For Phoenix/ZML/HIL work, keep the `Topic Ledger` grounded in the exact scenario/job/log root, topic/signal/source file, time window or run attempt, status, and next decisive probe.
+- Preserve material local log, validator, ZML, `test_record.json`, downloaded artifact, generated report, and helper-command records when they affect the answer or blocker.
+- For ZML topic inventory, signal extraction, time-window extraction, CSV/plotting prep, or pass/fail/before-after comparisons after SIL/sim/HIL log collection, hand off to `$zml-signal-audit` with the topic ledger seed, source-type context, and selected local ZML paths instead of broad ad-hoc signal spelunking.
 
 ## Default post-run upload for local SIL runs
 
@@ -378,4 +385,5 @@ When using this skill, reply with:
 - the safest next read-only step
 - any confirmation needed before launching Phoenix, repeated flakiness runs, or real HIL
 - if a local Phoenix run was executed and uploaded, the final S3 path and Baraza link, plus whether the tmux buffer copy happened
-- for RCA-style answers, concise evidence labels: `this proves/supports ...` and `this does not prove ...`
+- for RCA-style answers, an `Evidence Trace` with concise labels: `this proves/supports ...` and `this does not prove ...`
+- for artifact/log/ZML evidence work, the material `Topic Ledger`, commands used, artifacts read, and blockers or next decisive probe

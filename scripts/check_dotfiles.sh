@@ -107,7 +107,7 @@ check_agent_permissions() {
   require_agent_permission opencode/.config/opencode/agents/yolo.md task allow || return 1
   require_agent_permission opencode/.config/opencode/agents/orchestrator.md task allow || return 1
   require_agent_permission opencode/.config/opencode/agents/orchestrator.md edit deny || return 1
-  require_agent_permission opencode/.config/opencode/agents/orchestrator.md bash deny || return 1
+  require_agent_permission opencode/.config/opencode/agents/orchestrator.md bash allow || return 1
   require_agent_permission opencode/.config/opencode/agents/builder.md bash allow || return 1
   require_agent_permission opencode/.config/opencode/agents/builder.md edit allow || return 1
   require_agent_permission opencode/.config/opencode/agents/builder.md task allow || return 1
