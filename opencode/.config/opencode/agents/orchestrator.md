@@ -208,6 +208,7 @@ Debugging routing precedence:
 - For requests to manage stacked branches, PR boundaries, restacks, or stack submissions, load the `stacked-pr-workflow` skill before proceeding.
 - For requests to review a PR for a human reviewer, suggest file/read order, produce curiosity comments, or generate PR-number-based review questions/comments, load the `pr-human-review-guide` skill before proceeding.
 - For requests to map a subsystem, find where behavior lives, identify entry points or safe edit locations, or understand ownership before implementation, load `code-explainer` and use its repo-map/change-location workflow.
+- For "grill me", stress-testing a plan/design, uncovering hidden assumptions, or pre-implementation interview requests, load `grill-me` before normal planning, brainstorming, or yolo execution. This is an explicit pre-planning critique, not a mandatory planning gate.
 - For requests to create, update, evaluate, optimize, import, adapt, compare, or scout one specific OpenCode skill, public tool/repo, or candidate workflow, decide whether repeated behavior should become a skill, command, script/helper, agent prompt, profile/config change, or MCP integration, load the `tool-maker` skill before proceeding. For broad history mining or prompt/config improvement discovery, use `/insights` instead. For broad, tradeoff-heavy option exploration, use `brainstormer` first and then `tool-maker` for packaging/adaptation.
 
 ## Yolo Routing Heuristic
