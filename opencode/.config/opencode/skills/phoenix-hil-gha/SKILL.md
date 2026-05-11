@@ -1,9 +1,11 @@
 ---
 name: phoenix-hil-gha
-description: "Handle Phoenix HIL/GHA workflows: source recent HIL jobs, summarize exact GitHub Actions runs/jobs, generate evidence packets, check preset sync against /Systems, inspect artifacts, and debug failures when requested with handoff to `zml-signal-audit` for deeper signal analysis."
+description: "Legacy/expert escape hatch for low-level Phoenix HIL/GHA evidence helpers. Prefer `phoenix_inspector` for normal inventory, recent-HIL, sync-check, taxonomy, and inspection workflows."
 ---
 
 # Phoenix HIL/GHA Workflows
+
+> Legacy route: prefer `$phoenix_inspector` for normal read-only HIL/GHA/S3 inventory, recent-HIL lookup, preset sync-check, packet-based inspection, pass/fail comparison, and batch taxonomy. Use this skill only to debug or operate the older `hil_evidence_cli.py` helper directly.
 
 ## Goal
 
@@ -32,7 +34,7 @@ Use symptom summaries to choose where to look, not as the causal answer. Do not 
 | Pass/fail GHA regression comparison | Summarize exact failing and passing job/run packets before source inspection. | `summarize "$FAIL_JOB" --format both`; `summarize "$PASS_JOB" --format both` | Compare `test_record.json`, log summaries, mission context, and `Key S3 artifacts`; inspect code/config only for supported differences. |
 | Deeper failure RCA with code references | Start from packet evidence, then inspect only needed logs/ZML and source files. | Bounded download from packet S3 root; `rg` failing validator/alarm in logs and source | RCA `TL;DR`, `Detailed analysis`, `Potential fixes`, `Artifacts and steps used`. |
 | Bounded artifact download for selected job evidence | Download only selected job evidence needed for a claim. | Use packet `Key S3 artifacts`/S3 root; `aws s3 cp/sync` into `/tmp/hil_<run>_<job>` | State artifact path, scope limit, and what it proves/does not prove. |
-| ZML signal audit/pass-fail handoff | When validator/log evidence points to signal behavior, load `zml-signal-audit` and stop ad-hoc spelunking. | Pass selected job URL, packet path, key S3 rows, validator/alarm names, selected local ZML paths if already downloaded, source-type context, and question | Handoff packet with Topic Ledger seed; no unsupported signal RCA claim. |
+| ZML signal audit/pass-fail handoff | Prefer `phoenix_inspector`; use this legacy route only when debugging the old helper. | Pass selected job URL, packet path, key S3 rows, validator/alarm names, selected local ZML paths if already downloaded, source-type context, and question | Handoff packet with Topic Ledger seed; no unsupported signal RCA claim. |
 | PR/Jira/verification evidence packet | Collect links/status/evidence for review or ticket context only. | `summarize`/`recent` packets plus relevant PR/Jira links provided by user | Evidence-only packet; do not edit PR/Jira unless a separate request/skill handles it. |
 | Status/rate-limit/auth blocker reporting | Surface blocker from preflight or packet and stop safely. | `gh auth status`, packet `blockers`, command stderr/status | Exact blocker, affected workflow, and user action/decision needed. |
 
@@ -48,7 +50,7 @@ Use symptom summaries to choose where to look, not as the causal answer. Do not 
 - For Phoenix/HIL/ZML questions, keep the `Topic Ledger` grounded in the exact job/run attempt, log/source artifact, validator/alarm/topic/signal, time window when known, status, and next decisive probe.
 - Preserve material packet paths, JSON/Markdown fields, helper invocations, output paths, exit status, and stdout/stderr excerpts when they affect conclusions or blockers.
 - For debug/RCA claims, include an `Evidence Trace` for material claims.
-- Preserve these ledgers in handoffs to `debugger` or `zml-signal-audit`; do not reduce them to a conclusion-only summary.
+- Preserve these ledgers in handoffs to `debugger` or `phoenix_inspector`; do not reduce them to a conclusion-only summary.
 
 ## Canonical helper
 
@@ -142,7 +144,7 @@ Common high-signal artifacts:
 - `*.zml` / `*.zml.zst`: compute, droid, dock, and world logs used by validators.
 - Journal content often appears as `journalctl_log` topics inside ZML streams rather than standalone text files.
 
-If a failure points to ZML signal behavior, load `zml-signal-audit` instead of doing broad ad-hoc signal spelunking. Pass the selected job URL, packet JSON/Markdown path, relevant `Key S3 artifacts` rows, validator/alarm names, selected local ZML paths if already downloaded, source-type context, the specific question to answer, and the current Topic Ledger.
+If a failure points to ZML signal behavior, prefer `phoenix_inspector` instead of doing broad ad-hoc signal spelunking. Pass the selected job URL, packet JSON/Markdown path, relevant `Key S3 artifacts` rows, validator/alarm names, selected local ZML paths if already downloaded, source-type context, the specific question to answer, and the current Topic Ledger.
 
 ```bash
 command -v aws >/dev/null || { echo "aws CLI not found; use packet blockers or install aws before artifact download"; exit 1; }

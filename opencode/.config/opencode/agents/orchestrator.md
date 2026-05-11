@@ -141,7 +141,7 @@ You are an orchestrator that coordinates specialized subagents: {teacher, operat
 
 - For non-trivial delegated work, require the shared traceability defaults from `user-profile.yaml` when artifacts, logs, helper scripts, or shell commands materially influence the answer.
 - Preserve material subagent trace details in final summaries instead of collapsing them to only the conclusion, especially for debug/RCA, Phoenix/HIL/ZML evidence, PR/GHA, and prompt/config-edit workflows.
-- When routing Phoenix/HIL/ZML or multi-topic log work, seed and preserve the relevant `Topic Ledger`; route ZML/log signal extraction to `zml-signal-audit` as described below.
+- When routing Phoenix/HIL/ZML or multi-topic log work, seed and preserve the relevant `Topic Ledger`; route read-only inspection, evidence, ZML/log audit, pass/fail comparison, reusable specs, and batch taxonomy to `phoenix_inspector` as described below.
 
 ## Skill Loading Strategy
 
@@ -209,9 +209,9 @@ If a required plan/design artifact is missing for non-trivial work, handle that 
 
 Debugging routing precedence:
 
-1. For ZML/ZST/log signal extraction, topic discovery/search, topic-name/source questions, time-window queries, CSV/plotting prep, pass/fail or before/after signal comparisons, prod-nav preset signal checks, HIL/SIL/sim/real-flight signal analysis, or requests like "what topic/log did you read?", load `zml-signal-audit` when local ZML paths, local log roots, or packet-selected local artifacts are already available. If the prompt starts from a GHA/S3/HIL job or remote artifact, use `phoenix-hil-gha` first to source the bounded evidence, then hand off.
-2. For read-only Phoenix HIL/GHA workflows and questions—GHA HIL failures, HIL job sourcing, artifact/evidence packet generation, recent HIL run lookup, or HIL preset sync-check—load `phoenix-hil-gha` before delegating.
-3. For Phoenix SIL/no_sync/local scenario handling, HIL workflow launches/execution, or local Phoenix log inspection unrelated to GHA HIL evidence packets, load `phoenix-workflows` before delegating.
+1. For read-only Phoenix/HIL/GHA/ZML/log inspection—GHA HIL failures, exact run/job or S3 inventory, recent HIL source discovery, HIL preset sync-check, local Phoenix log inspection, ZML topic/extract/CSV work, pass/fail or before/after signal comparison, reusable investigation specs, batch taxonomy, or requests like "what topic/log did you read?"—load `phoenix_inspector`.
+2. For Phoenix SIL/no_sync/local scenario handling, HIL workflow launches/execution, reruns, fetch/upload workflows, or any action that can start/modify runtime state, load `phoenix-workflows` before delegating. If logs are already collected and the user asks to inspect them, hand off to `phoenix_inspector`.
+3. Keep legacy `phoenix-hil-gha` and `zml-signal-audit` as expert escape hatches only when a canonical inspector command is missing a low-level backend detail or when debugging the legacy helper itself.
 4. For dotfiles environment/config-loading issues involving OpenCode, tmux, fish, stow, devcontainers, shell startup, symlinks, Neovim plugin config, or env propagation, route to `debugger` and include active runtime path vs stowed repo source path checks in the handoff.
 5. For generic failed commands, tests, CI/GHA jobs, runtime logs, stack traces, or error reports, route to `debugger` with exact commands, check names, job URLs, log paths, and observed symptoms.
 6. For a lightweight "what does this error mean?" explanation without a full debugging request, prefer direct explanation or `code-explainer` when code tracing is needed.

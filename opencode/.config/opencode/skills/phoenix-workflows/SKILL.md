@@ -1,6 +1,6 @@
 ---
 name: phoenix-workflows
-description: Run Phoenix SIL scenarios, exercise no_sync scenarios for flakiness, inspect Phoenix/HIL logs, and launch Phoenix HIL workflows conservatively.
+description: Run Phoenix SIL scenarios, exercise no_sync scenarios for flakiness, and launch Phoenix HIL workflows conservatively; hand read-only inspection to phoenix_inspector.
 ---
 
 # Phoenix Workflows
@@ -10,11 +10,11 @@ Use this skill for Zipline-internal Phoenix requests that involve:
 - running local Phoenix SIL scenarios with `bazel test`
 - running `no_sync` scenarios
 - repeating Phoenix scenario runs to check flakiness or determinism
-- reading local Phoenix ZML, validator, stdout, or stderr logs
+- collecting local Phoenix ZML, validator, stdout, or stderr logs for later inspection
 - fetching Phoenix/HIL artifacts from S3
 - launching a Phoenix HIL run locally or through the checked-in GitHub workflow
 
-If the user asks for read-only HIL/GHA evidence collection, recent HIL run lookup, preset sync-check, artifact inspection, or root-cause analysis for one GitHub Actions run/job attempt, prefer `$phoenix-hil-gha`. After SIL/sim/HIL logs are collected locally, if they ask for ZML signal extraction, topic-name/source lookup, time-window extraction, CSV/plotting prep, pass/fail or before/after signal comparison, prod-nav preset signal checks, or "what topic/log did you read?", prefer `$zml-signal-audit` and keep GHA/S3 discovery out of that handoff. If they specifically want to upload a local Phoenix log directory and generate a LogPlots link, prefer `$upload_local_log_to_s3` when it is available from repo/system skill roots such as `.agents/skills/` or `/Systems/.agents/skills/`; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly.
+If the user asks for read-only HIL/GHA evidence collection, recent HIL run lookup, preset sync-check, artifact inspection, local log inspection, ZML signal extraction, topic-name/source lookup, time-window extraction, CSV/plotting prep, pass/fail or before/after signal comparison, prod-nav preset signal checks, batch taxonomy, or root-cause evidence for one GitHub Actions run/job attempt, hand off to `$phoenix_inspector`. Keep this skill focused on launch/execution/fetch/upload workflows. If they specifically want to upload a local Phoenix log directory and generate a LogPlots link, prefer `$upload_local_log_to_s3` when it is available from repo/system skill roots such as `.agents/skills/` or `/Systems/.agents/skills/`; otherwise run `phoenix/debug/scripts/upload_local_log_to_s3.sh` directly.
 
 For local Phoenix SIL runs, if `PHOENIX_LOG_UPLOAD_S3_PREFIX` is set, treat post-run log upload, Baraza-link capture from upload output, and Baraza-link return as the default behavior unless the user opts out. Do not apply this default to HIL runs unless the user explicitly asks.
 
@@ -59,7 +59,7 @@ Use `No` if the mode, target, credentials, branch/ref, HIL runner, log destinati
 
 ## Phoenix log source priority
 
-For Phoenix SIL/HIL runs or local Phoenix log inspection, start with `/Systems/.phoenix/logs/**` as the preferred local log source. Do not read `~/.cache/bazel/**/testlogs/**` by default; use Bazel cache testlogs only when Phoenix logs are missing/insufficient or the user explicitly asks for them.
+For Phoenix SIL/HIL runs, collect logs under `/Systems/.phoenix/logs/**` as the preferred local log source, then hand inspection to `$phoenix_inspector`. Do not read `~/.cache/bazel/**/testlogs/**` by default; use Bazel cache testlogs only when Phoenix logs are missing/insufficient or the user explicitly asks for them.
 
 Before attempting a Bazel cache fallback, stop and surface the exact cache path/action and required permission or decision instead of waiting behind an external-directory prompt.
 
@@ -67,7 +67,7 @@ Before attempting a Bazel cache fallback, stop and surface the exact cache path/
 
 First classify the request into one mode:
 
-1. `inspect-zml`
+1. `inspect-existing-evidence` (handoff to `$phoenix_inspector`)
 2. `run-sil-scenario`
 3. `run-no-sync-scenario`
 4. `run-flakiness-check`
@@ -90,7 +90,7 @@ For failure triage, do not make causal RCA claims without pass/fail contrast or 
 - Follow the shared traceability defaults from `user-profile.yaml` for nontrivial inspection, evidence, and RCA-style answers.
 - For Phoenix/ZML/HIL work, keep the `Topic Ledger` grounded in the exact scenario/job/log root, topic/signal/source file, time window or run attempt, status, and next decisive probe.
 - Preserve material local log, validator, ZML, `test_record.json`, downloaded artifact, generated report, and helper-command records when they affect the answer or blocker.
-- For ZML topic inventory, signal extraction, time-window extraction, CSV/plotting prep, or pass/fail/before-after comparisons after SIL/sim/HIL log collection, hand off to `$zml-signal-audit` with the topic ledger seed, source-type context, and selected local ZML paths instead of broad ad-hoc signal spelunking.
+- For ZML topic inventory, signal extraction, time-window extraction, CSV/plotting prep, or pass/fail/before-after comparisons after SIL/sim/HIL log collection, hand off to `$phoenix_inspector` with the topic ledger seed, source-type context, and selected local ZML paths instead of broad ad-hoc signal spelunking.
 
 ## Default post-run upload for local SIL runs
 
@@ -105,14 +105,14 @@ For `run-sil-scenario`, `run-no-sync-scenario`, and `run-flakiness-check`:
 
 Do not auto-upload logs for HIL launches, fetched HIL logs, or purely read-only inspection requests.
 
-## 1) inspect-zml
+## 1) inspect-existing-evidence
 
-For an existing ZML path, start with read-only inspection:
+For existing logs, packets, S3/GHA references, or ZML paths, use `$phoenix_inspector` rather than this launch workflow skill:
 
 ```sh
-zml -z "/path/to/compute_a.zml.zst" list
-zml -z "/path/to/compute_a.zml.zst" events
-zml -z "/path/to/compute_a.zml.zst" print '*GPS*'
+python3 "$HOME/.config/opencode/scripts/phoenix_inspector.py" inventory /path/to/log-dir --out-dir /tmp/pi
+python3 "$HOME/.config/opencode/scripts/phoenix_inspector.py" topics /path/to/compute_a.zml.zst --format json
+python3 "$HOME/.config/opencode/scripts/phoenix_inspector.py" compare --fail fail.zml.zst --pass pass.zml.zst --topic /nav --field pose.x --out-dir /tmp/pi
 ```
 
 Useful local Phoenix log roots:
@@ -120,7 +120,7 @@ Useful local Phoenix log roots:
 - `/Systems/.phoenix/logs/latest/`
 - `/Systems/.phoenix/logs/by_scenario/<scenario>/`
 
-If `zml` is not available and the user wants CLI inspection, the checked-in setup in `tools/zml/README.md` is:
+If `zml` is not available and the user wants low-level legacy CLI inspection, the checked-in setup in `tools/zml/README.md` is:
 
 ```sh
 bazel build //tools/zml
