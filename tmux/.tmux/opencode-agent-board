@@ -33,9 +33,8 @@ shorten() {
 agent_name() {
   local pane_id=$1
   local pane_title=$2
-  local name
+  local name=${3:-}
 
-  name=$(tmux show-option -pv -t "$pane_id" @opencode_agent_name 2>/dev/null || true)
   name=$(trim "$name")
   pane_title=$(trim "$pane_title")
   shorten "${name:-${pane_title:-UNNAMED $pane_id}}"
@@ -73,14 +72,14 @@ is_opencode_values() {
 collect_agents() {
   local -a waiting=()
   local -a running=()
-  local entry is_board pane_id pane_index pane_title session_id session_name window_id window_index current_cmd start_cmd state
+  local entry is_board pane_id pane_index pane_title session_id session_name window_id window_index current_cmd start_cmd state name
 
-  while IFS="$separator" read -r pane_id session_id session_name window_id window_index pane_index is_board pane_title current_cmd start_cmd; do
+  while IFS="$separator" read -r pane_id session_id session_name window_id window_index pane_index is_board name pane_title current_cmd start_cmd; do
     [[ "$is_board" == 1 ]] && continue
     is_opencode_values "$pane_title" "$current_cmd" "$start_cmd" || continue
 
     state=$(agent_state "$pane_id")
-    entry="$session_name$separator$window_index$separator$pane_index$separator$pane_id$separator$session_id$separator$window_id$separator$state$separator$(agent_name "$pane_id" "$pane_title")"
+    entry="$session_name$separator$window_index$separator$pane_index$separator$pane_id$separator$session_id$separator$window_id$separator$state$separator$(agent_name "$pane_id" "$pane_title" "$name")"
 
     if [[ "$state" == WAIT ]]; then
       waiting+=("$entry")
@@ -89,7 +88,7 @@ collect_agents() {
     fi
   done < <(
     tmux list-panes -a \
-      -F "#{pane_id}${separator}#{session_id}${separator}#{session_name}${separator}#{window_id}${separator}#{window_index}${separator}#{pane_index}${separator}#{@opencode_agent_board}${separator}#{pane_title}${separator}#{pane_current_command}${separator}#{pane_start_command}" \
+      -F "#{pane_id}${separator}#{session_id}${separator}#{session_name}${separator}#{window_id}${separator}#{window_index}${separator}#{pane_index}${separator}#{@opencode_agent_board}${separator}#{@opencode_agent_name}${separator}#{pane_title}${separator}#{pane_current_command}${separator}#{pane_start_command}" \
       | sort -t"$separator" -k3,3 -k5,5n -k6,6n
   )
 
