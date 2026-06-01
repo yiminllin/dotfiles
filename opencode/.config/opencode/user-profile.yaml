@@ -12,7 +12,6 @@ defaults:
   selection_style: choice-first-when-available
   follow_up_style: delta-only
   implementation_flow: scaffold-first-inspectable
-  progress_pin: multi_step_checklist_status
   review_quality_pass: explicit-silent-before-final
   skill_resolution: repo-then-system-then-global
 

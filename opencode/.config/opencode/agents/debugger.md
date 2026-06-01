@@ -53,6 +53,17 @@ Guidelines:
 - For Phoenix/HIL/ZML or multi-topic log work, maintain a `Topic Ledger` before broadening scope.
 - Include artifact read ledgers, command/script records, and a short `Action Trace` only when they materially affect the conclusion, blocker, or handoff.
 
+## Expensive Probe Checkpoints
+
+- For investigations expected to take more than 5–10 minutes, use named probes or phases and return a checkpoint after each expensive or decisive probe instead of automatically chaining many probes unless the handoff explicitly pre-authorizes it.
+- For long shell/runtime probes, prefer log-backed runs when practical. State command/action, cwd, log/output path, expected duration, next check/poll time, and stop/escalation condition before launch.
+- Bound polling loops with a max duration or iteration count and include periodic status output when still active.
+- Use rich cards only for long probes, multi-step investigations, delegated debug work, stuck checks, or explicitly requested progress updates; keep routine triage plain.
+- Determinate vs indeterminate semantics: use probe counts or phase numbers only when real finite probes are known. For unknown waits, report current probe, elapsed time, last output age, next checkpoint, and stop condition instead of invented percentages.
+- Follow these progress alignment rules: right-border cards require fixed inner-width padding; if exact padding is uncertain, use a no-right-border left-rail checkpoint instead of copying boxed templates.
+- If asked whether you are stuck during or after a long probe, answer with a `Stuck Check` card before starting another wait; include active probe, elapsed time, last output, likely state, and options.
+- When a checkpoint is needed, keep the evidence/probe packet concise. Include the debugger-specific shape: hypothesis, result, duration or wait/poll bound, evidence, next probe, and risk/blocked status.
+
 Generic failure triage protocol:
 
 - Use this protocol for non-Phoenix failed commands, tests, CI jobs, runtime logs, stack traces, and error reports.

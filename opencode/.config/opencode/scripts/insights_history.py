@@ -246,6 +246,36 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_LOOKBACK_DAYS,
         help="Days of local history to scan by session time_updated; defaults to 30",
     )
+    incremental = parser.add_mutually_exclusive_group()
+    incremental.add_argument(
+        "--since",
+        metavar="TIMESTAMP",
+        help=(
+            "Override the lookback start time; accepts common ISO-ish local times "
+            "such as 2026-05-31T20:00, '2026-05-31 20:00', or date-only."
+        ),
+    )
+    incremental.add_argument(
+        "--since-cache",
+        metavar="PATH",
+        help=(
+            "Start after the latest session timestamp recorded in a previous "
+            "--write-cache JSON file."
+        ),
+    )
+    incremental.add_argument(
+        "--since-session",
+        metavar="SESSION_ID_OR_TITLE_SUBSTRING",
+        help=(
+            "Start after a matching session id/title; exact id/title matches "
+            "are preferred, substring matches must be unique."
+        ),
+    )
+    parser.add_argument(
+        "--write-cache",
+        metavar="PATH",
+        help="Write compact scan metadata/counts JSON without message text.",
+    )
     parser.add_argument(
         "--session-examples",
         type=non_negative_int,
@@ -301,6 +331,44 @@ def safe_json_loads(raw: str | None) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
+def parse_since_timestamp(raw: str) -> int:
+    value = raw.strip()
+    if not value:
+        raise ValueError("empty timestamp")
+
+    normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(
+            "expected an ISO-ish timestamp such as 2026-05-31T20:00, "
+            "'2026-05-31 20:00', or 2026-05-31"
+        ) from exc
+    return int(parsed.timestamp() * 1000)
+
+
+def read_since_cache(path: str) -> tuple[int, str]:
+    expanded = os.path.expanduser(path)
+    with open(expanded, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    if not isinstance(data, dict):
+        raise ValueError("cache file does not contain a JSON object")
+
+    latest_session = (
+        data.get("latest_session") if isinstance(data.get("latest_session"), dict) else {}
+    )
+    latest_ms = latest_session.get("timestamp_ms")
+    if isinstance(latest_ms, int):
+        return latest_ms + 1, f"after latest session from cache {expanded}"
+
+    scan_window = data.get("scan_window") if isinstance(data.get("scan_window"), dict) else {}
+    until_ms = scan_window.get("until_ms")
+    if isinstance(until_ms, int):
+        return until_ms + 1, f"after previous cache scan window from {expanded}"
+
+    raise ValueError("cache file has no latest_session.timestamp_ms or scan_window.until_ms")
+
+
 def readonly_sqlite_connection(db_path: str) -> sqlite3.Connection:
     path = os.path.abspath(os.path.expanduser(db_path))
     uri = f"file:{quote(path)}?mode=ro"
@@ -316,6 +384,18 @@ def format_time(timestamp_ms: int | None) -> str:
     if not timestamp_ms:
         return "unknown"
     return datetime.fromtimestamp(timestamp_ms / 1000).strftime("%Y-%m-%d %H:%M")
+
+
+def scan_window_line(args: argparse.Namespace, since_ms: int, until_ms: int) -> str:
+    if getattr(args, "scan_window_note", None):
+        return (
+            f"- incremental window: {args.scan_window_note} by time_updated "
+            f"({format_time(since_ms)} to {format_time(until_ms)})"
+        )
+    return (
+        f"- lookback: last {args.lookback_days} days by time_updated "
+        f"({format_time(since_ms)} to {format_time(until_ms)})"
+    )
 
 
 def session_time_range(sessions: list[dict]) -> str:
@@ -396,6 +476,11 @@ def print_list(title: str, lines: list[str]) -> None:
     print()
 
 
+def print_cache_written(path: str | None) -> None:
+    if path:
+        print(f"Cache written: {path}")
+
+
 def fetch_sessions(cur: sqlite3.Cursor, since_ms: int, until_ms: int) -> list[dict]:
     rows = cur.execute(
         """
@@ -419,6 +504,60 @@ def fetch_sessions(cur: sqlite3.Cursor, since_ms: int, until_ms: int) -> list[di
         (since_ms, until_ms),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def fetch_session_lookup_rows(cur: sqlite3.Cursor) -> list[dict]:
+    rows = cur.execute(
+        """
+    select id, title, time_updated
+    from session
+    where time_archived is null
+    order by time_updated desc
+    """
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def resolve_since_session(cur: sqlite3.Cursor, query: str) -> tuple[int, str]:
+    needle = query.strip()
+    if not needle:
+        raise ValueError("empty --since-session query")
+
+    rows = fetch_session_lookup_rows(cur)
+    exact_matches = [
+        row
+        for row in rows
+        if row["id"] == needle or (row.get("title") or "") == needle
+    ]
+    matches = exact_matches
+    if not matches:
+        lowered = needle.lower()
+        matches = [
+            row
+            for row in rows
+            if lowered in row["id"].lower() or lowered in (row.get("title") or "").lower()
+        ]
+
+    if not matches:
+        raise ValueError(f"--since-session matched no session for {needle!r}")
+    if len(matches) > 1:
+        examples = "; ".join(
+            f"{row['id']} [{format_time(row.get('time_updated'))}] {shorten(row.get('title') or '', 80)}"
+            for row in matches[:8]
+        )
+        more = f"; ... {len(matches) - 8} more" if len(matches) > 8 else ""
+        raise ValueError(
+            f"ambiguous --since-session {needle!r}: matched {len(matches)} sessions: "
+            f"{examples}{more}"
+        )
+
+    match = matches[0]
+    if not match.get("time_updated"):
+        raise ValueError(f"matched session {match['id']} has no time_updated")
+    return (
+        match["time_updated"] + 1,
+        f"after session {match['id']} ({shorten(match.get('title') or '', 80)})",
+    )
 
 
 def select_scanned_sessions(
@@ -686,6 +825,71 @@ def category_counts(messages: list[dict]) -> Counter:
 
 def category_lines(messages: list[dict]) -> list[str]:
     return [f"{category}: {count}" for category, count in category_counts(messages).most_common()]
+
+
+def compact_cache_payload(
+    args: argparse.Namespace,
+    sessions: list[dict],
+    since_ms: int,
+    until_ms: int,
+    combined_evidence: list[dict],
+) -> dict:
+    root_count = sum(1 for session in sessions if session_kind(session) == "root")
+    child_count = sum(1 for session in sessions if session_kind(session) == "child")
+    worktree_counts = Counter(worktree_label(session) for session in sessions)
+    latest_session = sessions[0] if sessions else None
+
+    return {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "mode": args.mode,
+        "scope": {
+            "type": args.scope,
+            "worktree": (
+                normalize_path(args.worktree, allow_relative=True)
+                if args.scope == "worktree"
+                else None
+            ),
+        },
+        "scan_window": {
+            "since_ms": since_ms,
+            "until_ms": until_ms,
+            "since": datetime.fromtimestamp(since_ms / 1000).isoformat(timespec="seconds"),
+            "until": datetime.fromtimestamp(until_ms / 1000).isoformat(timespec="seconds"),
+            "incremental": bool(getattr(args, "scan_window_note", None)),
+            "note": getattr(args, "scan_window_note", None),
+        },
+        "session_counts": {
+            "total": len(sessions),
+            "root": root_count,
+            "child": child_count,
+        },
+        "top_worktrees": [
+            {"worktree": worktree, "sessions": count}
+            for worktree, count in worktree_counts.most_common(10)
+        ],
+        "top_categories": [
+            {"category": category, "count": count}
+            for category, count in category_counts(combined_evidence).most_common(10)
+        ],
+        "latest_session": (
+            {
+                "timestamp_ms": latest_session.get("time_updated"),
+                "timestamp": format_time(latest_session.get("time_updated")),
+                "id": latest_session.get("id"),
+                "title": latest_session.get("title"),
+            }
+            if latest_session
+            else None
+        ),
+    }
+
+
+def write_scan_cache(path: str, payload: dict) -> str:
+    expanded = os.path.expanduser(path)
+    with open(expanded, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    return expanded
 
 
 def agent_lines(counts: Counter) -> list[str]:
@@ -1106,10 +1310,7 @@ def print_tool_patterns_report(
         )
     else:
         print("- scope: all local OpenCode sessions")
-    print(
-        f"- lookback: last {args.lookback_days} days by time_updated "
-        f"({format_time(since_ms)} to {format_time(until_ms)})"
-    )
+    print(scan_window_line(args, since_ms, until_ms))
     print(f"- sessions scanned: {len(sessions)} total ({len(root_sessions)} root, {len(child_sessions)} child/subagent)")
     print(f"- tool calls scanned: {len(tool_parts)}; status={dict(status_counts.most_common())}")
     print("- evidence note: actual counts use tool part inputs; text mentions are weaker user-message evidence")
@@ -1148,10 +1349,7 @@ def print_raw_corrections_report(
         )
     else:
         print("- scope: all local OpenCode sessions")
-    print(
-        f"- lookback: last {args.lookback_days} days by time_updated "
-        f"({format_time(since_ms)} to {format_time(until_ms)})"
-    )
+    print(scan_window_line(args, since_ms, until_ms))
     print(f"- sessions scanned: {len(sessions)}")
     print(f"- aggregate top category: {top_category_label(root_evidence + child_evidence)}")
     print(f"- root raw top category: {top_category_label(root_evidence)}")
@@ -1197,10 +1395,7 @@ def print_latency_report(
         )
     else:
         print("- scope: all local OpenCode sessions")
-    print(
-        f"- lookback: last {args.lookback_days} days by time_updated "
-        f"({format_time(since_ms)} to {format_time(until_ms)})"
-    )
+    print(scan_window_line(args, since_ms, until_ms))
     print(f"- sessions scanned: {len(sessions)} total ({len(root_sessions)} root, {len(child_sessions)} child/subagent)")
     print(f"- tool calls: {sum(tool_counts.values())} total; status={dict(status_counts.most_common())}")
     print(f"- subagent fanout: {len(child_sessions)} child sessions; task tool calls={task_tool_count}")
@@ -1225,19 +1420,28 @@ def print_unavailable(args: argparse.Namespace, since_ms: int, until_ms: int, re
         print(f"- scope: worktree {normalized}")
     else:
         print("- scope: all local OpenCode sessions")
-    print(
-        f"- lookback: last {args.lookback_days} days by time_updated "
-        f"({format_time(since_ms)} to {format_time(until_ms)})"
-    )
+    print(scan_window_line(args, since_ms, until_ms))
     print(f"- unavailable: {reason}")
 
 
 def main() -> int:
     args = parse_args()
+    args.scan_window_note = None
     lookback_end = datetime.now()
     lookback_start = lookback_end - timedelta(days=args.lookback_days)
     since_ms = int(lookback_start.timestamp() * 1000)
     until_ms = int(lookback_end.timestamp() * 1000)
+
+    try:
+        if args.since:
+            since_ms = parse_since_timestamp(args.since)
+            args.scan_window_note = f"since {args.since!r}"
+        elif args.since_cache:
+            since_ms, args.scan_window_note = read_since_cache(args.since_cache)
+    except Exception as exc:
+        print_unavailable(args, since_ms, until_ms, f"invalid incremental scan window ({exc})")
+        return 0
+
     worktree = args.worktree if args.scope == "worktree" else None
     normalized_worktree = normalize_path(args.worktree, allow_relative=True) if worktree else None
 
@@ -1249,6 +1453,13 @@ def main() -> int:
         conn = readonly_sqlite_connection(args.db_path)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
+
+        if args.since_session:
+            try:
+                since_ms, args.scan_window_note = resolve_since_session(cur, args.since_session)
+            except ValueError as exc:
+                print_unavailable(args, since_ms, until_ms, str(exc))
+                return 0
 
         sessions, selection_meta = select_scanned_sessions(
             cur,
@@ -1279,6 +1490,12 @@ def main() -> int:
         root_evidence = root_followups if len(root_followups) >= 2 else root_messages
         child_evidence = child_followups if len(child_followups) >= 2 else child_messages
         combined_evidence = root_evidence + child_evidence
+        cache_path = None
+        if args.write_cache:
+            cache_path = write_scan_cache(
+                args.write_cache,
+                compact_cache_payload(args, sessions, since_ms, until_ms, combined_evidence),
+            )
 
         if args.mode == "raw-corrections":
             print_raw_corrections_report(
@@ -1291,6 +1508,7 @@ def main() -> int:
                 child_evidence,
                 root_followups,
             )
+            print_cache_written(cache_path)
             return 0
 
         if args.mode == "tool-patterns":
@@ -1304,6 +1522,7 @@ def main() -> int:
                 human_user_messages,
                 parts,
             )
+            print_cache_written(cache_path)
             return 0
 
         if args.mode == "latency":
@@ -1319,6 +1538,7 @@ def main() -> int:
                 assistant_messages,
                 parts,
             )
+            print_cache_written(cache_path)
             return 0
 
         print("Recent local history evidence")
@@ -1334,11 +1554,9 @@ def main() -> int:
             )
         else:
             print("- scope: all local OpenCode sessions")
-        print(
-            f"- lookback: last {args.lookback_days} days by time_updated "
-            f"({format_time(since_ms)} to {format_time(until_ms)})"
-        )
-        print("- scanning mode: all sessions in lookback; no root/child session caps")
+        print(scan_window_line(args, since_ms, until_ms))
+        window_name = "incremental window" if args.scan_window_note else "lookback"
+        print(f"- scanning mode: all sessions in {window_name}; no root/child session caps")
         print(
             f"- sessions scanned: {len(sessions)} total "
             f"({len(root_sessions)} root, {len(child_sessions)} child/subagent)"
@@ -1402,12 +1620,13 @@ def main() -> int:
 
         caveats = []
         if not sessions:
+            empty_window_name = "incremental window" if args.scan_window_note else "lookback window"
             if args.scope == "worktree":
                 caveats.append(
-                    f"no sessions matched worktree {normalized_worktree or args.worktree} in the lookback window"
+                    f"no sessions matched worktree {normalized_worktree or args.worktree} in the {empty_window_name}"
                 )
             else:
-                caveats.append("no sessions found in the lookback window")
+                caveats.append(f"no sessions found in the {empty_window_name}")
         if len(root_followups) < 2:
             caveats.append(
                 "root follow-up evidence is limited; root category hints may include initial user requests"
@@ -1427,6 +1646,7 @@ def main() -> int:
                 "synthetic user messages were separated from human feedback category hints"
             )
         print_list("Evidence caveats", caveats)
+        print_cache_written(cache_path)
         return 0
     except Exception as exc:
         print_unavailable(args, since_ms, until_ms, f"failed to summarize OpenCode history ({exc})")

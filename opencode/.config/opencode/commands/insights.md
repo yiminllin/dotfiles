@@ -36,6 +36,8 @@ Additional bounded helper modes are available when needed:
 python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode raw-corrections --scope worktree --worktree "$PWD" --followup-examples 5
 python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode latency --scope all --followup-examples 5 --session-examples 5
 python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode tool-patterns --scope all --followup-examples 5
+python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all --since "2026-05-31T00:00" --write-cache /tmp/opencode-insights-cache.json
+python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all --since-cache /tmp/opencode-insights-cache.json
 ```
 
 ## Workflow
@@ -62,27 +64,31 @@ python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode tool-pattern
    - recurring deterministic helper/script opportunities; use `--mode tool-patterns` when repeated command/tool payloads may justify a narrow helper/script instead of prompt wording
    - latency or time-sink patterns when the user mentions speed, thrash, repeated corrections, slow tool use, subagent fanout, or model/reasoning settings
    - When latency is in scope, use `insights_history.py --mode latency` if local history is available and explicitly label model-setting evidence as `supported`, `weak`, or `absent` rather than implying configuration causality from timing alone.
+   - Classify expected slow helpers, bounded long commands, stale runtime-history entries, and trailing subagent completions separately from behavior problems; do not let delegation tail noise inflate conclusions unless raw root follow-ups show user impact.
 4. Classify findings with this lightweight taxonomy: routing, autonomy, verbosity, artifact usage, safety, output format, validation.
-5. Produce a comprehensive list of credible narrow proposals surfaced by the evidence, grouped or ordered by confidence and actionability. Prefer additive wording tweaks or a small shared-profile change over broad rewrites; do not cap the proposal list at three.
+5. Screen candidate improvements before recommending prompt/workflow changes: separate raw observations from candidates, label candidates as `narrow`, `duplicate`, and/or `high-risk` when applicable, and record frequency, impact, false-positive risk, and first-edit location. Shared prompt/profile edits should have raw-root evidence or explicit current-session/user approval, not aggregate counts alone.
+6. Produce a comprehensive list of credible narrow proposals surfaced by the evidence, grouped or ordered by confidence and actionability. Prefer additive wording tweaks or a small shared-profile change over broad rewrites; do not cap the proposal list at three.
    - Lead with proposals derived from recurring real workflows across the dominant worktrees, not with `/insights` mechanics.
    - Put `/insights`-specific fixes in a separate subsection unless `/insights` is clearly the dominant issue in the raw worktree evidence.
    - When evidence shows repeated command sequences, data extraction, formatting, or validation steps, consider a narrow script/helper proposal as an alternative to changing agent wording.
-6. For each proposal, include:
+7. For each proposal, include:
    - proposal id
    - observed problem
    - evidence snippets or references
    - exact target file(s)
+   - first-edit location and false-positive/high-risk notes when relevant
    - proposed wording or diff sketch
    - expected behavior change
    - risks and confidence
    - evidence class: `raw-root-confirmed`, `aggregate-supported`, `artifact-supported`, or `inferred/downweighted`
    - if applicable, whether this is better as prompt guidance, a deterministic script/helper, or both
-7. Lead with analysis and proposals unless the user requests a bounded implementation. For implementation requests, apply only the requested narrow change, run validation, and report the result.
+8. Lead with analysis and proposals unless the user requests a bounded implementation. For implementation requests, apply only the requested narrow change, run validation, and report the result.
 
 ## Implementation and reporting
 - Use normal OpenCode edit permissions for prompt/config file changes, while honoring active runtime safety rules, explicit user constraints, and configured tool boundaries.
 - Do not add boilerplate approval prompts unless the user explicitly asks for approval-gated review.
 - Before a bounded edit, restate the target file(s), intended change, and validation plan when doing so adds clarity.
+- For shared prompt/profile edits, cite the raw-root evidence, explicit user approval, or plan artifact that justifies the edit; if only aggregate evidence exists, propose rather than implement.
 - After edits, report files changed, validation results, and any material caveats.
 - If the user rejects or continues refining, keep changes limited to analysis/proposal output and optional note artifacts under `~/notes/opencode/insights/` when persistence is helpful.
 

@@ -50,7 +50,7 @@ For readiness checks before any confirm-first action, such as "ready to one shot
 Answer: Yes/No
 Why:
 - blockers:
-- exact command/action:
+- exact command/action (wrapped and underlying when longrun applies):
 - validation/log upload plan:
 - waiting for your confirm before launch:
 ```
@@ -62,6 +62,20 @@ Use `No` if the mode, target, credentials, branch/ref, HIL runner, log destinati
 For Phoenix SIL/HIL runs, collect logs under `/Systems/.phoenix/logs/**` as the preferred local log source, then hand inspection to `$phoenix_inspector`. Do not read `~/.cache/bazel/**/testlogs/**` by default; use Bazel cache testlogs only when Phoenix logs are missing/insufficient or the user explicitly asks for them.
 
 Before attempting a Bazel cache fallback, stop and surface the exact cache path/action and required permission or decision instead of waiting behind an external-directory prompt.
+
+## Long local run wrapper
+
+For local Phoenix/SIL/Bazel/ZML/Python runtime commands expected to take more than about 5-10 minutes, default to the existing long-run helper:
+
+```sh
+python3 "$HOME/.config/opencode/scripts/opencode_longrun.py" run --name <safe-name> -- <command...>
+```
+
+Use this especially for local Phoenix SIL `bazel test` scenario runs, repeated/flakiness `bazel test --runs_per_test=...`, ZML extraction/plotting or ad-hoc long Python analysis, and long local validation loops. Do not require it for tiny/quick commands, simple read-only inspections, or commands where wrapping would obscure interactive prompts, permission behavior, or auth setup.
+
+When a wrapped command already produces canonical Phoenix log directories, the helper records the wrapper command, stdout/stderr, and wrapper log path; final answers should still report the Phoenix log directory plus any Baraza, S3, ZML, plot, or CSV artifacts. For confirm-first Phoenix actions, readiness and exact-command responses must show both the wrapped command and the underlying command clearly.
+
+Preserve the upload rules below: longrun wraps the run or analysis command, not necessarily the upload step, unless the upload itself is expected to be long and is explicitly included. Child processes may buffer output under a wrapper; use unbuffered flags only when appropriate for that specific command, such as Python analysis you own, and do not invent generic unsafe changes.
 
 ## Workflow selection
 

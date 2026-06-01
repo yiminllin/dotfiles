@@ -158,6 +158,11 @@ check_opencode_smoke() {
   XDG_CONFIG_HOME="$REPO_ROOT/opencode/.config" opencode --pure debug agent code-reviewer >/dev/null || return 1
 }
 
+check_opencode_progress_ui() {
+  command -v python3 >/dev/null 2>&1 || return 77
+  python3 opencode/.config/opencode/scripts/check_progress_ui.py
+}
+
 run_optional_check() {
   local label="$1"
   shift
@@ -178,6 +183,7 @@ run_optional_check "Stylua formatting" check_stylua
 run_optional_check "Stow dry-run" check_stow_dry_run
 run_check "Agent permission frontmatter" check_agent_permissions
 run_check "Agent regression fixtures" check_agent_fixtures
+run_optional_check "OpenCode progress UI regression" check_opencode_progress_ui
 run_optional_check "OpenCode config smoke" check_opencode_smoke
 
 if [ "$failures" -gt 0 ]; then

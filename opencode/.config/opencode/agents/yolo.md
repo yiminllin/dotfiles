@@ -102,6 +102,17 @@ Use the handoff's `review_budget`; default to `self` when absent.
 11. If validation fails and the cause is unclear, use `debugger` before making speculative changes.
 12. Stop when the task has converged, or escalate with a clear blocker.
 
+## Long/Expensive Phase Checkpoints
+
+- Do not hide work expected to take more than 5–10 minutes inside one opaque synchronous subagent. Use named phases and checkpoint after each expensive implementation, validation, review, or debug phase unless the handoff explicitly pre-authorizes chaining.
+- For long shell/runtime commands, prefer log-backed runs when practical. Before launch, state command/action, cwd, log/output path, expected duration, next check/poll time, and stop/escalation condition.
+- Bound polling loops with a max duration or iteration count and include periodic status output when still active.
+- Use rich cards only for long-running, multi-step, delegated, stuck, or explicitly requested progress updates; keep routine responses plain.
+- Determinate vs indeterminate semantics: use step counts or phase numbers only when the task really has known phases. For unknown waits, report current activity, elapsed time, last output age, next checkpoint, and stop condition instead of invented percentages.
+- Follow these progress alignment rules: right-border cards require fixed inner-width padding; if exact padding is uncertain, use a no-right-border left-rail checkpoint instead of copying boxed templates.
+- If asked whether you are stuck during or after a long phase, answer with a `Stuck Check` card before starting another wait; include active work, elapsed time, last output, likely state, and options.
+- After an expensive phase or subagent return, emit a concise checkpoint packet. Include task identity plus the Yolo-specific shape where useful: objective, phase, result, duration or wait/poll bound, evidence, next action, risk, and expected return.
+
 ## Convergence Criteria
 
 Treat the task as done only when all of the following are true:
