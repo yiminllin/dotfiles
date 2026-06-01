@@ -11,7 +11,7 @@ Use this as a flexible reviewer-friendly starting point for PR bodies in a stack
 2. Under `Reason for Change`, include:
     - The shared chain-level reason paragraph/context. For stacked PRs in one chain, keep this text identical across PRs.
     - Optional context link.
-    - Default-on `PR Tree` list for stacks, with all PR numbers and `◀` on the current PR as the only per-PR change in this section.
+    - Default-on `PR Tree` list for stacks, with PR numbers only such as `- #123`, no PR titles or markdown links, and `◀` on the current PR as the only per-PR change in this section.
 3. Put per-PR specifics in `Description of Change`:
     - A short prose lead (usually 1-2 sentences) is a good default when it clarifies what this PR changes.
     - Use `In particular:` bullets, a diagram, a table, or a before/after comparison when that better explains the change.

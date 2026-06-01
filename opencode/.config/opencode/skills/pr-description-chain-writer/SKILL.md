@@ -61,13 +61,15 @@ Important options:
 
 - Read `references/style-notes.md` and keep template order/shape consistent.
 - Tighten the generated reason paragraph so it states the concrete reviewer-visible problem and the mechanism/root cause changed in this PR.
-- Use the hybrid `Description of Change` shape as a useful default, not a hard requirement; adapt to the change and favor clarity.
+- Keep `Description of Change` concise and layered around the feature being added; use the hybrid shape as a useful default, not a hard requirement, and avoid turning it into a long file/change inventory.
 - For chains, keep the chain-level reason paragraph/context identical across PRs and keep `PR Tree` by default; only omit it when the user asks or it is clearly noise for reviewers.
-- If you include `PR Tree`, keep the ordering exactly aligned to the chain and keep `◀` on the current PR.
+- If you include `PR Tree`, keep the ordering exactly aligned to the chain, use PR numbers only such as `- #123`, do not include PR titles or markdown links, and keep `◀` on the current PR.
+- When a Jira ticket is known, add `Jira Ticket: [FSW-XXXXX](https://flyzipline.atlassian.net/browse/FSW-XXXXX)` directly below the `PR Tree` block; use the ticket most relevant to each PR, even when multiple PRs share a ticket.
 - Ensure the baked-in `L3 Nonfunctional` / no-release-notes defaults still reflect reality for each PR.
-- Keep `Verification` concise and evidence-based; prefer exact commands, Baraza/GHA links, run tables, or concrete manual results over vague `CI` claims. Never return raw generated verification placeholders as final PR text.
+- Keep `Verification` concise and evidence-based; prefer checklist bullets such as `- [x] <description> [Aspect](...) [Baraza](...) [S3](...)` when links exist, along with exact commands, run tables, or concrete manual results over vague `CI` claims. Use separate `- [x]` bullets for multiple verification items/tests rather than combining them into one paragraph. Never return raw generated verification placeholders as final PR text.
+- For SIL/Phoenix log evidence, prefer uploading logs and linking S3 and Baraza URLs over attaching or citing only local log paths. Do not invent Baraza/S3 links; omit unavailable links, upload logs when requested/authorized, or state local-only evidence.
 - For `Manual Test`, keep it concise: name the Phoenix scenario or workflow, add environment or mode only when it matters, summarize the result briefly, and include links when useful.
-- Use an indented fenced `bash` block only when command details are the real verification evidence.
+- A verification bullet may be followed by a fenced `bash` command block when the exact command is useful; include command details only when they are real verification evidence.
 
 ### 4. Apply generated body to each PR (optional)
 
