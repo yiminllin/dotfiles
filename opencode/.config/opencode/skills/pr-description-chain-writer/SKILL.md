@@ -1,21 +1,31 @@
 ---
 name: pr-description-chain-writer
-description: Generate consistent PR descriptions for chained/stacked GitHub PRs in FlightSystems by reading each PR's commits/files and reusing a style reference PR body. Use when asked to draft PR descriptions for a PR chain, replicate a previous chain's format, or bulk-generate chain-aware PR bodies from a list of PR numbers.
+description: Generate consistent PR descriptions for chained/stacked GitHub PRs in FlightSystems by reading each PR's commits/files and reusing a style reference PR body. Use when asked to draft PR descriptions for a PR chain, draft local git-spice stack PR bodies before PRs exist, replicate a previous chain's format, or bulk-generate chain-aware PR bodies from PR numbers.
 ---
 
 # Pr Description Chain Writer
 
 ## Overview
 
-Generate draft PR bodies for an ordered PR chain. Reuse section structure and tone from a style reference PR while honoring global `coding_style.pr_descriptions` from `user-profile.yaml`: stacked PRs should keep `Reason for Change` identical across the chain, place PR-specific details in `Description of Change`, use diagrams/tables/before-after comparisons when they improve clarity, keep the shape flexible rather than forced, prefer exact verification commands/links over vague CI claims, and include `PR Tree` by default for multi-PR stacks.
+Generate draft PR bodies for an ordered PR chain or a local git-spice stack whose PRs may not exist yet. Reuse section structure and tone from a style reference PR while honoring global `coding_style.pr_descriptions` from `user-profile.yaml`: stacked PRs should keep `Reason for Change` identical across the chain, place PR-specific details in `Description of Change`, use diagrams/tables/before-after comparisons when they improve clarity, keep the shape flexible rather than forced, prefer exact verification commands/links over vague CI claims, and include `PR Tree` by default for multi-PR stacks.
 
 ## Workflow
 
 ### 1. Collect inputs
 
 - Collect ordered PR numbers in chain order.
+- For local stacks before PRs exist, collect the current git-spice stack from the repo checkout instead of asking for PR numbers.
 - Default to `ZiplineTeam/FlightSystems` unless user specifies another repo.
 - Prefer using a style reference PR with a high-quality body in the same chain.
+
+For local git-spice stacks, build the packet/draft context before writing final text:
+
+```bash
+python3 "$HOME/.config/opencode/scripts/opencode_pr_stack_packet.py" packet --from-git-spice --format markdown
+python3 "$HOME/.config/opencode/scripts/opencode_pr_stack_packet.py" draft --from-git-spice --criticality todo --format markdown
+```
+
+The local mode is read-only, does not require `gh`, uses branch placeholders in the PR Tree until PR numbers exist, and warns when drafts are based only on committed branch diffs because the worktree is dirty.
 
 ### 2. Generate draft bodies
 
