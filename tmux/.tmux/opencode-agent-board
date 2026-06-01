@@ -3,7 +3,7 @@
 set -euo pipefail
 
 separator=$'\034'
-refresh_interval=5
+refresh_interval=0.5
 current_pane=${TMUX_PANE:-$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)}
 current_client=""
 current_session_id=""
