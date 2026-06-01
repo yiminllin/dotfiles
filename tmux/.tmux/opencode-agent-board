@@ -3,9 +3,17 @@
 set -euo pipefail
 
 separator=$'\034'
-refresh_interval=2
+refresh_interval=5
 current_pane=${TMUX_PANE:-$(tmux display-message -p '#{pane_id}')}
+current_client=$(tmux display-message -p -t "$current_pane" '#{client_tty}' 2>/dev/null || true)
+current_session_id=$(tmux display-message -p -t "$current_pane" '#{session_id}' 2>/dev/null || true)
+current_session_name=$(tmux display-message -p -t "$current_pane" '#{session_name}' 2>/dev/null || true)
 current_window_id=$(tmux display-message -p -t "$current_pane" '#{window_id}' 2>/dev/null || true)
+progress_renderer="$HOME/.config/opencode/scripts/opencode_progress_render.py"
+progress_refresh_seconds=${OPENCODE_AGENT_BOARD_PROGRESS_REFRESH_SECONDS:-30}
+progress_snapshot_limit=${OPENCODE_AGENT_BOARD_SNAPSHOT_LIMIT:-10}
+rendered_content=""
+saved_tty_state=""
 
 declare -a rows=()
 declare -a target_panes=()
@@ -28,6 +36,45 @@ shorten() {
   else
     printf '%s' "$value"
   fi
+}
+
+context_segment() {
+  local context=""
+
+  [[ "${OPENCODE_AGENT_BOARD_DEBUG:-}" == 1 ]] || return 0
+  [[ -n "$current_session_name" ]] && context=$(shorten "$current_session_name")
+  [[ -n "$current_client" ]] && context+="${context:+ }$current_client"
+  [[ -n "$context" ]] || return 0
+  printf '\033[2m%s\033[0m  ║  ' "$context"
+}
+
+setup_tty() {
+  [[ -t 0 ]] || return 0
+  saved_tty_state=$(stty -g 2>/dev/null || true)
+  [[ -n "$saved_tty_state" ]] || return 0
+  stty -echo -icanon min 1 time 0 2>/dev/null || saved_tty_state=""
+}
+
+restore_tty() {
+  [[ -n "$saved_tty_state" && -t 0 ]] || return 0
+  stty "$saved_tty_state" 2>/dev/null || true
+  saved_tty_state=""
+}
+
+read_key() {
+  local __key_var=$1
+
+  printf -v "$__key_var" '%s' ""
+  if [[ -t 0 ]]; then
+    IFS= read -rsn1 -t "$refresh_interval" "$__key_var"
+    return $?
+  fi
+
+  if IFS= read -rsn1 -t 0 "$__key_var"; then
+    return 0
+  fi
+  sleep "$refresh_interval"
+  return 1
 }
 
 agent_name() {
@@ -59,6 +106,24 @@ state_label() {
     RUN) printf '\033[31m󰐊 RUN\033[0m' ;;
     *) printf '\033[32m󰔟 WAIT\033[0m' ;;
   esac
+}
+
+progress_segment() {
+  local segment
+
+  command -v python3 >/dev/null 2>&1 || return 0
+  [[ -f "$progress_renderer" ]] || return 0
+  segment=$(
+    python3 "$progress_renderer" \
+      --mode statusline \
+      --width 76 \
+      --refresh \
+      --refresh-seconds "$progress_refresh_seconds" \
+      --snapshot-limit "$progress_snapshot_limit" \
+      2>/dev/null || true
+  )
+  [[ -n "$segment" ]] || return 0
+  printf '%s' "$segment"
 }
 
 is_opencode_values() {
@@ -98,7 +163,7 @@ collect_agents() {
 
 render() {
   local index=1
-  local index_label name name_label pane_id row session_id state window_id
+  local context index_label name name_label pane_id progress row session_id state window_id
 
   rows=()
   target_panes=()
@@ -125,16 +190,24 @@ render() {
     [[ $index -le 9 ]] || break
   done < <(collect_agents)
 
-  printf '\033[H\033[2K'
+  progress=$(progress_segment)
+  context=$(context_segment)
   if [[ ${#rows[@]} -eq 0 ]]; then
-    printf 'no OpenCode agents'
-    return
+    rendered_content="${context}no OpenCode agents"
+    if [[ -n "$progress" ]]; then
+      rendered_content+="  ║  $progress"
+    fi
+    return 0
   fi
 
-  printf '%s' "${rows[0]}"
+  rendered_content="${context}${rows[0]}"
   for row in "${rows[@]:1}"; do
-    printf '  ║  %s' "$row"
+    rendered_content+="  ║  $row"
   done
+  if [[ -n "$progress" ]]; then
+    rendered_content+="  ║  $progress"
+  fi
+  return 0
 }
 
 jump_to_agent() {
@@ -144,16 +217,41 @@ jump_to_agent() {
   local window_id=${target_windows[$key]:-}
 
   [[ -n "$pane_id" && -n "$session_id" && -n "$window_id" ]] || return 0
-  tmux switch-client -t "$session_id" 2>/dev/null || return 0
-  tmux select-window -t "$window_id" 2>/dev/null || return 0
-  "$HOME/.tmux/opencode-pane-focus-main" "$window_id" "$pane_id" 2>/dev/null || return 0
+
+  if [[ -n "$current_client" ]]; then
+    if tmux switch-client -c "$current_client" -t "$session_id:$window_id" 2>/dev/null; then
+      "$HOME/.tmux/opencode-pane-focus-main" "$window_id" "$pane_id" 2>/dev/null || true
+    else
+      tmux display-message -t "$current_pane" 'Agent Board: target tmux client is no longer available' 2>/dev/null || true
+    fi
+    return 0
+  fi
+
+  if [[ -n "$current_session_id" && "$session_id" == "$current_session_id" ]]; then
+    tmux select-window -t "$window_id" 2>/dev/null || return 0
+    "$HOME/.tmux/opencode-pane-focus-main" "$window_id" "$pane_id" 2>/dev/null || true
+    return 0
+  fi
+
+  tmux display-message -t "$current_pane" 'Agent Board: cannot resolve current client for cross-session jump' 2>/dev/null || true
 }
+
+last_rendered_content=""
+
+setup_tty
+trap restore_tty EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 while true; do
   render
+  if [[ "$rendered_content" != "$last_rendered_content" ]]; then
+    printf '\033[H\033[2K%s' "$rendered_content"
+    last_rendered_content=$rendered_content
+  fi
 
   key=""
-  if read -rsn1 -t "$refresh_interval" key; then
+  if read_key key; then
     case "$key" in
       q) tmux kill-pane -t "$current_pane"; exit 0 ;;
       [1-9]) jump_to_agent "$key" ;;
