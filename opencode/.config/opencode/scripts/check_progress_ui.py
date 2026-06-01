@@ -21,6 +21,7 @@ def main() -> int:
         ("renderer refresh throttling", lambda: check_renderer_refresh_throttling(repo_root)),
         ("plugin state ingestion", lambda: check_plugin_state_ingestion(repo_root)),
         ("board bash syntax", lambda: check_board_bash_syntax(repo_root)),
+        ("board progress gate", lambda: check_board_progress_gate(repo_root)),
         ("board empty progress smoke", lambda: check_board_empty_progress(repo_root)),
         ("board repaint cache", lambda: check_board_repaint_cache(repo_root)),
         ("progress card alignment", lambda: check_progress_card_alignment(repo_root)),
@@ -297,6 +298,9 @@ def check_board_bash_syntax(repo_root: Path) -> None:
 def check_board_empty_progress(repo_root: Path) -> None:
     board = repo_root / "tmux/.tmux/opencode-agent-board"
     board_text = board.read_text(encoding="utf-8")
+    assert '[[ "${OPENCODE_AGENT_BOARD_SHOW_PROGRESS:-}" == 1 ]] || return 0' in board_text, (
+        "progress_segment should be default-off unless OPENCODE_AGENT_BOARD_SHOW_PROGRESS=1"
+    )
     assert "segment=$(" in board_text and 'python3 "$progress_renderer"' in board_text, (
         "progress_segment should tolerate renderer errors/empty output under set -e"
     )
@@ -312,36 +316,92 @@ def check_board_empty_progress(repo_root: Path) -> None:
 
     with tempfile.TemporaryDirectory(dir="/tmp", prefix="opencode-progress-check-") as temp_dir:
         temp_path = Path(temp_dir)
-        fake_home = temp_path / "home"
-        fake_bin = temp_path / "bin"
-        fake_scripts = fake_home / ".config/opencode/scripts"
-        fake_bin.mkdir(parents=True)
-        fake_scripts.mkdir(parents=True)
-        write_executable(fake_scripts / "opencode_progress_render.py", "#!/usr/bin/env python3\n")
-        write_executable(fake_bin / "tmux", fake_tmux_script())
-
-        env = os.environ.copy()
-        env.update(
-            {
-                "HOME": str(fake_home),
-                "PATH": f"{fake_bin}{os.pathsep}{env.get('PATH', '')}",
-                "TMUX_PANE": "%fixture",
-            }
-        )
-        result = subprocess.run(
-            [timeout, "1s", "bash", str(board)],
-            cwd=repo_root,
-            env=env,
-            text=True,
-            input="",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
+        result = run_board_smoke(
+            repo_root,
+            temp_path,
+            "#!/usr/bin/env python3\n",
+            {"OPENCODE_AGENT_BOARD_SHOW_PROGRESS": "1"},
         )
         assert result.returncode == 124, failure_detail(
             "board should keep looping when the renderer emits empty output",
             result,
         )
+
+
+def check_board_progress_gate(repo_root: Path) -> None:
+    timeout = shutil.which("timeout")
+    if timeout is None:
+        return
+
+    with tempfile.TemporaryDirectory(dir="/tmp", prefix="opencode-progress-check-") as temp_dir:
+        temp_path = Path(temp_dir)
+        called_file = temp_path / "renderer-called"
+        renderer = (
+            "#!/usr/bin/env python3\n"
+            "from pathlib import Path\n"
+            f"Path({str(called_file)!r}).write_text('called', encoding='utf-8')\n"
+            "print('OC active=1')\n"
+        )
+
+        default = run_board_smoke(repo_root, temp_path, renderer)
+        assert default.returncode == 124, failure_detail("default board smoke should time out cleanly", default)
+        assert not called_file.exists(), "board should not invoke the progress renderer by default"
+        assert "OC active=1" not in default.stdout, failure_detail(
+            "board should not append progress by default",
+            default,
+        )
+
+        enabled = run_board_smoke(
+            repo_root,
+            temp_path,
+            renderer,
+            {"OPENCODE_AGENT_BOARD_SHOW_PROGRESS": "1"},
+        )
+        assert enabled.returncode == 124, failure_detail("enabled board smoke should time out cleanly", enabled)
+        assert called_file.exists(), "board should invoke the progress renderer when explicitly enabled"
+        assert "OC active=1" in enabled.stdout, failure_detail(
+            "board should append progress when explicitly enabled",
+            enabled,
+        )
+
+
+def run_board_smoke(
+    repo_root: Path,
+    temp_path: Path,
+    renderer: str,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    board = repo_root / "tmux/.tmux/opencode-agent-board"
+    fake_home = temp_path / "home"
+    fake_bin = temp_path / "bin"
+    fake_scripts = fake_home / ".config/opencode/scripts"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    fake_scripts.mkdir(parents=True, exist_ok=True)
+    write_executable(fake_bin / "tmux", fake_tmux_script())
+    write_executable(fake_scripts / "opencode_progress_render.py", renderer)
+
+    env = os.environ.copy()
+    env.pop("OPENCODE_AGENT_BOARD_SHOW_PROGRESS", None)
+    env.update(
+        {
+            "HOME": str(fake_home),
+            "PATH": f"{fake_bin}{os.pathsep}{env.get('PATH', '')}",
+            "TMUX_PANE": "%fixture",
+        }
+    )
+    if extra_env:
+        env.update(extra_env)
+
+    return subprocess.run(
+        ["timeout", "1s", "bash", str(board)],
+        cwd=repo_root,
+        env=env,
+        text=True,
+        input="",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
 
 
 def write_executable(path: Path, content: str) -> None:

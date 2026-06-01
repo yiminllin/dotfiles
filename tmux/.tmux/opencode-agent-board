@@ -124,6 +124,7 @@ state_label() {
 progress_segment() {
   local segment
 
+  [[ "${OPENCODE_AGENT_BOARD_SHOW_PROGRESS:-}" == 1 ]] || return 0
   command -v python3 >/dev/null 2>&1 || return 0
   [[ -f "$progress_renderer" ]] || return 0
   segment=$(
