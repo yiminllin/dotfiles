@@ -4,11 +4,11 @@ set -euo pipefail
 
 separator=$'\034'
 refresh_interval=5
-current_pane=${TMUX_PANE:-$(tmux display-message -p '#{pane_id}')}
-current_client=$(tmux display-message -p -t "$current_pane" '#{client_tty}' 2>/dev/null || true)
-current_session_id=$(tmux display-message -p -t "$current_pane" '#{session_id}' 2>/dev/null || true)
-current_session_name=$(tmux display-message -p -t "$current_pane" '#{session_name}' 2>/dev/null || true)
-current_window_id=$(tmux display-message -p -t "$current_pane" '#{window_id}' 2>/dev/null || true)
+current_pane=${TMUX_PANE:-$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)}
+current_client=""
+current_session_id=""
+current_session_name=""
+current_window_id=""
 progress_renderer="$HOME/.config/opencode/scripts/opencode_progress_render.py"
 progress_refresh_seconds=${OPENCODE_AGENT_BOARD_PROGRESS_REFRESH_SECONDS:-30}
 progress_snapshot_limit=${OPENCODE_AGENT_BOARD_SNAPSHOT_LIMIT:-10}
@@ -19,6 +19,19 @@ declare -a rows=()
 declare -a target_panes=()
 declare -a target_sessions=()
 declare -a target_windows=()
+
+refresh_current_context() {
+  current_client=""
+  current_session_id=""
+  current_session_name=""
+  current_window_id=""
+
+  [[ -n "$current_pane" ]] || return 0
+  current_client=$(tmux display-message -p -t "$current_pane" '#{client_tty}' 2>/dev/null || true)
+  current_session_id=$(tmux display-message -p -t "$current_pane" '#{session_id}' 2>/dev/null || true)
+  current_session_name=$(tmux display-message -p -t "$current_pane" '#{session_name}' 2>/dev/null || true)
+  current_window_id=$(tmux display-message -p -t "$current_pane" '#{window_id}' 2>/dev/null || true)
+}
 
 trim() {
   local value=$1
@@ -244,6 +257,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 while true; do
+  refresh_current_context
   render
   if [[ "$rendered_content" != "$last_rendered_content" ]]; then
     printf '\033[H\033[2K%s' "$rendered_content"
@@ -254,7 +268,7 @@ while true; do
   if read_key key; then
     case "$key" in
       q) tmux kill-pane -t "$current_pane"; exit 0 ;;
-      [1-9]) jump_to_agent "$key" ;;
+      [1-9]) refresh_current_context; jump_to_agent "$key" ;;
     esac
   fi
 done
