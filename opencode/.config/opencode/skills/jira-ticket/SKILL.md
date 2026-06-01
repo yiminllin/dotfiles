@@ -11,7 +11,7 @@ Use the Jira CLI to create and update short, readable Jira tickets.
 
 This skill is optimized for Phoenix Simulation work:
 
-- new ticket summaries are prefixed with `[Phoenix]`
+- new ticket summaries are prefixed with `[Phoenix]` and use Title Case after the prefix, e.g. `[Phoenix] Add Prod-Nav Ideal Sensor Diagnostics`
 - component is set to `Phoenix`
 - team is set to `Simulation`
 - descriptions stay concise and skim-friendly
@@ -105,7 +105,7 @@ Keep each section to 1-5 bullets when possible. If the ticket needs more detail,
 ## Workflow: Create a Phoenix Ticket
 
 1. Collect fields one by one:
-   - Summary
+   - Summary, in Title Case after `[Phoenix]`
    - Why
    - Goal
    - Non-goal
@@ -235,6 +235,7 @@ rm -f "$f"
 - If a section is unknown, use `TBD` only with user approval.
 - For Phoenix tickets, always ensure:
   - summary starts with `[Phoenix]`
+  - text after `[Phoenix]` uses Title Case
   - component is `Phoenix`
   - team is `Simulation`
 
