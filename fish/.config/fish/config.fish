@@ -52,6 +52,7 @@ end
 abbr -a devbox to_devbox
 
 abbr -a fs_notes_sync 'mkdir -p ~/Desktop/notes && rsync -az --delete -e "ssh -i ~/.ssh/id_ed25519_zipline" ubuntu@devbox_yimin_lin.int.flyzipline.com:/home/ubuntu/github/FlightSystems/notes/ ~/Desktop/notes/'
+abbr -a syncfs "mutagen sync create --name flightsystems --ignore-vcs -i 'bazel-*' -i '.cache/' -i 'build/' -i '__pycache__/' -i '*.pyc' -i '.phoenix/logs/' ~/FlightSystems ubuntu@devbox_yimin_lin.int.flyzipline.com:/home/ubuntu/github/FlightSystems"
 
 function jira_list_fzf
     set q '(assignee = currentUser() OR reporter = currentUser()) AND status NOT IN ("Done", "Canceled") ORDER BY duedate ASC, parent, created ASC'
