@@ -40,7 +40,9 @@ Treat `$ARGUMENTS` as a scope hint, not a separate command surface:
 - shared OpenCode plan/design artifacts under `~/notes/opencode/` when relevant
 - fallback legacy shared OpenCode notes under `~/notes/projects/dotfiles/` only
   when migration status is relevant
-- stowed source config under `opencode/.config/opencode/`
+- stowed source config under `opencode/.config/opencode/`, resolved for this
+  dotfiles checkout as `/home/vscode/dotfiles/opencode/.config/opencode/`
+  (commonly `~/dotfiles/opencode/.config/opencode/`)
 - runtime config under `~/.config/opencode/` when behavior/loading matters
 - the current target prompt/profile/skill/agent file(s)
 
@@ -87,7 +89,10 @@ python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all --since
    - Prefer root-session user evidence over child/subagent task prompts.
    - Downweight recent `/insights` or prompt-tuning meta sessions unless raw
      root evidence shows they are the main issue.
-   - If raw evidence cannot be inspected, say so and keep proposals conservative.
+   - If raw evidence cannot be inspected, label affected findings/proposals
+     `evidence-limited`, keep them conservative, and avoid broad profile/shared
+     default edits unless explicit user approval or an active plan supplies the
+     missing evidence boundary.
 3. Build findings across routing, autonomy, verbosity, artifact/memory use,
    safety, output format, validation, source-vs-runtime confusion, latency, and
    deterministic helper/script opportunities.
@@ -135,12 +140,17 @@ in **Memory consolidation** instead of overfitting prompt text immediately:
 
 ## Skill/workflow quality spine
 
-When skills are in scope, inventory local sources before proposing changes:
+When skills or workflow artifacts are in scope, inventory the local workflow
+surface before proposing changes or new artifacts:
 
-- stowed source skills under `opencode/.config/opencode/skills/`
-- runtime skills under `~/.config/opencode/skills/` when loading behavior matters
+- stowed source skills, commands, agents, scripts/helpers, and plugins under
+  `/home/vscode/dotfiles/opencode/.config/opencode/` (or
+  `~/dotfiles/opencode/.config/opencode/` in a normal checkout)
+- runtime skills, commands, agents, scripts/helpers, and plugins under
+  `~/.config/opencode/` when loading behavior matters
 - repo/system/global skill roots exposed by the current OpenCode session
 - orchestrator routing text and any related command/agent prompt
+- shared registry or index notes under `~/notes/opencode/` when present
 
 Evaluate skill candidates against the shared skill-quality defaults from
 `user-profile.yaml` and `skills/tool-maker/SKILL.md`: concise anatomy,
@@ -152,7 +162,8 @@ eval/checklist with positive and negative prompts.
 Only run external scouting when `$ARGUMENTS` explicitly asks for `scout`,
 `skills/scout`, or `external skills`.
 
-1. Inventory local skills/tools/notes and current workflow gaps first.
+1. Inventory local skills, commands, agents, scripts/helpers, orchestrator
+   routing, registry notes, and current workflow gaps first.
 2. Use external sources only to identify workflow patterns, not text to copy.
 3. Classify each candidate as: adapt pattern, local skill, helper/script,
    docs-or-notes, skip, or defer.
