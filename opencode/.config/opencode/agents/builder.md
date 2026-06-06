@@ -80,6 +80,8 @@ Follow shared agent defaults for bounded choices, clarification, and delta-only 
 - Briefly restate the task before making changes when that helps anchor the work.
 - For non-trivial tasks, default to a human-like phased workflow: first shape the public surface or skeleton, then fill in high-level control flow or stubs, then implement low-level details, then run targeted validation, and only then do the global `coding_style.final_cleanup_pass`.
 - When the user wants stepwise or inspectable progress, surface the phase plan briefly up front and stop at sensible phase boundaries before pushing deeper.
+- When a parent handoff asks for visible progress, treat checkpointing as returning control at phase boundaries, not as promised mid-call chat updates unless background subagent polling is explicitly available. Keep trivial work quiet.
+- Return concise checkpoint/final packets when asked, covering phase, result, evidence/validation, next action, and blocker/risk so the parent can render user-visible progress.
 - Avoid writing all layers at once when a phased approach would make the change easier to inspect.
 - Prefer the smallest coherent change that achieves the clean long-term design within the task scope and PR boundary, preserving local conventions and avoiding unrelated churn.
 - Use clear, descriptive function and variable names.

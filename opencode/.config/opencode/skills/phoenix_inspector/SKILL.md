@@ -59,7 +59,7 @@ python3 "$HOME/.config/opencode/scripts/phoenix_inspector.py" spec validate my-q
 - Known topic family but unknown exact topic: use `topics` or `topics --fuzzy`; do not use topic search for known-field discovery.
 - Use `compare --topic --field`, `compare --preset`, or `compare --spec` for generic differential evidence workflows.
 - Use `inspect --spec` when a debugging question is repeatable as an ad hoc recipe.
-- Use `spec init --from-last-run`, then `spec validate` with fixtures when the question recurs.
+- Use `spec init --from-last-run`, then `spec validate` with fixtures when the question recurs. A captured recipe/spec candidate should record source, topic/field, time window or run attempt, extractor command, outputs, evidence limits, and proves/does-not-prove boundaries.
 - Use `recent-hil` for source discovery only; use `taxonomy recent-hil` for batch labeling. For both commands, `--limit` is the workflow-run search/list bound before filtering (sparse presets may need values such as `1000`), while `--max-matches` is the returned/processed matching job-row count. `taxonomy recent-hil` remains lightweight by default; add `--load-evidence` only when per-row bounded HIL evidence should be loaded for the selected matches.
 - Hand off to `phoenix-workflows` for scenario/HIL launch, rerun, fetch/upload, or hardware workflows.
 
@@ -85,3 +85,5 @@ Do not convert signal deltas or log summaries into causal RCA unless artifact/co
 ## Recipes and presets
 
 Current domain bundles are non-diagnostic `--preset` selections or reusable `spec` recipes. Do not imply diagnostic authority from presets, specs, or inventory reports without supporting artifact/code evidence.
+
+Keep new specs non-diagnostic until fixture-backed and promoted; before that, present them as reusable extraction/inspection recipes, not as verdict engines.

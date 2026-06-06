@@ -163,6 +163,34 @@ check_opencode_progress_ui() {
   python3 opencode/.config/opencode/scripts/check_progress_ui.py
 }
 
+check_opencode_helper_packets() {
+  command -v python3 >/dev/null 2>&1 || return 77
+
+  local helpers=(
+    opencode/.config/opencode/scripts/opencode_worktree_cleanup_packet.py
+    opencode/.config/opencode/scripts/opencode_tmux_handoff.py
+    opencode/.config/opencode/scripts/opencode_runtime_packet.py
+    opencode/.config/opencode/scripts/opencode_repo_packet.py
+    opencode/.config/opencode/scripts/opencode_disk_pressure.py
+  )
+
+  python3 -m py_compile "${helpers[@]}" || return 1
+
+  local helper
+  for helper in "${helpers[@]}"; do
+    python3 "$helper" --help >/dev/null || return 1
+  done
+
+  python3 opencode/.config/opencode/scripts/opencode_worktree_cleanup_packet.py packet --repo . --format markdown >/dev/null || return 1
+  python3 opencode/.config/opencode/scripts/opencode_tmux_handoff.py packet --path /tmp --format markdown --dry-run >/dev/null || return 1
+  python3 opencode/.config/opencode/scripts/opencode_tmux_handoff.py packet --path /tmp --format markdown --copy-tmux --dry-run >/dev/null || return 1
+  python3 opencode/.config/opencode/scripts/opencode_runtime_packet.py packet --repo . --format markdown --dry-run >/dev/null || return 1
+  python3 opencode/.config/opencode/scripts/opencode_repo_packet.py packet --repo . --format markdown --no-gh >/dev/null || return 1
+  python3 opencode/.config/opencode/scripts/opencode_disk_pressure.py report --repo . --format markdown --max-depth 1 --max-entries 500 >/dev/null || return 1
+  python3 opencode/.config/opencode/scripts/opencode_disk_pressure.py report --repo . --format json --max-depth 1 --max-entries 500 >/dev/null || return 1
+  python3 opencode/.config/opencode/scripts/opencode_disk_pressure.py report --repo . --format markdown --max-depth 1 --max-entries 500 --print-cleanup-plan >/dev/null || return 1
+}
+
 run_optional_check() {
   local label="$1"
   shift
@@ -184,6 +212,7 @@ run_optional_check "Stow dry-run" check_stow_dry_run
 run_check "Agent permission frontmatter" check_agent_permissions
 run_check "Agent regression fixtures" check_agent_fixtures
 run_optional_check "OpenCode progress UI regression" check_opencode_progress_ui
+run_optional_check "OpenCode helper packet smoke" check_opencode_helper_packets
 run_optional_check "OpenCode config smoke" check_opencode_smoke
 
 if [ "$failures" -gt 0 ]; then

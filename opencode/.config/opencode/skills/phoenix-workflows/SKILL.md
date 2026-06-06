@@ -57,6 +57,8 @@ Why:
 
 Use `No` if the mode, target, credentials, branch/ref, HIL runner, log destination, or other launch-critical input is unresolved. If ready, name the exact SIL/HIL dispatch/run/fetch/upload action and the validation or log-upload plan, then wait for confirmation before launching, dispatching, or starting upload-heavy behavior.
 
+For any confirm-first Phoenix/SIL/HIL/fetch/upload action, include a compact decision packet before launch: chosen mode, repo/worktree and branch/ref, underlying command plus `opencode_longrun.py` wrapper when applicable, safety status (confirmation/auth/network/hardware/upload), expected artifacts (Phoenix log dir, S3 prefix, Baraza link, ZML/CSV/plot outputs), timeout/checkpoint cadence, validation/stop condition, and blockers. Preserve routing: launch/run/fetch/upload stays here; read-only evidence inspection still goes to `$phoenix_inspector`.
+
 ## Phoenix log source priority
 
 For Phoenix SIL/HIL runs, collect logs under `/Systems/.phoenix/logs/**` as the preferred local log source, then hand inspection to `$phoenix_inspector`. Do not read `~/.cache/bazel/**/testlogs/**` by default; use Bazel cache testlogs only when Phoenix logs are missing/insufficient or the user explicitly asks for them.
@@ -105,6 +107,7 @@ For failure triage, do not make causal RCA claims without pass/fail contrast or 
 - For Phoenix/ZML/HIL work, keep the `Topic Ledger` grounded in the exact scenario/job/log root, topic/signal/source file, time window or run attempt, status, and next decisive probe.
 - Preserve material local log, validator, ZML, `test_record.json`, downloaded artifact, generated report, and helper-command records when they affect the answer or blocker.
 - For ZML topic inventory, signal extraction, time-window extraction, CSV/plotting prep, or pass/fail/before-after comparisons after SIL/sim/HIL log collection, hand off to `$phoenix_inspector` with the topic ledger seed, source-type context, and selected local ZML paths instead of broad ad-hoc signal spelunking.
+- If the same Phoenix/ZML extraction or comparison recipe recurs, ask `$phoenix_inspector` to capture a reusable spec or spec candidate instead of creating another one-off script.
 
 ## Default post-run upload for local SIL runs
 

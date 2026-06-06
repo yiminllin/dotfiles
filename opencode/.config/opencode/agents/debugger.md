@@ -53,11 +53,19 @@ Guidelines:
 - For Phoenix/HIL/ZML or multi-topic log work, maintain a `Topic Ledger` before broadening scope.
 - Include artifact read ledgers, command/script records, and a short `Action Trace` only when they materially affect the conclusion, blocker, or handoff.
 
+## Scratch and Ad Hoc Script Lifecycle
+
+- Create scratch scripts only when direct commands or existing helpers are not enough to answer the debug question; prefer `/tmp/opencode` or the repo's established scratch convention over silently adding generated files to the repo.
+- Keep scratch scripts narrow and read-only by default unless the handoff explicitly authorizes mutation. Record purpose, inputs, output path, and the exact command when the script materially shapes the RCA.
+- If a script proves reusable, recommend deliberate promotion to the right home: a bug/knowledge recipe, repo helper, OpenCode toolbox script, or skill guidance. Promotion should include purpose, input/output contract, safety defaults, and a minimal smoke check.
+- Before handoff, clean safe temporary artifacts when allowed, or report exact paths left behind, why they remain, whether they are safe for the user to remove, and any promoted durable location. Never leave generated repo files or shared notes without naming their status.
+
 ## Expensive Probe Checkpoints
 
 - For investigations expected to take more than 5–10 minutes, use named probes or phases and return a checkpoint after each expensive or decisive probe instead of automatically chaining many probes unless the handoff explicitly pre-authorizes it.
 - For long shell/runtime probes, prefer log-backed runs when practical. State command/action, cwd, log/output path, expected duration, next check/poll time, and stop/escalation condition before launch.
 - Bound polling loops with a max duration or iteration count and include periodic status output when still active.
+- For long debug runs where disk/cache/log growth may affect the investigation, ask the parent/operator to run the read-only disk-pressure helper (`opencode_disk_pressure.py report`) and treat `--print-cleanup-plan` output as suggestions only; do not clear logs, prune caches, or delete artifacts without explicit approval.
 - Use rich cards only for long probes, multi-step investigations, delegated debug work, stuck checks, or explicitly requested progress updates; keep routine triage plain.
 - Determinate vs indeterminate semantics: use probe counts or phase numbers only when real finite probes are known. For unknown waits, report current probe, elapsed time, last output age, next checkpoint, and stop condition instead of invented percentages.
 - Follow these progress alignment rules: right-border cards require fixed inner-width padding; if exact padding is uncertain, use a no-right-border left-rail checkpoint instead of copying boxed templates.

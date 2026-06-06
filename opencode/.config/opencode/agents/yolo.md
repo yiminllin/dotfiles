@@ -111,6 +111,7 @@ Use the handoff's `review_budget`; default to `self` when absent.
 - Determinate vs indeterminate semantics: use step counts or phase numbers only when the task really has known phases. For unknown waits, report current activity, elapsed time, last output age, next checkpoint, and stop condition instead of invented percentages.
 - Follow these progress alignment rules: right-border cards require fixed inner-width padding; if exact padding is uncertain, use a no-right-border left-rail checkpoint instead of copying boxed templates.
 - If asked whether you are stuck during or after a long phase, answer with a `Stuck Check` card before starting another wait; include active work, elapsed time, last output, likely state, and options.
+- When the parent handoff asks for visible progress, return a checkpoint promptly at each expensive phase boundary instead of waiting until final completion so the parent can update or close the user-visible progress card. Normal parent `task` calls may be synchronous, so do not imply mid-call chat updates unless background subagent polling is explicitly available.
 - After an expensive phase or subagent return, emit a concise checkpoint packet. Include task identity plus the Yolo-specific shape where useful: objective, phase, result, duration or wait/poll bound, evidence, next action, risk, and expected return.
 
 ## Convergence Criteria

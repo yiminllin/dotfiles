@@ -34,6 +34,8 @@ Additional bounded helper modes are available when needed:
 
 ```sh
 python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode raw-corrections --scope worktree --worktree "$PWD" --followup-examples 5
+python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode raw-corrections --scope worktree --worktree "/Systems/FlightSystems" --followup-examples 5 --session-examples 3
+python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode raw-corrections --scope worktree --worktree "$HOME/dotfiles" --followup-examples 5 --session-examples 3
 python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode latency --scope all --followup-examples 5 --session-examples 5
 python3 "$HOME/.config/opencode/scripts/insights_history.py" --mode tool-patterns --scope all --followup-examples 5
 python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all --since "2026-05-31T00:00" --write-cache /tmp/opencode-insights-cache.json
@@ -50,7 +52,7 @@ python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all --since
    - Raw evidence from the current session, explicit user corrections, or current worktree root follow-ups overrides aggregate category hints when they conflict.
    - Do not let aggregate/meta categories dominate concrete current-session evidence; use aggregate categories to find where to inspect, not to overrule the inspected raw messages.
    - Downweight recent `/insights`/prompt-tuning meta sessions unless they remain dominant after the raw worktree review.
-   - Use `insights_history.py --mode raw-corrections` when worktree matching or aggregate/raw disagreement is in question; it checks both `project.worktree` and `session.directory/path`.
+   - Use `insights_history.py --mode raw-corrections` when worktree matching or aggregate/raw disagreement is in question; it checks both `project.worktree` and `session.directory/path`. For dominant worktrees, run bounded representative checks with small example counts rather than scanning every raw session.
    - If raw evidence cannot be inspected, say so explicitly and keep proposals conservative.
 3. Build a broad behavior model across recent history, including:
    - routing and subagent selection patterns
@@ -70,6 +72,7 @@ python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all --since
 6. Produce a comprehensive list of credible narrow proposals surfaced by the evidence, grouped or ordered by confidence and actionability. Prefer additive wording tweaks or a small shared-profile change over broad rewrites; do not cap the proposal list at three.
    - Lead with proposals derived from recurring real workflows across the dominant worktrees, not with `/insights` mechanics.
    - Put `/insights`-specific fixes in a separate subsection unless `/insights` is clearly the dominant issue in the raw worktree evidence.
+   - Keep `/insights` mechanics separate from broader workflow-derived proposals so meta prompt-tuning does not dominate the final answer.
    - When evidence shows repeated command sequences, data extraction, formatting, or validation steps, consider a narrow script/helper proposal as an alternative to changing agent wording.
 7. For each proposal, include:
    - proposal id
@@ -90,6 +93,7 @@ python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all --since
 - Before a bounded edit, restate the target file(s), intended change, and validation plan when doing so adds clarity.
 - For shared prompt/profile edits, cite the raw-root evidence, explicit user approval, or plan artifact that justifies the edit; if only aggregate evidence exists, propose rather than implement.
 - After edits, report files changed, validation results, and any material caveats.
+- Create or update artifacts only when persistence is useful for later implementation, review, or a yolo handoff. Do not create a new plan/design note for every `/insights` review or for purely conversational proposal output.
 - If the user rejects or continues refining, keep changes limited to analysis/proposal output and optional note artifacts under `~/notes/opencode/insights/` when persistence is helpful.
 
 ## Response contract
@@ -98,8 +102,9 @@ python3 "$HOME/.config/opencode/scripts/insights_history.py" --scope all --since
   2. raw workflow evidence summary by dominant worktree/theme, including representative root follow-ups or clear caveats if raw evidence was unavailable
   3. corrected comprehensive proposal list, led by broad workflow-derived OpenCode improvements and with `/insights`-specific fixes separated
   4. deterministic helper/script opportunities
-  5. recommended next step
-- Prefer chooser/dropdown-style next-step options when useful. Otherwise present short numbered options and accept compact replies (for example `1`, `2`, or `1+3`) instead of requiring exact command phrases.
+  5. recommended next steps as 2-4 numbered choices, not a checklist
+- Prefer chooser/dropdown-style next-step options when useful. Otherwise present short numbered options and accept compact replies (for example `1`, `2`, or `1+3`) instead of requiring exact command phrases. Typical choices are `1) implement all`, `2) implement prompt-only`, `3) create a plan`, and `4) refine proposals`.
+- Do not include a final `Progress Pin` by default. Use progress/status blocks only for long-running scans, stuck/status updates, or when the user explicitly asks for progress.
 - On `refine`: revise the proposal set or wording.
 - On `reject`: close the proposal.
 - On implementation requests: prepare a bounded handoff to `builder` or `yolo` with objective, edit scope, files, constraints, and validation steps; then execute that handoff.

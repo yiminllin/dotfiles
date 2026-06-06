@@ -14,6 +14,7 @@ Pressure-test an idea before execution by finding unclear requirements, hidden a
 - The user explicitly says "grill me" or asks for Socratic questioning.
 - The user wants a plan, design, requirement, or implementation approach stress-tested before building.
 - The user asks to uncover assumptions, sharpen scope, or validate readiness before committing to a direction.
+- A caller needs a bounded optional critique checkpoint before a risky design choice, broad implementation plan, unclear requirement, PR-boundary tradeoff, or safety-sensitive change where hidden assumptions could alter the path.
 
 ## When not to use
 
@@ -24,6 +25,7 @@ Pressure-test an idea before execution by finding unclear requirements, hidden a
 ## Guardrails
 
 - This is an explicit pre-planning critique, not a mandatory planning gate.
+- Keep caller-invoked checkpoints lightweight unless the user explicitly asks to be grilled or the risk justifies deeper stress testing.
 - Inspect the repo, docs, notes, or provided context before asking questions that are answerable locally.
 - Ask one high-leverage question at a time unless the user requests a full checklist.
 - Include a recommended answer or default, plus why, when asking the user to choose.
