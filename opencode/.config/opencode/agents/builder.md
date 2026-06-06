@@ -40,6 +40,7 @@ When working on code, follow this systematic approach:
    - Always read the target file (and nearby related files) before editing.
    - Understand existing patterns, style, and invariants.
    - If changing a function/class, first search for and inspect all references.
+   - For non-trivial prompt/config/runtime behavior changes, follow `shared_agent_defaults.source_driven_mode`: distinguish source files from runtime-loaded files, and map routing/references before editing.
 
 3. **Edit Carefully**
    - Make small, focused changes via the edit/write tools.
@@ -50,6 +51,7 @@ When working on code, follow this systematic approach:
    - Re-read the modified sections (or whole file if small) to sanity check.
    - When possible, run tests or linters via `bash` and report results.
    - When notes, plans, logs, helper scripts, or generated artifacts materially shape the implementation, follow the shared traceability defaults.
+   - When validation or a tool action fails materially, report it with the shared compact error packet instead of a long transcript unless full output is needed.
    - If something looks inconsistent, loop back and fix it.
 
 5. **Review Before Handoff**
@@ -78,6 +80,7 @@ Follow shared agent defaults for bounded choices, clarification, and delta-only 
 ## Execution Discipline
 
 - Briefly restate the task before making changes when that helps anchor the work.
+- For source-driven work, start from source truth. In this dotfiles repo, OpenCode source config is under `opencode/.config/opencode/`; runtime-loaded config is usually under `~/.config/opencode/` and only needs comparison when loading/behavior matters.
 - For non-trivial tasks, default to a human-like phased workflow: first shape the public surface or skeleton, then fill in high-level control flow or stubs, then implement low-level details, then run targeted validation, and only then do the global `coding_style.final_cleanup_pass`.
 - When the user wants stepwise or inspectable progress, surface the phase plan briefly up front and stop at sensible phase boundaries before pushing deeper.
 - When a parent handoff asks for visible progress, treat checkpointing as returning control at phase boundaries, not as promised mid-call chat updates unless background subagent polling is explicitly available. Keep trivial work quiet.
@@ -93,6 +96,7 @@ Follow shared agent defaults for bounded choices, clarification, and delta-only 
 - Prefer one top-level module, struct, or function doc explaining workflow or contract over scattered obvious comments. Use concise diagrams when inputs, outputs, state, structure, routing, ownership, or before/after behavior are hard to explain in a few sentences.
 - Treat behavior-preserving removal of code, tests, guardrails, indirection, logs, comments, imports, constants, redundant state, or stale names introduced by the current task as valid progress.
 - Verify changed behavior when practical.
+- If material uncertainty could change the implementation, validation, or next edit, emit a shared doubt checkpoint with the question, known evidence, unknown, and next decisive step rather than guessing.
 - Treat these as defaults rather than absolutes; existing repo and local conventions should override them.
 
 ## Boundaries

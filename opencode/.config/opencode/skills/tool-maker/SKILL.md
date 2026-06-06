@@ -1,6 +1,6 @@
 ---
 name: tool-maker
-description: Turn repeated OpenCode workflows into the right reusable tool: skill, command, script/helper, agent prompt, profile/config change, or MCP integration. Use when asked to create, evaluate, improve, import, adapt, or compare one specific OpenCode skill or candidate workflow, or decide how to package repeated behavior.
+description: Turn repeated OpenCode workflows into the right reusable tool: skill, command, script/helper, agent prompt, profile/config change, or MCP integration. Use when asked to create, evaluate, improve, adapt, or compare one specific OpenCode skill or candidate workflow, or decide how to package repeated behavior.
 ---
 
 # Tool Maker
@@ -13,13 +13,13 @@ This is narrower than `/insights`: `/insights` mines broad OpenCode history for 
 
 ## When to use
 
-- The user asks to create, update, evaluate, optimize, import, adapt, or compare one OpenCode skill or candidate workflow.
+- The user asks to create, update, evaluate, optimize, adapt, or compare one OpenCode skill or candidate workflow.
 - The user asks whether repeated OpenCode behavior should become a skill, command, script/helper, agent prompt, profile/config change, or MCP integration.
 - The user provides a public skill/prompt/workflow and asks to adapt it into this repo.
-- The user asks to scout public skills, tools, repos, or examples and recommend what to adopt, adapt, defer, or skip.
+- The user brings one candidate from `/insights` scout mode or asks for a bounded comparison of one small candidate set.
 - The user wants baseline-vs-candidate checks for a skill change.
 
-Do not use this for broad prompt-tuning discovery; use `/insights` first when the target workflow is unknown.
+Do not use this for broad prompt-tuning discovery or open-ended external scouting; use `/insights` first when the target workflow is unknown or the user wants `skills/scout`.
 
 ## Guardrails
 
@@ -27,6 +27,7 @@ Do not use this for broad prompt-tuning discovery; use `/insights` first when th
 - Do not add plugins, MCP servers, package installs, or scripts unless explicitly requested as a separate implementation task.
 - For prompt/config/skill edits, propose exact diffs and apply them only after user approval unless the user explicitly asked to implement that specific change.
 - Adapt public sources by extracting the useful workflow pattern; do not copy large proprietary, license-unclear, or repo-irrelevant text verbatim.
+- Do not add external skill URLs, background hooks, package/plugin/MCP config, or direct imports without separate explicit approval.
 - Follow `user-profile.yaml`: small reviewable changes, lean validation, direct top-down structure, and final cleanup for nontrivial edits.
 
 ## Workflow
@@ -35,10 +36,19 @@ Do not use this for broad prompt-tuning discovery; use `/insights` first when th
 
 - Identify the target workflow, trigger phrases, intended users, and expected outputs.
 - Capture non-goals and safety boundaries.
-- Check for existing overlapping skills, commands, scripts, agents, or config before proposing a new artifact.
+- Check for existing overlapping skills, commands, scripts/helpers, agents, profile/config defaults, and orchestrator routing before proposing a new artifact.
+- For dotfiles-stowed OpenCode work, distinguish source under `opencode/.config/opencode/` from runtime-loaded files under `~/.config/opencode/` when behavior or loading matters.
 - Decide the right home: skill vs command vs script/helper vs agent prompt vs profile/config vs ordinary docs vs MCP.
 
 A workflow is a good skill candidate when it is repeatable, specialized, tool- or context-aware, easy to trigger from user intent, and benefits from an operational checklist.
+
+Anti-rationalization checks before creating a skill:
+
+- Is this a repeated specialized workflow, not just a one-off preference?
+- Does an existing command, agent, skill, helper, note, or profile default already cover it?
+- Would a deterministic helper/script, docs/notes, or one profile line be simpler?
+- Does the skill improve trigger precision without bloating common prompts?
+- Are negative cases, approval boundaries, and prohibited actions clear enough to prevent over-triggering?
 
 ### 2. Choose the right artifact
 
@@ -76,16 +86,30 @@ description: <action-oriented description with when-to-use trigger>
 ---
 ```
 
-Keep the body practical: purpose, when to use, guardrails, workflow, eval/validation, and output format.
+Skill anatomy standard:
+
+- Frontmatter has `name` and an action-oriented `description` that says when to trigger the skill.
+- Body starts with purpose and when-to-use/non-use cases.
+- Guardrails name approval boundaries, tool/source limits, and prohibited actions.
+- Workflow is step-by-step and ends with the smallest useful output contract.
+- Eval/validation guidance uses realistic prompts and avoids ceremony for tiny edits.
+
+Keep the body practical and compact. Avoid generic style defaults that already live in `user-profile.yaml`.
 
 ### 4. Improve an existing skill
 
-- Read the current `SKILL.md`, related orchestrator routing, and any local notes the user points to.
+- Read the current `SKILL.md`, related orchestrator routing, relevant command/agent prompts, and any local notes the user points to.
 - Identify the smallest behavior gap: trigger precision, missing step, unclear guardrail, weak output format, or validation gap.
 - Patch the skill instructions directly around that gap; avoid broad rewrites.
 - Remove redundant text introduced by the change before handoff.
 
-### 5. Import or adapt a public skill
+Lightweight registry/inventory guidance:
+
+- Track enough to avoid overlap: skill purpose, trigger phrases, owner path, related command/agent/profile text, eval prompts, and last meaningful review when useful.
+- Inventory source skills and runtime-loaded skills separately when behavior differs; do not assume stowed source has already been loaded by the running OpenCode session.
+- Use the inventory to update an existing artifact before creating a new one unless the trigger/workflow boundary is genuinely distinct.
+
+### 5. Adapt a public skill pattern
 
 - Inspect the source for reusable workflow shape, not phrasing to copy.
 - Map external assumptions to this repo's tools, permissions, agents, and style.
@@ -93,20 +117,20 @@ Keep the body practical: purpose, when to use, guardrails, workflow, eval/valida
 - Note provenance briefly when useful.
 - Validate the adapted skill against local trigger phrases and expected outputs.
 
-### 6. Public-source scouting mode
+### 6. Candidate scouting follow-up
 
-Use when the user asks to find public skills, tools, repos, or examples worth bringing into the workflow.
+Use after `/insights` internal `skills/scout` mode or when the user explicitly provides a bounded candidate set.
 
 1. Inventory local workflow, existing skills/tools, and relevant history/artifacts first.
-2. Search public sources by relevance and popularity, but do not trust stars or README claims alone.
-3. Sample representative implementations, docs, scripts, and examples before recommending adoption.
+2. Use external sources to identify patterns; do not copy text directly.
+3. Sample only enough implementation/docs/examples to judge local fit.
 4. Classify each candidate:
-   - import as-is
-   - adapt into an existing skill/tool
-   - create a new local artifact
-   - convert idea into script/helper/config only
+   - adapt pattern into existing artifact
+   - create local skill
+   - create helper/script
+   - capture docs-or-notes only
    - skip or defer
-5. Prioritize by workflow fit, repeatability, overlap with existing artifacts, setup cost, safety/permission impact, maintenance burden, and validation path.
+5. Prioritize by workflow fit, repeatability, overlap, setup cost, safety/permission impact, maintenance burden, and validation path.
 6. Recommend a small next action, usually one candidate, one local improvement, or one bakeoff.
 
 Keep scouting output concise per candidate, but do not hide credible options when the user asks for comprehensive coverage.
@@ -115,11 +139,11 @@ Keep scouting output concise per candidate, but do not hide credible options whe
 
 Use a small realistic prompt set, usually 3-8 prompts:
 
-- happy path where the skill should load
-- boundary case where it should not load
+- positive happy path where the skill should load
+- negative boundary where it should not load
 - ambiguous request that should ask one clarifying question
-- approval-gated edit request
-- historical prompt from local OpenCode history when available and relevant
+- approval-gated edit or external-boundary request when relevant
+- historical prompt from local OpenCode history when available and representative
 
 For each prompt, define expected routing, key workflow steps, output shape, and any prohibited behavior.
 
@@ -136,6 +160,7 @@ For each prompt, define expected routing, key workflow steps, output shape, and 
 - After approval or explicit implementation request, apply the narrow patch.
 - Validate YAML frontmatter and search for skill routing references.
 - Check that orchestrator routing is not duplicated or conflicting.
+- For OpenCode prompt/config/agent/skill/command source edits under `opencode/.config/opencode/`, report that OpenCode must be quit and restarted before runtime behavior changes can be observed.
 - Final cleanup: trim redundant prose, speculative guardrails, unsupported tools, stale names, and unrelated scope.
 
 ## Output format
@@ -153,13 +178,16 @@ Proposed/applied changes:
 - `<path>`: <summary>
 
 Candidate scouting:
-- <candidate>: <import | adapt | new artifact | script/config only | skip/defer> — <why>
+- <candidate>: <adapt pattern | local skill | helper/script | docs-or-notes | skip | defer> — <why>
 
 Eval prompts/results:
 - <prompt>: <baseline> -> <candidate/result>
 
 Validation:
 - <checks run and result>
+
+Runtime note:
+- <restart caveat for OpenCode source config edits, when applicable>
 
 Remaining risks/assumptions:
 - <concise uncertainty or none>

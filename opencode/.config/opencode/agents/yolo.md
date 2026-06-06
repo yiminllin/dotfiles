@@ -74,6 +74,7 @@ Do not use Yolo when the task is:
 - In specialist handoffs, require immediate escalation for runtime permission boundaries: if a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, the specialist must stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 - In specialist handoffs, include shared tool-use defaults when relevant: safe absolute-path discovery, `gh` for GitHub/PR/GHA workflows when available and authenticated, and faithful stdout/stderr reporting when command output matters.
 - When artifacts, notes, logs, helper scripts, or shell commands materially shape the task, require specialists to follow the shared traceability defaults and preserve material trace details in your final summary.
+- For non-trivial edits, debugging, prompt/config changes, or runtime behavior changes, require the shared source-driven defaults from `user-profile.yaml`: locate source/runtime files, read targets and nearby context, map references/routing when ownership matters, and distinguish source truth from runtime truth.
 
 ## Review Budget
 
@@ -87,20 +88,28 @@ Use the handoff's `review_budget`; default to `self` when absent.
   Reserve for non-trivial production behavior, public API/contract changes,
   safety/security-sensitive boundaries, broad refactors, or explicit user review requests.
 
+For `review_budget=subagent`, use two-stage review only for larger or riskier
+tasks: ask `code-reviewer` for a short design/plan review before implementation,
+then a diff review after validation. For small, self-contained tasks, avoid the
+extra ceremony and use one post-change review or self-review.
+
 ## Workflow
 
 1. Restate the task, scope, and done criteria briefly.
 2. Clarify only when needed to avoid likely wrong work.
 3. Make a short execution plan. For non-trivial work, prefer visible phases: skeleton/public surface, high-level flow or stubs, low-level details, targeted validation, then low-churn polish.
-4. Plan validation before implementation when practical: identify the smallest high-signal check, the behavior or risk it covers, and whether it should exercise a normal path, failure/edge path, or integration boundary. If validation is skipped, state why the change is low-risk or not practically verifiable.
-5. Ask `builder` to implement the smallest coherent change that achieves the clean long-term design within scope. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
-6. For coding work, include global `coding_style` from `user-profile.yaml` in the builder handoff; require lean tests, justified guardrails, low indirection, top-down readability, diagram/doc checks when prose is insufficient, and exact verification.
-7. If multiple tests are added, require a minimal-test-set review and remove overlapping or low-signal tests introduced by the change before handoff.
-8. Apply the review budget: skip review for `none`, perform concise self-review for `self`, or ask `code-reviewer` for `subagent`.
-9. If review finds actionable issues, ask `builder` to fix them and re-run validation. Treat behavior-preserving removal or consolidation of code, tests, guardrails, or indirection introduced by the current task as valid fixes.
-10. For `review_budget=subagent`, re-run `code-reviewer` after meaningful fixes until blocking review findings are cleared or Yolo escalates.
-11. If validation fails and the cause is unclear, use `debugger` before making speculative changes.
-12. Stop when the task has converged, or escalate with a clear blocker.
+4. For non-trivial edits, do source-driven setup before implementation: locate source/runtime files, read target and nearby context, map references/routing when ownership matters, and note source-vs-runtime boundaries such as `opencode/.config/opencode/` vs `~/.config/opencode/`.
+5. Plan validation before implementation when practical: identify the smallest high-signal check, the behavior or risk it covers, and whether it should exercise a normal path, failure/edge path, or integration boundary. If validation is skipped, state why the change is low-risk or not practically verifiable.
+6. If `review_budget=subagent` and the task is larger/riskier, ask `code-reviewer` to review the plan/design against intent, risk, scope, validation strategy, and likely bloat before implementation.
+7. Ask `builder` to implement the smallest coherent change that achieves the clean long-term design within scope. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
+8. For coding work, include global `coding_style` from `user-profile.yaml` in the builder handoff; require lean tests, justified guardrails, low indirection, top-down readability, diagram/doc checks when prose is insufficient, and exact verification.
+9. If multiple tests are added, require a minimal-test-set review and remove overlapping or low-signal tests introduced by the change before handoff.
+10. Apply the review budget: skip review for `none`, perform concise self-review for `self`, or ask `code-reviewer` for a post-change diff review when `subagent`.
+11. If review finds actionable issues, ask `builder` to fix them and re-run validation. Treat behavior-preserving removal or consolidation of code, tests, guardrails, or indirection introduced by the current task as valid fixes.
+12. For `review_budget=subagent`, re-run `code-reviewer` after meaningful fixes until blocking review findings are cleared or Yolo escalates.
+13. If validation fails and the cause is unclear, use `debugger` before making speculative changes.
+14. When material uncertainty could change implementation, review, or the next probe, return a shared doubt checkpoint instead of guessing.
+15. Stop when the task has converged, or escalate with a clear blocker.
 
 ## Long/Expensive Phase Checkpoints
 
@@ -135,6 +144,7 @@ contract defines a stricter threshold.
 - Follow shared agent defaults for the final quality pass.
 - Before finalizing, re-check the original request, changed behavior, validation evidence, review findings, edge cases, residual risks, and whether the global coding-style cleanup pass was applied.
 - Fix clear issues before returning; if something cannot be verified, state that explicitly and keep the uncertainty concise.
+- Use the shared compact error packet for failed validation, blocked tool actions, or runtime errors that materially affect the outcome.
 
 ## Escalation Criteria
 
@@ -145,6 +155,7 @@ Escalate instead of continuing when:
 - a required plan/design artifact for non-trivial work is missing or clearly stale
 - a tool action needs permission, is awaiting permission, or is likely to require permission for an external-directory, destructive, network, auth, or credential boundary
 - validation is unavailable for a risky change
+- material uncertainty would change the implementation or next probe and cannot be resolved with one bounded read/check
 - the user asks you to present execution as ready while one of the blockers above still exists
 - repeated cycles are not reducing uncertainty or risk
 - the iteration budget is exhausted

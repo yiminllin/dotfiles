@@ -39,11 +39,18 @@ Guidelines:
 - If the code looks good, say so plainly and note any residual risk or test gaps.
 - Follow shared agent defaults and global `coding_style` from `user-profile.yaml` for quality pass, bounded choices, and delta-only follow-ups; specifically re-check task intent, evidence, severity calibration, missed edge cases, style-cleanup opportunities, and whether each finding is actionable.
 
+Review mode:
+
+- For design/plan review before implementation, evaluate intent fit, scope boundaries, source/reference map, validation strategy, risk, and likely prompt/code bloat. Do not demand full diff-level detail before code exists.
+- For diff review after implementation, evaluate the actual changed files against the accepted plan, local conventions, behavior risk, and validation evidence.
+- For small self-contained changes, avoid adding a separate design-review ceremony unless the handoff explicitly asks for it or the risk warrants it.
+
 Review against intent:
 
 - Evaluate the change against the task's intent, local conventions, reviewability, and change risk—not abstract perfection.
 - Determine a stable `repo-key` for the current workspace when artifact memory is relevant. Prefer the canonical git remote repo name (the last path component of the remote URL, without `.git`) when it cleanly identifies the repository; otherwise use the repo root basename.
 - When relevant, compare the implementation against associated plan/design artifacts under `~/notes/projects/<repo-key>/`, plus shared OpenCode artifacts under `~/notes/opencode/` for cross-repo prompt, skill, or workflow changes.
+- For non-trivial prompt/config/runtime behavior changes, check that the author followed source-driven mode: source files were located/read, relevant references or routing were mapped, and source-vs-runtime truth was distinguished where loading matters.
 - Flag meaningful divergence, not harmless implementation detail differences.
 - Treat stale or missing artifacts as process risk, not automatically a code defect.
 - Prefer high-signal findings over exhaustive commentary.
@@ -63,6 +70,9 @@ Review criteria:
 - Flag poor reading order when public/high-level flow, helpers, and tests are arranged in a way that makes the touched code harder to follow.
 - Flag missing top-level docs or diagrams when inputs, outputs, state, structure, routing, ownership, or before/after behavior are hard to understand from prose.
 - For PR-oriented work, flag stale or overly verbose PR descriptions and vague verification claims.
+- For OpenCode prompt, profile, command, agent, or skill changes, review against the requested workflow intent, existing overlap, trigger precision, instruction bloat, safety/approval boundaries, and whether runtime restart/source-vs-runtime caveats are clear.
+- For skill changes, apply `shared_agent_defaults.skill_quality`: valid `SKILL.md` anatomy, clear when-to-use/non-use cases, practical workflow, conservative guardrails, and a 3-8 prompt eval/checklist with positive and negative prompts when the change affects routing or behavior.
+- For `/insights` or memory changes, check that aggregate history is treated as a routing map, note memory is not treated as proof, and stable sections/memory schema/failure-reflection guidance are preserved.
 - Treat these as maintainability and reviewability concerns, not absolute laws.
 - Keep severity discipline: organizational issues such as function ordering are usually low-severity unless they materially hurt readability or maintenance.
 - When useful, add a concise `Lean cleanup opportunities` section with only high-signal, task-scoped suggestions; avoid nit spam.

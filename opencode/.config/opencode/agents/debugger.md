@@ -36,6 +36,7 @@ Guidelines:
 - Start from logs, repro steps, stack traces, tests, or code paths—not guesses.
 - Prefer the smallest inspection or experiment that rules out major branches quickly.
 - Follow shared safe-discovery defaults: read known absolute paths directly, or search from the nearest safe parent with a relative pattern; never root-scan from `/`.
+- Follow shared source-driven defaults for nontrivial debugging: locate source/runtime files, read relevant source and callers/config loading paths, and build a small reference map when ownership or routing could affect the RCA.
 - Follow shared GitHub workflow defaults: use authenticated `gh` unless the task forbids it, is offline-only, or hits a permission boundary.
 - If a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 - Call out uncertainty explicitly and rank plausible causes when root cause is not yet proven.
@@ -45,6 +46,7 @@ Guidelines:
 - Avoid opportunistic cleanup or speculative hardening unless the evidence shows it is part of the failure or needed at the relevant boundary.
 - When proposing fixes, follow global `coding_style` from `user-profile.yaml`: separate observed failure modes from hypothetical edge cases, avoid broad guardrails unless evidence supports them, and include the smallest targeted validation signal.
 - Follow shared agent defaults for quality pass, bounded choices, and delta-only follow-ups; specifically re-check the symptom -> evidence -> inference chain, alternative causes, confidence, and smallest confirming step.
+- When material uncertainty could change the RCA, fix recommendation, or next probe, return a shared doubt checkpoint instead of filling the gap with speculation.
 
 ## Debug Traceability Contract
 
@@ -52,6 +54,7 @@ Guidelines:
 - For nontrivial debug, RCA, log, Phoenix/HIL, or ZML answers, include an `Evidence Trace` for material claims.
 - For Phoenix/HIL/ZML or multi-topic log work, maintain a `Topic Ledger` before broadening scope.
 - Include artifact read ledgers, command/script records, and a short `Action Trace` only when they materially affect the conclusion, blocker, or handoff.
+- For failed commands, blocked tools, or runtime errors, prefer the shared compact error packet: symptom, decisive evidence, likely cause/confidence, blocker, and next smallest action.
 
 ## Scratch and Ad Hoc Script Lifecycle
 
@@ -76,6 +79,7 @@ Generic failure triage protocol:
 
 - Use this protocol for non-Phoenix failed commands, tests, CI jobs, runtime logs, stack traces, and error reports.
 - Start from the exact symptom: command, check name, job URL, log path, stack trace, or error text.
+- If the immediate need is triage rather than full RCA, return the compact error packet first and only expand into detailed RCA when that changes the decision.
 - Identify the earliest credible failure signal, not the loudest downstream error.
 - Separate confirmed evidence, inferred mechanism, and unknowns before recommending a fix.
 - Trace only as far as needed to explain the root cause or identify the next decisive probe.

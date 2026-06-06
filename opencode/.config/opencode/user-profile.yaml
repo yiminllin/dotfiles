@@ -98,6 +98,94 @@ shared_agent_defaults:
       - For Phoenix/HIL/ZML or multi-topic log work, maintain a Topic Ledger with the active question, topic/signal/log/source, time window or attempt, status, and next decisive probe.
       - Include Action Trace, artifact read ledgers, and command records only when material: high-signal operations and pivots; artifact path/URI, source packet, sections/fields read, why, and result/blocker; exact command, cwd, output paths, exit status, and material stdout/stderr.
       - Keep routine or low-signal reads and commands out of final responses unless the user asks for a full transcript.
+  source_driven_mode:
+    applies_to: non-trivial edits, debugging, prompt/config changes, and runtime behavior changes
+    workflow:
+      - Locate the source files, runtime-loaded files, entry points, and references before editing or proposing broad behavior changes.
+      - Read the target source and nearby related files; do not rely on summaries, aggregate history, or notes alone.
+      - Build a small reference map when ownership, callers, or routing may affect the edit.
+      - Distinguish source truth from runtime truth; for dotfiles-stowed OpenCode config, source is `opencode/.config/opencode/` and runtime is usually `~/.config/opencode/`.
+      - Compare source-vs-runtime only when behavior/loading matters; do not make trivial work heavy.
+  uncertainty:
+    doubt_checkpoint:
+      trigger: material uncertainty that could change the implementation, review result, or next probe
+      shape:
+        - question: the specific uncertain point
+        - known: evidence already inspected
+        - unknown: what remains unproven
+        - next_decisive_step: one probe, read, question, or choice
+      guidance:
+        - Use for real ambiguity, conflicting evidence, failing validation, or risky assumptions.
+        - Do not emit doubt checkpoints for ordinary low-risk edits where normal verification is enough.
+  error_packets:
+    compact_shape:
+      - symptom: exact command, check, error, or observed behavior
+      - evidence: most relevant stdout/stderr, file, log, or diff signal
+      - likely_cause: confirmed or inferred, with confidence
+      - blocked_by: permission, missing input, failing dependency, or unknown if applicable
+      - next_step: smallest useful action or user decision
+    guidance:
+      - Prefer compact packets over long transcripts when reporting failed tools, validation, or blocked runtime actions.
+      - Include full stdout/stderr only when the user asked or it materially changes the decision.
+  memory:
+    note_schema:
+      - Context: workflow, repo/source path, runtime path if different, and date range.
+      - Memory kind: episodic for concrete events/corrections, semantic for stable facts/preferences, or procedural for reusable workflows/steps.
+      - Observed failure or habit: user-visible symptom or repeated correction.
+      - Evidence: raw root-session snippets, commands, artifacts, or links, plus what they do not prove.
+      - Decision/default: behavior to preserve in prompt, profile, skill, helper, or docs.
+      - Owner: command, agent, skill, profile, helper, or notes.
+      - Consolidation status: active, superseded, duplicate, stale, or rejected.
+      - Confidence/staleness: confidence level and the signal that would mark the memory stale when scoped.
+      - Review trigger: future signal that should refresh, merge, or remove the memory.
+    failure_reflection_packet:
+      - Trigger: user ask, correction, failure, or repeated follow-up.
+      - Expected behavior: what should have happened.
+      - Actual behavior: what happened.
+      - Root habit: likely workflow or prompt gap, with confidence.
+      - Durable home: profile, command, agent, skill, helper, or note.
+      - Next probe: one check that would show whether this is recurring.
+    guidance:
+      - Consolidate only durable, reusable lessons; do not create note churn for every conversation.
+      - Treat notes as memory and routing hints, not proof against repo/source/runtime evidence.
+  skill_quality:
+    anatomy:
+      - YAML frontmatter with `name` and an action-oriented `description` that says when to trigger the skill.
+      - Purpose and when-to-use/non-use cases.
+      - Guardrails, approval boundaries, and tool/source limits.
+      - Step-by-step workflow with the smallest useful output contract.
+      - Validation or eval guidance using realistic prompts.
+    anti_rationalization_checks:
+      - Is this a repeated specialized workflow, not just a preference or one-off task?
+      - Does it overlap an existing command, agent, skill, script, or profile default?
+      - Would a deterministic helper, docs/notes, or a profile line be simpler?
+      - Does the skill add clear trigger precision without bloating common prompts?
+      - Are negative cases and approval boundaries explicit enough to prevent over-triggering?
+    eval_prompt_set:
+      size: 3-8 prompts
+      include:
+        - positive happy path where the skill should load
+        - negative boundary where it should not load
+        - ambiguous request that should ask one clarifying question
+        - approval-gated edit or external-boundary request when relevant
+        - historical local prompt when available and representative
+      score:
+        - trigger precision
+        - workflow completeness
+        - safety and approval handling
+        - output usefulness
+        - instruction bloat
+    registry_inventory:
+      - Inventory local source skills, runtime-loaded skills, commands, agents, scripts/helpers, and orchestrator routing before adding a new artifact.
+      - Track skill purpose, trigger phrases, owner path, overlaps, eval prompts, and last meaningful review when useful.
+  external_scouting:
+    applies_to: /insights internal skills/scout mode and tool-maker candidate evaluation
+    guidance:
+      - Inventory local sources and workflow gaps before looking outward.
+      - Use external examples to identify patterns; do not copy text directly.
+      - Classify candidates as adapt pattern, local skill, helper/script, docs-or-notes, skip, or defer.
+      - Recommend one concrete candidate or bakeoff by default; keep broader lists concise when requested.
+      - Do not add package/plugin/MCP config, external skill URLs, background hooks, or direct imports without separate explicit approval.
   clarification:
     style: minimum-needed
     prefer: structured_choice_when_available
