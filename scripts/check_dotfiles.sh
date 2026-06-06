@@ -137,10 +137,12 @@ check_agent_fixtures() {
   local fixture_dir="opencode/.config/opencode/evals"
   local fixtures=(
     permission-frontmatter.md
+    permission-boundary-escalation.md
     yolo-autonomy.md
     prompt-edit-approval.md
     commit-safety.md
     dotfile-documenter-plugins.md
+    insights-followup.md
   )
   local fixture
   for fixture in "${fixtures[@]}"; do
@@ -149,6 +151,50 @@ check_agent_fixtures() {
       return 1
     }
   done
+}
+
+check_skill_anatomy() {
+  shopt -s nullglob
+  local skills=(opencode/.config/opencode/skills/*/SKILL.md)
+  shopt -u nullglob
+
+  [ "${#skills[@]}" -gt 0 ] || return 77
+
+  local failures=0
+  local skill
+  for skill in "${skills[@]}"; do
+    skill_has_frontmatter_field "$skill" name || {
+      printf 'missing or empty skill frontmatter field: %s: name\n' "$skill" >&2
+      failures=$((failures + 1))
+    }
+    skill_has_frontmatter_field "$skill" description || {
+      printf 'missing or empty skill frontmatter field: %s: description\n' "$skill" >&2
+      failures=$((failures + 1))
+    }
+  done
+
+  [ "$failures" -eq 0 ]
+}
+
+skill_has_frontmatter_field() {
+  local file="$1"
+  local field="$2"
+  local line
+  local in_frontmatter=0
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [ "$in_frontmatter" -eq 0 ]; then
+      [ "$line" = '---' ] || return 1
+      in_frontmatter=1
+      continue
+    fi
+
+    [ "$line" = '---' ] && return 1
+
+    [[ "$line" =~ ^[[:space:]]*${field}:[[:space:]]*[^[:space:]].* ]] && return 0
+  done <"$file"
+
+  return 1
 }
 
 check_opencode_smoke() {
@@ -211,6 +257,7 @@ run_optional_check "Stylua formatting" check_stylua
 run_optional_check "Stow dry-run" check_stow_dry_run
 run_check "Agent permission frontmatter" check_agent_permissions
 run_check "Agent regression fixtures" check_agent_fixtures
+run_optional_check "Skill anatomy frontmatter" check_skill_anatomy
 run_optional_check "OpenCode progress UI regression" check_opencode_progress_ui
 run_optional_check "OpenCode helper packet smoke" check_opencode_helper_packets
 run_optional_check "OpenCode config smoke" check_opencode_smoke
