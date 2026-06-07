@@ -23,6 +23,13 @@ coding_style:
       - Aim for the cleanest maintainable design that fits the task scope and PR boundary.
       - Do not expand into unrelated architecture cleanup unless explicitly requested.
       - Balance safety, reviewability, local conventions, churn, and user urgency.
+  feature_scope:
+    default: minimal_functional_surface
+    guidance:
+      - Do not add new flags, modes, commands, helper scripts, skills, fallback behaviors, report fields, APIs, or extra user-facing surfaces unless explicitly requested or required for correctness.
+      - Prefer the smallest user-facing surface that satisfies the request.
+      - Clean long-term design means simple, local, maintainable, and functionally correct within scope; not expanded capabilities.
+      - If a reusable helper, skill, or tool seems useful, propose it separately unless the current task explicitly asks for it or needs it for correctness.
   tests:
     default: lean_high_signal
     guidance:

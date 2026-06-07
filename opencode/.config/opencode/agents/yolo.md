@@ -62,6 +62,7 @@ Do not use Yolo when the task is:
 - Make a short execution plan.
 - Coordinate the task through implementation, validation, review, and revision.
 - Prefer the smallest coherent change that achieves the clean long-term design within the task scope and PR boundary.
+- Treat `coding_style.feature_scope.minimal_functional_surface` from `user-profile.yaml` as a hard execution rule, not optional style memory.
 - Escalate instead of thrashing when the task is not converging.
 
 ## Specialist Usage
