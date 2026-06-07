@@ -93,7 +93,7 @@ abbr -a jl jira_list_fzf
 function jira_create_phoenix
     set summary (string join ' ' $argv)
     test -n "$summary"; or return 1
-    jira issue create -t Task -s "[Phoenix] $summary" -C Phoenix --custom team=Simulation --no-input
+    jira issue create -t Task -s "[Phoenix] $summary" -C Phoenix --custom team=Simulation -a "Yimin Lin" --no-input
 end
 
 abbr -a jm --set-cursor 'jira issue move %'

@@ -15,7 +15,7 @@ This skill is optimized for Phoenix Simulation work:
 - component is set to `Phoenix`
 - team is set to `Simulation`
 - default to high-level work-item grouping rather than one Jira ticket per PR unless the user asks for per-PR tickets
-- assign the ticket to the user when requested
+- assign Phoenix tickets to `Yimin Lin` by default unless the user says otherwise
 - descriptions stay concise and skim-friendly
 
 Do not turn Jira tickets into design docs. Link to design docs, PRs, Slack threads, logs, simulations, and dashboards instead of pasting long details.
@@ -86,6 +86,8 @@ Use this structure by default:
 ## Context
 - Relevant Slack threads, docs, PRs, code links, logs
 - Current behavior / constraints / prior decisions
+- Parent ticket: none / `<KEY>` / not sure
+- Due date: none / today / this week / custom date
 
 ## Plan
 - Step 1
@@ -108,9 +110,13 @@ Keep each section to 1-5 bullets when possible. If the ticket needs more detail,
 
 1. Confirm the ticket shape before drafting:
    - Prefer one high-level work item for a feature, investigation, validation effort, or rollout; create one ticket per PR only when the user requests that granularity.
-   - If the user asks for parent/child work items or an epic, capture the intended hierarchy in the draft, but do not invent exact child-link CLI syntax unless it is documented for the installed Jira CLI. Confirm the write boundary before creating or linking child items.
+   - Parent ticket: offer `none`, `existing key`, or `not sure`. Use `-P "<PARENT-KEY>"` only when an existing parent key is supplied and confirmed.
+   - Due date: offer `none`, `today`, `this week`, or `custom`. Capture the choice in the description unless exact Jira CLI/custom-field syntax is confirmed.
+   - Assignee defaults to `Yimin Lin`; ask only if the user wants a different assignee or no assignee.
 2. Collect fields one by one:
    - Summary, in Title Case after `[Phoenix]`
+   - Parent ticket
+   - Due date
    - Why
    - Goal
    - Non-goal
@@ -118,14 +124,13 @@ Keep each section to 1-5 bullets when possible. If the ticket needs more detail,
    - Plan
    - Artifacts / PRs
    - Definition of Done
-   - Assignee, if the user wants the ticket assigned
 3. For each section:
    - offer short suggested options when possible
    - ask the user to choose, edit, skip, or provide custom text
    - keep wording short and concrete
    - prefer useful Slack, PR, log, simulation, dashboard, and context links over pasted detail
 4. Draft the full description and show it before creating the ticket.
-5. Confirm before writing to Jira, including any assignee or parent/child/epic writes.
+5. Confirm before writing to Jira, including assignee, parent, due-date handling, and any parent/child/epic writes.
 6. Create the ticket:
 
 ```bash
@@ -134,11 +139,23 @@ jira issue create \
   -s "[Phoenix] <summary>" \
   -C Phoenix \
   --custom team=Simulation \
+  -a "Yimin Lin" \
   -b "$body" \
   --no-input
 ```
 
-If the installed Jira CLI does not support `-b` during create, create the ticket first, then update the body with `jira issue edit`.
+When a parent key is supplied and confirmed, add `-P "<PARENT-KEY>"` to the create command. If the installed Jira CLI does not support `-b` during create, create the ticket first, then update the body with `jira issue edit`. Do not invent due-date CLI syntax; include the due date in the description or apply it only when exact Jira CLI/custom-field syntax is confirmed.
+
+## Workflow: Sync Jira With PR
+
+Use when the user wants a Jira ticket kept aligned with PR state. Confirm each Jira write/status/description change unless the user explicitly requested that exact update.
+
+1. Collect the ticket key and PR URL/title.
+2. PR created or draft-ready: confirm moving the ticket to `In Review`.
+3. Add the PR link under `## Artifacts` / `PRs` in the description, or as a concise comment if preserving the existing description is safer.
+4. Add validation results as a short comment or description update.
+5. Blocked PR: add a blocker comment and confirm any status change.
+6. Merged PR: confirm moving the ticket to `Done`.
 
 ## Workflow: Update Description
 
@@ -235,13 +252,13 @@ rm -f "$f"
 
 ## Guardrails
 
-- Ask before performing Jira write operations unless the user explicitly requested the exact write.
+- Ask before performing Jira create/update/move/link/comment writes unless the user explicitly requested the exact write.
 - Keep tickets short; link to detailed docs instead of embedding them.
 - Do not invent Slack links, PRs, simulations, dashboards, logs, or validation artifacts.
 - Include useful Slack/PR/log/context links when known; summarize instead of pasting long threads or logs.
 - Do not create per-PR tickets by default for a PR stack; group related Phoenix work into a higher-level work item unless the user asks otherwise.
 - Do not invent Jira parent/child or epic CLI syntax. If the exact command is not documented or already known, draft the relationship and ask/confirm before writing.
-- Assign tickets only when requested or explicitly confirmed.
+- Default Phoenix ticket creates assign to `Yimin Lin`; confirm if using a different assignee or leaving the ticket unassigned.
 - If Jira auth fails, stop and ask the user to refresh Jira CLI credentials or environment variables.
 - If a section is unknown, use `TBD` only with user approval.
 - For Phoenix tickets, always ensure:
