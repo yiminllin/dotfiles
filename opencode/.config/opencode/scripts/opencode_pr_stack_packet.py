@@ -50,6 +50,8 @@ FSW_RE = re.compile(r"\bFSW-\d+\b", re.IGNORECASE)
 JIRA_LINK_RE = re.compile(r"https?://[^\s)]+(?:jira|atlassian|browse/|FSW-)\S*", re.IGNORECASE)
 URL_RE = re.compile(r"https?://[^\s)>'\"]+")
 S3_RE = re.compile(r"\bs3://[^\s)>'\"]+", re.IGNORECASE)
+MARKDOWN_S3_LINK_RE = re.compile(r"\[S3\]\(\s*(?P<url>s3://[^\s)]+)\s*\)", re.IGNORECASE)
+VERIFICATION_PLACEHOLDER_RE = re.compile(r"\bTODO\b|Empty query results|add exact verification|how have you proven|template placeholder", re.IGNORECASE)
 PHOENIX_LOG_RE = re.compile(r"(?:^|[\s`'\"])(?P<path>(?:/[^\s`'\"]*)?(?:phoenix|hil|sil)[^\s`'\"]*\.(?:log|txt|jsonl?))", re.IGNORECASE)
 ZML_PATH_RE = re.compile(r"(?:^|[\s`'\"])(?P<path>[^\s`'\"]*\.zml(?:\.[^\s`'\"]+)?)", re.IGNORECASE)
 OUTPUT_PATH_RE = re.compile(r"(?:^|[\s`'\"])(?P<path>(?:/tmp/|/var/|~/|\./|bazel-)[^\s`'\"]*(?:out|output|outputs|artifacts?|plots?|csv|logs?)[^\s`'\"]*)", re.IGNORECASE)
@@ -630,7 +632,7 @@ def build_packet(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         targets = [normalize_target(None, args.repo)]
 
     git_context, git_commands = collect_git_context(args.timeout)
-    if args.from_git_spice:
+    if getattr(args, "from_git_spice", False):
         local_stack, local_stack_commands = collect_local_stack_from_git_spice(args.timeout, git_context, args.base)
         packet = {
             "schema_version": 1,
@@ -949,7 +951,7 @@ def audit_title(pr: dict[str, Any], title: str) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     bracket_match = re.match(r"^\[([^\]]+)\]\s+\[([^\]]+)\]\s+(.+)$", title)
     if FSW_RE.search(title) and not bracket_match:
-        findings.append(finding("warning", pr, "title-ticket-brackets", "FSW titles usually start with [FSW-#####] [Domain] ..."))
+        findings.append(finding("warning", pr, "title-ticket-brackets", "Ticketed Phoenix titles usually start with [FSW-#####] [Phoenix] ...; use another readable domain bracket when Phoenix does not apply."))
     if bracket_match:
         ticket, domain, rest = bracket_match.groups()
         if not re.match(r"^[A-Z]+-\d+$", ticket):
@@ -992,15 +994,40 @@ def audit_release_notes(pr: dict[str, Any], section: str) -> list[dict[str, Any]
 
 def audit_verification(pr: dict[str, Any], section: str, full_pr: dict[str, Any]) -> list[dict[str, Any]]:
     text = section.strip()
-    if not text or "how have you proven" in text.lower():
+    if not text:
         return [finding("warning", pr, "verification-missing", "Verification should contain exact evidence, not the template placeholder.")]
+
+    findings: list[dict[str, Any]] = []
+    if VERIFICATION_PLACEHOLDER_RE.search(text):
+        findings.append(finding("warning", pr, "verification-placeholder", "Verification still contains a generated placeholder such as TODO, empty query results, or template text."))
+
     artifacts = full_pr.get("verification_artifacts", {})
     exact_count = sum(len(artifacts.get(key, [])) for key in ("commands", "baraza_links", "s3_links", "phoenix_log_paths", "zml_paths", "output_paths", "gha_links", "aspect_links"))
+    if exact_count and not has_checked_verification_item(text):
+        findings.append(finding("warning", pr, "verification-checklist", "Verification cites concrete evidence but should use checked checklist bullets such as `- [x] Manual Test [Baraza](...) [S3](...)`."))
+
+    raw_s3_urls = raw_visible_s3_urls(text)
+    if raw_s3_urls:
+        findings.append(finding("warning", pr, "verification-raw-s3", "Use markdown `[S3](...)` links instead of raw visible `s3://...` paths in Verification.", raw_s3_urls))
+
     vague_ci = re.fullmatch(r"(?is)\s*(?:[-*]\s*)?(?:ci|gha|checks?)\s*(?:passes|passed|will pass|green)?\.?\s*", text) is not None
     l3_tiny = is_l3_tiny_nonfunctional(full_pr)
     if exact_count == 0 and (vague_ci or len(text) < 80) and not l3_tiny:
-        return [finding("warning", pr, "verification-vague", "Verification should cite exact commands, links, logs, ZML paths, or output folders instead of vague CI-only evidence.")]
-    return []
+        findings.append(finding("warning", pr, "verification-vague", "Verification should cite exact commands, links, logs, ZML paths, or output folders instead of vague CI-only evidence."))
+    return findings
+
+
+def has_checked_verification_item(text: str) -> bool:
+    for line in text.splitlines():
+        match = CHECKBOX_RE.search(line)
+        if match and match.group("mark").lower() == "x":
+            return True
+    return False
+
+
+def raw_visible_s3_urls(text: str) -> list[str]:
+    linked_urls = set(stable_unique(match.group("url") for match in MARKDOWN_S3_LINK_RE.finditer(text)))
+    return [url for url in stable_unique(S3_RE.findall(text)) if url not in linked_urls]
 
 
 def is_l3_tiny_nonfunctional(pr: dict[str, Any]) -> bool:

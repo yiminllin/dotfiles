@@ -60,14 +60,20 @@ Important options:
 ### 3. Review generated content before posting
 
 - Read `references/style-notes.md` and keep template order/shape consistent.
+- Do a title preflight before writing or posting:
+  - Preserve any capitalization the user explicitly requested.
+  - When drafting from commits, preserve commit title capitalization/style unless the user asks for a rewrite.
+  - For ticketed Phoenix work, use `[FSW-#####] [Phoenix] ...`.
+  - For throwaway/test PRs, add `[DNL]` when the user asks for that marker.
+  - Ensure commit-derived PR titles or wording still follow requested `[FSW-#####] [Phoenix] ...` and `[DNL]` conventions.
 - Tighten the generated reason paragraph so it states the concrete reviewer-visible problem and the mechanism/root cause changed in this PR.
-- Keep `Description of Change` concise and layered around the feature being added; use the hybrid shape as a useful default, not a hard requirement, and avoid turning it into a long file/change inventory.
+- Keep `Description of Change` concise and layered around the feature being added: feature/mechanism first, file inventory second. Use the hybrid shape as a useful default, reduce local jargon, and use diagrams/tables only when they make the review easier.
 - For chains, keep the chain-level reason paragraph/context identical across PRs and keep `PR Tree` by default; only omit it when the user asks or it is clearly noise for reviewers.
 - If you include `PR Tree`, keep the ordering exactly aligned to the chain, use PR numbers only such as `- #123`, do not include PR titles or markdown links, and keep `◀` on the current PR.
 - When a Jira ticket is known, add `Jira Ticket: [FSW-XXXXX](https://flyzipline.atlassian.net/browse/FSW-XXXXX)` directly below the `PR Tree` block; use the ticket most relevant to each PR, even when multiple PRs share a ticket.
 - Ensure the baked-in `L3 Nonfunctional` / no-release-notes defaults still reflect reality for each PR.
-- Keep `Verification` concise and evidence-based; prefer checklist bullets such as `- [x] <description> [Aspect](...) [Baraza](...) [S3](...)` when links exist, along with exact commands, run tables, or concrete manual results over vague `CI` claims. Use separate `- [x]` bullets for multiple verification items/tests rather than combining them into one paragraph. Never return raw generated verification placeholders as final PR text.
-- For SIL/Phoenix log evidence, prefer uploading logs and linking S3 and Baraza URLs over attaching or citing only local log paths. Do not invent Baraza/S3 links; omit unavailable links, upload logs when requested/authorized, or state local-only evidence.
+- Finalize `Verification` as checked evidence bullets, not raw generated text: use `- [x] Manual Test [Baraza](...) [S3](...)` or another short result label; multiple tests get multiple `- [x]` bullets. Use fenced `bash` only for real commands that were run or are the evidence. Never leave TODOs, empty query results, or template placeholders.
+- Treat Baraza/S3/GHA links as evidence, not decoration: prefer Baraza and `[S3](...)` links over Aspect links or local paths when available, but never invent links. Upload or link logs only when the user requested/authorized it; otherwise omit unavailable links or state local-only evidence.
 - For `Manual Test`, keep it concise: name the Phoenix scenario or workflow, add environment or mode only when it matters, summarize the result briefly, and include links when useful.
 - A verification bullet may be followed by a fenced `bash` command block when the exact command is useful; include command details only when they are real verification evidence.
 

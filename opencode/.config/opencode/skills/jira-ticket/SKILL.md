@@ -14,6 +14,8 @@ This skill is optimized for Phoenix Simulation work:
 - new ticket summaries are prefixed with `[Phoenix]` and use Title Case after the prefix, e.g. `[Phoenix] Add Prod-Nav Ideal Sensor Diagnostics`
 - component is set to `Phoenix`
 - team is set to `Simulation`
+- default to high-level work-item grouping rather than one Jira ticket per PR unless the user asks for per-PR tickets
+- assign the ticket to the user when requested
 - descriptions stay concise and skim-friendly
 
 Do not turn Jira tickets into design docs. Link to design docs, PRs, Slack threads, logs, simulations, and dashboards instead of pasting long details.
@@ -104,7 +106,10 @@ Keep each section to 1-5 bullets when possible. If the ticket needs more detail,
 
 ## Workflow: Create a Phoenix Ticket
 
-1. Collect fields one by one:
+1. Confirm the ticket shape before drafting:
+   - Prefer one high-level work item for a feature, investigation, validation effort, or rollout; create one ticket per PR only when the user requests that granularity.
+   - If the user asks for parent/child work items or an epic, capture the intended hierarchy in the draft, but do not invent exact child-link CLI syntax unless it is documented for the installed Jira CLI. Confirm the write boundary before creating or linking child items.
+2. Collect fields one by one:
    - Summary, in Title Case after `[Phoenix]`
    - Why
    - Goal
@@ -113,13 +118,15 @@ Keep each section to 1-5 bullets when possible. If the ticket needs more detail,
    - Plan
    - Artifacts / PRs
    - Definition of Done
-2. For each section:
+   - Assignee, if the user wants the ticket assigned
+3. For each section:
    - offer short suggested options when possible
    - ask the user to choose, edit, skip, or provide custom text
    - keep wording short and concrete
-3. Draft the full description and show it before creating the ticket.
-4. Confirm before writing to Jira.
-5. Create the ticket:
+   - prefer useful Slack, PR, log, simulation, dashboard, and context links over pasted detail
+4. Draft the full description and show it before creating the ticket.
+5. Confirm before writing to Jira, including any assignee or parent/child/epic writes.
+6. Create the ticket:
 
 ```bash
 jira issue create \
@@ -231,6 +238,10 @@ rm -f "$f"
 - Ask before performing Jira write operations unless the user explicitly requested the exact write.
 - Keep tickets short; link to detailed docs instead of embedding them.
 - Do not invent Slack links, PRs, simulations, dashboards, logs, or validation artifacts.
+- Include useful Slack/PR/log/context links when known; summarize instead of pasting long threads or logs.
+- Do not create per-PR tickets by default for a PR stack; group related Phoenix work into a higher-level work item unless the user asks otherwise.
+- Do not invent Jira parent/child or epic CLI syntax. If the exact command is not documented or already known, draft the relationship and ask/confirm before writing.
+- Assign tickets only when requested or explicitly confirmed.
 - If Jira auth fails, stop and ask the user to refresh Jira CLI credentials or environment variables.
 - If a section is unknown, use `TBD` only with user approval.
 - For Phoenix tickets, always ensure:
