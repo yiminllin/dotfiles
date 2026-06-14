@@ -195,6 +195,8 @@ At the end, summarize:
 
 - which comments were addressed
 - which threads or comments were replied to or resolved
+- `draft only` when replies/resolutions were prepared or local fixes made but no GitHub reply/resolution was posted; state that no GitHub artifact was updated and why
+- for each intended GitHub reply/resolution, whether it was `updated` or `not updated`, with exact evidence: comment/thread/PR URL, helper command or `gh` command result, or the blocker/reason no update happened
 - what verification you ran
 - any lean cleanup performed or intentionally skipped
 - which comments still need human input

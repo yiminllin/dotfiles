@@ -85,6 +85,11 @@ gh pr edit 48825 --repo ZiplineTeam/FlightSystems --body-file /tmp/pr-chain-bodi
 
 Repeat for each PR in the chain.
 
+When reporting results:
+
+- Draft/local mode: say `draft only` and name the local files or stdout output; no GitHub artifact was updated.
+- Edit/posting mode: for each PR, say `updated` or `not updated` with exact evidence: PR URL, the `gh pr edit ...` command that succeeded, or the blocker/reason no update happened.
+
 ## Script Output Contract
 
 For each PR, generate:
