@@ -427,6 +427,19 @@ local function ordered_file_list(view)
 	return entries
 end
 
+local function is_file_reviewed(state, file)
+	if state.viewed[file] == true then
+		return true
+	end
+
+	for saved_file, viewed in pairs(state.viewed or {}) do
+		if viewed == true and normalize_file(saved_file) == file then
+			return true
+		end
+	end
+	return false
+end
+
 local function review_entries(view, state)
 	local entries = {}
 	for _, entry in ipairs(ordered_file_list(view)) do
@@ -435,12 +448,14 @@ local function review_entries(view, state)
 			table.insert(entries, {
 				entry = entry,
 				path = path,
-				viewed = state.viewed[path] == true,
+				viewed = is_file_reviewed(state, path),
 			})
 		end
 	end
 	return entries
 end
+
+local apply_buffer_keymaps
 
 local function comments_for_file(state, file)
 	local comments = {}
@@ -469,7 +484,7 @@ end
 local function jump_to_entry(view, item, line)
 	local ok = pcall(function()
 		if view.set_file then
-			view:set_file(item.entry, true, true)
+			view:set_file(item.entry, false, true)
 		else
 			view:use_entry(item.entry)
 		end
@@ -478,31 +493,33 @@ local function jump_to_entry(view, item, line)
 		notify("Could not open " .. item.path, vim.log.levels.WARN)
 		return
 	end
-	vim.defer_fn(function()
-		if line then
+
+	if line then
+		vim.defer_fn(function()
 			pcall(vim.api.nvim_win_set_cursor, 0, { math.max(1, tonumber(line) or 1), 0 })
-		end
-		M.refresh_visible()
-	end, 60)
+		end, 120)
+	end
 end
 
 local function review_status(file, state)
-	if state.viewed[file] then
+	if is_file_reviewed(state, file) then
 		return {
 			panel_hl = "DiffviewReviewPanelViewed",
-			panel_text = "  ✓ reviewed",
+			panel_sign = "DiffviewReviewFileReviewed",
 			viewed = true,
 			winbar_hl = "DiffviewReviewWinbarViewed",
-			winbar_text = " ✓ Reviewed ",
+			winbar_short_text = " ✓ ",
+			winbar_text = " ✓ ",
 		}
 	end
 
 	return {
 		panel_hl = "DiffviewReviewPanelUnviewed",
-		panel_text = "  ○ not reviewed",
+		panel_sign = "DiffviewReviewFileUnreviewed",
 		viewed = false,
 		winbar_hl = "DiffviewReviewWinbarUnviewed",
-		winbar_text = " ○ Not reviewed ",
+		winbar_short_text = " ○ ",
+		winbar_text = " ○ ",
 	}
 end
 
@@ -558,15 +575,61 @@ local function refresh_buffer(bufnr, file, state, show_comments)
 
 end
 
+local function fit_suffix(value, max_width)
+	value = tostring(value or "")
+	if max_width <= 0 then
+		return ""
+	end
+	if vim.fn.strdisplaywidth(value) <= max_width then
+		return value
+	end
+	if max_width <= 1 then
+		return ""
+	end
+
+	local suffix = ""
+	for index = #value, 1, -1 do
+		local candidate = value:sub(index, #value)
+		if vim.fn.strdisplaywidth(candidate) + 1 > max_width then
+			break
+		end
+		suffix = candidate
+	end
+	return "…" .. suffix
+end
+
+local function winbar_file_label(file, max_width)
+	if max_width <= 0 then
+		return ""
+	end
+	if vim.fn.strdisplaywidth(file) <= max_width then
+		return file
+	end
+
+	local name = basename(file)
+	if vim.fn.strdisplaywidth(name) <= max_width then
+		return name
+	end
+	return fit_suffix(name, max_width)
+end
+
 local function refresh_winbar(winid, file, state)
-	local escaped_file = file:gsub("%%", "%%%%")
+	local width = vim.api.nvim_win_get_width(winid)
 	local status = review_status(file, state)
-	vim.wo[winid].winbar = "%#"
-		.. status.winbar_hl
-		.. "#"
-		.. status.winbar_text
-		.. "%#DiffviewReviewWinbarFile# · "
-		.. escaped_file
+	local status_text = status.winbar_text
+	if width < vim.fn.strdisplaywidth(status_text) + 4 then
+		status_text = status.winbar_short_text
+	end
+
+	local separator = " · "
+	local file_width = width - vim.fn.strdisplaywidth(status_text) - vim.fn.strdisplaywidth(separator) - 1
+	local file_label = winbar_file_label(file, file_width)
+	local file_part = ""
+	if file_label ~= "" then
+		file_part = "%#DiffviewReviewWinbarFile#" .. separator .. file_label:gsub("%%", "%%%%")
+	end
+
+	vim.wo[winid].winbar = "%#" .. status.winbar_hl .. "#" .. status_text .. file_part
 end
 
 local function refresh_file_panel(bufnr, view, state)
@@ -575,6 +638,7 @@ local function refresh_file_panel(bufnr, view, state)
 	end
 
 	vim.api.nvim_buf_clear_namespace(bufnr, NS, 0, -1)
+	vim.fn.sign_unplace(SIGN_GROUP, { buffer = bufnr })
 
 	local lines_ok, lines = pcall(vim.api.nvim_buf_get_lines, bufnr, 0, -1, false)
 	if not lines_ok or type(lines) ~= "table" then
@@ -609,11 +673,7 @@ local function refresh_file_panel(bufnr, view, state)
 			local lnum = matches[1]
 			used_lines[lnum] = true
 			local status = review_status(item.path, state)
-			pcall(vim.api.nvim_buf_set_extmark, bufnr, NS, lnum - 1, 0, {
-				virt_text = { { status.panel_text, status.panel_hl } },
-				virt_text_pos = "eol",
-				priority = 45,
-			})
+			vim.fn.sign_place(0, SIGN_GROUP, status.panel_sign, bufnr, { lnum = lnum, priority = 45 })
 		end
 	end
 end
@@ -749,7 +809,7 @@ function M.apply_highlights()
 	set(0, "DiffviewReviewStatusViewed", { bg = "#f6f8fa", fg = "#1a7f37" })
 	set(0, "DiffviewReviewWinbarFile", { bg = "#f6f8fa", fg = "#57606a" })
 	set(0, "DiffviewReviewWinbarUnviewed", { bg = "#fff8c5", fg = "#9a6700", bold = true })
-	set(0, "DiffviewReviewWinbarViewed", { bg = "#f6f8fa", fg = "#1a7f37" })
+	set(0, "DiffviewReviewWinbarViewed", { bg = "#dafbe1", fg = "#1a7f37", bold = true })
 end
 
 function M.refresh_visible()
@@ -765,6 +825,9 @@ function M.refresh_visible()
 	for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
 		local bufnr = vim.api.nvim_win_get_buf(winid)
 		if is_file_panel_buffer(bufnr) then
+			pcall(function()
+				vim.wo[winid].signcolumn = "yes:1"
+			end)
 			refresh_file_panel(bufnr, view, state)
 		else
 			local file = file_for_buffer(bufnr, ctx, view)
@@ -966,15 +1029,17 @@ function M.next_review_comment(direction)
 	jump_to_entry(ctx.view, target.item, target.line)
 end
 
-function M.next_unviewed_file()
+function M.next_unviewed_file(direction)
+	direction = direction == -1 and -1 or 1
 	local ctx = current_file_context()
-	if not require_active_diffview(ctx, "jumping to next unreviewed file") or not require_repo_context(ctx, "jumping to next unreviewed file") then
+	local action = direction == -1 and "jumping to previous unreviewed file" or "jumping to next unreviewed file"
+	if not require_active_diffview(ctx, action) or not require_repo_context(ctx, action) then
 		return
 	end
 
 	local state = load_state(ctx)
 	local entries = review_entries(ctx.view, state)
-	local unviewed = {}
+	local unreviewed = {}
 	local current_index = nil
 	local last_index = nil
 	for index, item in ipairs(entries) do
@@ -985,22 +1050,25 @@ function M.next_unviewed_file()
 			last_index = index
 		end
 		if not item.viewed then
-			table.insert(unviewed, { item = item, index = index })
+			table.insert(unreviewed, { item = item, index = index })
 		end
 	end
 
-	if #unviewed == 0 then
+	if #unreviewed == 0 then
 		last_unviewed_path = nil
 		notify("No unreviewed Diffview files")
 		return
 	end
 
 	local start_index = last_index or current_index or 0
-	local target = unviewed[1]
-	for _, candidate in ipairs(unviewed) do
-		if candidate.index > start_index then
+	local target = direction == -1 and unreviewed[#unreviewed] or unreviewed[1]
+	for _, candidate in ipairs(unreviewed) do
+		if direction == 1 and candidate.index > start_index then
 			target = candidate
 			break
+		end
+		if direction == -1 and candidate.index < start_index then
+			target = candidate
 		end
 	end
 
@@ -1080,13 +1148,19 @@ function M.show_status()
 	end, { buffer = bufnr, nowait = true, silent = true })
 end
 
-local function apply_buffer_keymaps(bufnr)
+apply_buffer_keymaps = function(bufnr)
 	if not vim.api.nvim_buf_is_valid(bufnr) then
 		return
 	end
-	vim.keymap.set("n", "<Tab>", M.next_unviewed_file, {
+	vim.keymap.set("n", "<Tab>", function() M.next_unviewed_file(1) end, {
 		buffer = bufnr,
 		desc = "Next unreviewed Diffview file",
+		nowait = true,
+		silent = true,
+	})
+	vim.keymap.set("n", "<S-Tab>", function() M.next_unviewed_file(-1) end, {
+		buffer = bufnr,
+		desc = "Previous unreviewed Diffview file",
 		nowait = true,
 		silent = true,
 	})
@@ -1096,7 +1170,7 @@ function M.diffview_keymaps()
 	-- Diffview local-review keymap contract:
 	-- <leader>gda/gdd edit local comments, <leader>gdv toggles reviewed,
 	-- <leader>gds opens the minimal status popup, <leader>gd[/] jump comments,
-	-- and <Tab> advances only through unreviewed files.
+	-- and <Tab>/<S-Tab> move only through unreviewed files.
 	return {
 		view = {
 			{ "n", "<leader>gda", M.add_comment, { desc = "[G]it [D]iffview [A]dd Review Comment" } },
@@ -1106,33 +1180,39 @@ function M.diffview_keymaps()
 			{ "n", "<leader>gds", M.show_status, { desc = "[G]it [D]iffview Review [S]tatus" } },
 			{ "n", "<leader>gd]", function() M.next_review_comment(1) end, { desc = "Next Diffview review comment" } },
 			{ "n", "<leader>gd[", function() M.next_review_comment(-1) end, { desc = "Previous Diffview review comment" } },
-			{ "n", "<Tab>", M.next_unviewed_file, { desc = "Next unreviewed Diffview file" } },
+			{ "n", "<Tab>", function() M.next_unviewed_file(1) end, { desc = "Next unreviewed Diffview file" } },
+			{ "n", "<S-Tab>", function() M.next_unviewed_file(-1) end, { desc = "Previous unreviewed Diffview file" } },
 		},
 		file_panel = {
 			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File Reviewed" } },
 			{ "n", "<leader>gds", M.show_status, { desc = "[G]it [D]iffview Review [S]tatus" } },
 			{ "n", "<leader>gd]", function() M.next_review_comment(1) end, { desc = "Next Diffview review comment" } },
 			{ "n", "<leader>gd[", function() M.next_review_comment(-1) end, { desc = "Previous Diffview review comment" } },
-			{ "n", "<Tab>", M.next_unviewed_file, { desc = "Next unreviewed Diffview file" } },
+			{ "n", "<Tab>", function() M.next_unviewed_file(1) end, { desc = "Next unreviewed Diffview file" } },
+			{ "n", "<S-Tab>", function() M.next_unviewed_file(-1) end, { desc = "Previous unreviewed Diffview file" } },
 		},
 	}
 end
 
 function M.setup()
 	vim.fn.sign_define("DiffviewReviewComment", { text = COMMENT_MARKER, texthl = "DiffviewReviewCommentSign" })
+	vim.fn.sign_define("DiffviewReviewFileReviewed", { text = "✓", texthl = "DiffviewReviewPanelViewed" })
+	vim.fn.sign_define("DiffviewReviewFileUnreviewed", { text = "○", texthl = "DiffviewReviewPanelUnviewed" })
 
 	local group = vim.api.nvim_create_augroup("DiffviewReview", { clear = true })
 	vim.api.nvim_create_autocmd("User", {
 		group = group,
-		pattern = { "DiffviewViewOpened", "DiffviewViewPostLayout", "DiffviewDiffBufWinEnter" },
+		pattern = { "DiffviewViewPostLayout", "DiffviewDiffBufWinEnter" },
 		callback = function()
-			vim.schedule(function()
+			vim.defer_fn(function()
 				M.apply_highlights()
 				M.refresh_visible()
 				for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-					apply_buffer_keymaps(vim.api.nvim_win_get_buf(winid))
+					if vim.api.nvim_win_is_valid(winid) then
+						apply_buffer_keymaps(vim.api.nvim_win_get_buf(winid))
+					end
 				end
-			end)
+			end, 100)
 		end,
 	})
 
