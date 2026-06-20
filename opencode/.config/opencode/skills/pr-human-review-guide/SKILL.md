@@ -1,6 +1,6 @@
 ---
 name: pr-human-review-guide
-description: Review a GitHub PR for a human reviewer: recommend file reading order, summarize structure, and draft prioritized review comments, questions, curiosity notes, and validation gaps with file/line anchors. Use when the user provides a PR number or URL and asks for review order, human-review guidance, curiosity comments, or suggested review comments.
+description: Review or refresh a GitHub PR guide for a human reviewer: recommend file reading order, summarize structure, and draft prioritized review comments, questions, curiosity notes, and validation gaps with file/line anchors. Use when the user provides a PR number/URL, asks for review order or human-review guidance, or provides an existing guide artifact to update.
 ---
 
 # PR Human Review Guide
@@ -27,6 +27,16 @@ Prefer high-signal comments over exhaustive commentary.
 Final reports are `draft only` by default: state that no GitHub review, comment, approval, request-changes action, or thread resolution was updated. If the user later explicitly asks for a GitHub-facing mutation, report each intended artifact as `updated` or `not updated` with exact evidence such as the PR/comment/thread URL, the `gh` command that succeeded, or the blocker/reason no update happened.
 
 For complex or unfamiliar subsystems, or when the user asks for explanation, begin with toddler terminology and a small diagram before the normal review order/comments. Keep simple PRs concise.
+
+## Guide artifact refresh mode
+
+When the prompt provides a target guide path, existing guide path, or asks to update/refresh a saved guide:
+
+- If the existing guide file exists and is readable, read it before reviewing the current PR state.
+- Treat the existing guide as prior context, not truth. Preserve still-relevant observations, remove stale ones, and add new findings/questions from the current PR state.
+- Keep the refreshed output in the same primary output structure below so it can replace the previous artifact cleanly.
+- Mention materially stale or removed prior observations only when that helps the human reviewer; do not include a noisy changelog by default.
+- If the guide path is provided, state that the response is intended to be saved there, but do not rely on the shell redirect as proof that it was written.
 
 ## Workflow
 
