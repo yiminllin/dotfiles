@@ -27,14 +27,137 @@ local function diffview_file_history()
 	vim.api.nvim_cmd({ cmd = "DiffviewFileHistory", args = args }, {})
 end
 
+local function notify_pr(message, level)
+	vim.notify(message, level or vim.log.levels.INFO, { title = "Diffview PR" })
+end
+
+local function trim_command_output(lines)
+	return vim.trim(table.concat(lines or {}, "\n"))
+end
+
+local function git_command(root, args)
+	local command = { "git", "-C", root }
+	vim.list_extend(command, args)
+	local output = vim.fn.systemlist(command)
+	return vim.v.shell_error == 0, output
+end
+
+local function git_root()
+	local output = vim.fn.systemlist({ "git", "rev-parse", "--show-toplevel" })
+	if vim.v.shell_error ~= 0 or not output[1] or output[1] == "" then
+		return nil, "Not inside a git repository"
+	end
+	return vim.fn.fnamemodify(output[1], ":p"):gsub("/+$", "")
+end
+
+local function ref_exists(root, ref)
+	local ok = git_command(root, { "rev-parse", "--verify", ref .. "^{commit}" })
+	return ok
+end
+
+local function fetch_ref(root, source, destination)
+	local ok, output = git_command(root, { "fetch", "--no-tags", "origin", source .. ":" .. destination })
+	if ok and ref_exists(root, destination) then
+		return true
+	elseif ok then
+		return false, "fetched ref is unavailable after fetch: " .. destination
+	end
+
+	local details = trim_command_output(output)
+	if details ~= "" then
+		return false, details
+	end
+	return false, "git fetch failed"
+end
+
+local function gh_pr_view(selector)
+	if vim.fn.executable("gh") ~= 1 then
+		return nil, "gh CLI is unavailable; install gh and run gh auth login for PR lookup"
+	end
+
+	local command = { "gh", "pr", "view" }
+	if selector and selector ~= "" then
+		table.insert(command, selector)
+	end
+	vim.list_extend(command, {
+		"--json",
+		"number,headRefName,baseRefName,url",
+	})
+
+	local output = vim.fn.systemlist(command)
+	if vim.v.shell_error ~= 0 then
+		local details = trim_command_output(output)
+		if details ~= "" then
+			return nil, "gh PR lookup failed: " .. details
+		end
+		return nil, "gh PR lookup failed; check gh auth status and network access"
+	end
+
+	local ok, decoded = pcall(vim.fn.json_decode, table.concat(output, "\n"))
+	if not ok or type(decoded) ~= "table" or not decoded.number or not decoded.baseRefName then
+		return nil, "gh PR lookup returned invalid JSON"
+	end
+	return decoded
+end
+
+local function open_pr_diffview(opts)
+	local selector = vim.trim(opts and opts.args or "")
+	selector = selector ~= "" and selector or nil
+
+	local root, root_error = git_root()
+	if not root then
+		notify_pr(root_error, vim.log.levels.ERROR)
+		return
+	end
+
+	local pr, pr_error = gh_pr_view(selector)
+	if not pr then
+		notify_pr((pr_error or "Could not resolve PR") .. "; no Diffview opened", vim.log.levels.ERROR)
+		return
+	end
+
+	local pr_number = tostring(pr.number)
+	local base_branch = pr.baseRefName
+	local base_ref = "refs/remotes/origin/" .. base_branch
+	local head_ref = "refs/remotes/origin/pr/" .. pr_number
+
+	local fetched_base, base_error = fetch_ref(root, "refs/heads/" .. base_branch, base_ref)
+	if not fetched_base then
+		notify_pr(("Could not fetch base branch origin/%s: %s"):format(base_branch, base_error), vim.log.levels.ERROR)
+		return
+	end
+
+	local fetched_pr, pr_fetch_error = fetch_ref(root, "refs/pull/" .. pr_number .. "/head", head_ref)
+	if not fetched_pr then
+		notify_pr(("Could not fetch PR #%s ref: %s"):format(pr_number, pr_fetch_error), vim.log.levels.ERROR)
+		return
+	end
+
+	diffview_open({ base_ref .. "..." .. head_ref })
+	notify_pr(("Opened PR #%s in Diffview"):format(pr_number))
+end
+
 return {
 	"sindrets/diffview.nvim",
+	cmd = {
+		"DiffviewOpen",
+		"DiffviewFileHistory",
+		"DiffviewClose",
+		"DiffviewToggleFiles",
+		"DiffviewRefresh",
+		"DiffviewPrOpen",
+	},
 	dependencies = {
 		{ "lifepillar/vim-solarized8", branch = "neovim" }, -- Pin to master branch
 	},
 	config = function()
 		local review = require("utils.diffview_review")
 		review.setup()
+		vim.api.nvim_create_user_command("DiffviewPrOpen", open_pr_diffview, {
+			nargs = "?",
+			force = true,
+			desc = "Open a GitHub PR in Diffview",
+		})
 		local previous_diffopt = nil
 
 		require("diffview").setup({
