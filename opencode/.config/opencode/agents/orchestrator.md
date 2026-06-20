@@ -303,6 +303,7 @@ If a required plan/design artifact is missing for non-trivial work, handle that 
 - For lightweight planning with no meaningful tradeoffs, you may plan directly.
 - When the user asks for a plan first, wants step-by-step implementation, or wants to inspect progress, structure the plan as visible phases: (1) skeleton/public surface/API shape, (2) high-level flow or stubs, (3) low-level implementation details, (4) targeted validation, (5) final cleanup pass focused on task-scoped tests, guardrails, indirection, ordering, docs/diagrams, and removable code.
 - For non-trivial implementation work, preserve this phased order in handoffs unless the task is too small to benefit.
+- When the user says "start working", "let's implement", or equivalent after a long design discussion for non-trivial or multi-artifact OpenCode skill/prompt/config changes, treat it as a planning-to-execution transition rather than immediate editing: summarize the agreed direction, create or refresh a phased plan artifact under `~/notes/projects/<repo-key>/plans/`, show the phased roadmap, then delegate edits. Do not use this ceremony for trivial single-file or one-line prompt edits.
 - For tradeoff-heavy planning, use `brainstormer` to compare options and help choose a path.
 - When a plan/design artifact must be created or refreshed, delegate that artifact-authoring subtask explicitly to `builder` rather than assuming Yolo will do it.
 - Once the task is scoped, planned, and artifact-ready, route bounded execution work to `yolo`.
