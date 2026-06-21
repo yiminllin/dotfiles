@@ -3,6 +3,7 @@ local M = {}
 M.COMMENT_BOX_WIDTH = 88
 M.COMMENT_MARKER = "▌"
 M.GUIDE_MARKER = "🤖"
+M.GITHUB_MARKER = "GH"
 M.GUIDE_SIGN_NAMES = {
 	"DiffviewReviewGuideHigh",
 	"DiffviewReviewGuideMedium",
@@ -47,6 +48,14 @@ local MANUAL_STYLE = {
 	sign = "DiffviewReviewComment",
 	status = "DiffviewReviewStatusComment",
 	virt = "DiffviewReviewCommentVirt",
+}
+
+local GITHUB_STYLE = {
+	border = "DiffviewReviewGithubBorder",
+	range = "DiffviewReviewGithubRange",
+	sign = "DiffviewReviewGithub",
+	status = "DiffviewReviewStatusGithub",
+	virt = "DiffviewReviewGithubVirt",
 }
 
 function M.normalize_comment_text(value)
@@ -116,8 +125,23 @@ function M.is_guide_comment(comment)
 	return type(comment) == "table" and comment.source == "guide"
 end
 
+function M.is_imported_github_comment(comment)
+	return type(comment) == "table" and comment.source == "github"
+end
+
+local function is_stale_github_anchor(comment)
+	return M.is_imported_github_comment(comment)
+		and comment.github_line == nil
+		and comment.original_line ~= nil
+end
+
 function M.is_file_level_comment(comment)
-	return M.is_guide_comment(comment) and (comment.file_level == true or comment.kind == "guide_note")
+	return type(comment) == "table"
+		and (
+			comment.file_level == true
+			or (M.is_guide_comment(comment) and comment.kind == "guide_note")
+			or is_stale_github_anchor(comment)
+		)
 end
 
 function M.severity_label(value)
@@ -158,6 +182,9 @@ function M.severity_emoji(value)
 end
 
 function M.comment_highlights(comment)
+	if M.is_imported_github_comment(comment) then
+		return GITHUB_STYLE
+	end
 	if not M.is_guide_comment(comment) then
 		return MANUAL_STYLE
 	end
@@ -168,6 +195,10 @@ end
 
 local function boxed_comment_header(comment, start_line, end_line)
 	local label = M.line_range_label(start_line, end_line)
+	if M.is_imported_github_comment(comment) then
+		local author = comment.author and (" @" .. comment.author) or ""
+		return " " .. M.GITHUB_MARKER .. author .. " • " .. (M.is_file_level_comment(comment) and "File-level" or label) .. " "
+	end
 	if M.is_guide_comment(comment) then
 		if comment.kind == "guide_note" then
 			return " " .. M.GUIDE_MARKER .. " "
@@ -186,6 +217,18 @@ end
 
 local function boxed_comment_body(comment)
 	local body = tostring(comment and comment.body or "")
+	if is_stale_github_anchor(comment) then
+		local original_line = tonumber(comment.original_line)
+		local original_start_line = tonumber(comment.original_start_line)
+		local note = ("Imported from a stale GitHub anchor at original line %d."):format(original_line)
+		if original_start_line and original_start_line ~= original_line then
+			note = ("Imported from a stale GitHub anchor at original lines %d-%d."):format(
+				original_start_line,
+				original_line
+			)
+		end
+		body = body ~= "" and (note .. "\n\n" .. body) or note
+	end
 	if M.is_guide_comment(comment) and comment.kind == "guide_suggestion" and comment.why and tostring(comment.why) ~= "" then
 		body = body .. "\nWhy it matters: " .. tostring(comment.why)
 	end

@@ -61,19 +61,37 @@ local function git_command(root, args)
 	return vim.v.shell_error == 0, output
 end
 
-local function pr_guide_context(root, pr_number)
+local function github_repo_from_url(value)
+	value = tostring(value or ""):gsub("%.git/?$", ""):gsub("/+$", "")
+	value = value:gsub("/pull/%d+.*$", "")
+	local owner, repo = value:match("github%.com[:/]([^/]+)/([^/]+)$")
+	if owner and repo then
+		return owner, repo
+	end
+	return nil, nil
+end
+
+local function pr_guide_context(root, pr_number, pr_url)
 	local repo_key = nil
 	local ok, output = git_command(root, { "remote", "get-url", "origin" })
+	local remote_url = ok and trim_command_output(output) or ""
 	if ok then
-		repo_key = trim_command_output(output):gsub("%.git/?$", ""):gsub("/+$", ""):gsub("^.*[:/]", "")
+		repo_key = remote_url:gsub("%.git/?$", ""):gsub("/+$", ""):gsub("^.*[:/]", "")
 	end
 	if not repo_key or repo_key == "" then
 		repo_key = vim.fn.fnamemodify(root, ":t")
 	end
+	local owner, repo = github_repo_from_url(pr_url)
+	if not owner or not repo then
+		owner, repo = github_repo_from_url(remote_url)
+	end
 
 	return {
+		owner = owner,
 		path = ("%s/notes/projects/%s/pr-reviews/%s/guide.json"):format(vim.env.HOME or vim.fn.expand("~"), repo_key, pr_number),
 		pr_number = pr_number,
+		pr_url = pr_url,
+		repo_name = repo,
 		repo = root,
 		repo_key = repo_key,
 	}
@@ -172,7 +190,7 @@ local function open_pr_diffview(opts)
 
 	local review = review_module()
 	if review and review.set_active_guide_context then
-		review.set_active_guide_context(pr_guide_context(root, pr_number))
+		review.set_active_guide_context(pr_guide_context(root, pr_number, pr.url))
 	end
 	diffview_open({ base_ref .. "..." .. head_ref }, true)
 	notify_pr(("Opened PR #%s in Diffview"):format(pr_number))
@@ -187,6 +205,7 @@ return {
 		"DiffviewToggleFiles",
 		"DiffviewRefresh",
 		"DiffviewPrOpen",
+		"DiffviewReviewImportGithubComments",
 	},
 	dependencies = {
 		{ "lifepillar/vim-solarized8", branch = "neovim" }, -- Pin to master branch

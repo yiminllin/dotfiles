@@ -8,8 +8,11 @@ local STATUS_NS = vim.api.nvim_create_namespace("diffview_review_status")
 local SIGN_GROUP = "diffview_review"
 local COMMENT_MARKER = review_format.COMMENT_MARKER
 local GUIDE_MARKER = review_format.GUIDE_MARKER
+local GITHUB_MARKER = review_format.GITHUB_MARKER
 local last_unviewed_path = nil
 local active_guide_context = nil
+local auto_imported_github_contexts = {}
+local auto_import_scheduled_contexts = {}
 local guide_cache = nil
 
 local function notify(message, level)
@@ -96,6 +99,49 @@ local function string_id(value)
 	end
 end
 
+local function json_value(value)
+	if value == vim.NIL then
+		return nil
+	end
+	return value
+end
+
+local function github_repo_from_url(value)
+	value = tostring(value or ""):gsub("%.git/?$", ""):gsub("/+$", "")
+	value = value:gsub("/pull/%d+.*$", "")
+	if value == "" then
+		return nil, nil
+	end
+
+	local owner, repo = value:match("github%.com[:/]([^/]+)/([^/]+)$")
+	if owner and repo then
+		return owner, repo
+	end
+	return nil, nil
+end
+
+local function is_stale_github_anchor(comment)
+	return review_format.is_imported_github_comment(comment)
+		and comment.github_line == nil
+		and comment.original_line ~= nil
+end
+
+local function github_status_label(comment)
+	local stale_anchor = is_stale_github_anchor(comment)
+	if comment.sync_status == "edited-locally" then
+		return stale_anchor and "edited locally; stale original anchor" or "edited locally"
+	end
+	if stale_anchor then
+		return "stale original anchor"
+	end
+	if comment.outdated == true or comment.stale == true then
+		return "outdated"
+	end
+	if comment.sync_status == "github-unknown-resolution" then
+		return "unknown resolution"
+	end
+end
+
 local function normalize_guide(decoded)
 	if type(decoded) ~= "table" then
 		return nil
@@ -174,6 +220,18 @@ local function git_context_from_command(cwd)
 	end
 
 	return root, normalize_dir(gitdir)
+end
+
+local function origin_repo(ctx)
+	if not (ctx and ctx.root) then
+		return nil, nil
+	end
+
+	local output = vim.fn.systemlist({ "git", "-C", ctx.root, "remote", "get-url", "origin" })
+	if vim.v.shell_error ~= 0 then
+		return nil, nil
+	end
+	return github_repo_from_url(table.concat(output or {}, "\n"))
 end
 
 local function repo_context(view)
@@ -618,6 +676,298 @@ local function import_guide_comments(state, guide)
 	return changed
 end
 
+local entry_path
+local ordered_file_list
+
+local function active_pr_context(ctx)
+	local context = active_guide_context
+	if context and context.repo and ctx and ctx.root and normalize_dir(context.repo) ~= ctx.root then
+		context = nil
+	end
+
+	local pr_number = string_id(context and context.pr_number)
+	if not pr_number then
+		return nil, "Open a PR Diffview with :DiffviewPrOpen before importing GitHub comments"
+	end
+
+	local owner = context and context.owner or nil
+	local repo = context and context.repo_name or nil
+	if not owner or not repo then
+		owner, repo = github_repo_from_url(context and context.pr_url)
+	end
+	if not owner or not repo then
+		owner, repo = origin_repo(ctx)
+	end
+	if not owner or not repo then
+		return nil, "Could not derive GitHub owner/repo from the active PR context or origin remote"
+	end
+
+	return {
+		owner = owner,
+		pull_number = pr_number,
+		repo = repo,
+	}
+end
+
+local function diffview_file_set(view)
+	local files = {}
+	for _, entry in ipairs(ordered_file_list(view)) do
+		local path = entry_path(entry)
+		if path then
+			files[path] = true
+		end
+	end
+	return files
+end
+
+local function github_import_context_key(ctx, pr)
+	return table.concat({ ctx.root or "", pr.owner or "", pr.repo or "", pr.pull_number or "" }, "\n")
+end
+
+local function decode_github_comments(output)
+	local ok, decoded = pcall(vim.fn.json_decode, table.concat(output or {}, "\n"))
+	if not ok or type(decoded) ~= "table" then
+		return nil, "gh api returned invalid JSON"
+	end
+	if type(decoded[1]) == "table" and json_value(decoded[1].id) == nil and json_value(decoded[1].path) == nil then
+		local comments = {}
+		for _, page in ipairs(decoded) do
+			if type(page) ~= "table" then
+				return nil, "gh api returned invalid paginated JSON"
+			end
+			vim.list_extend(comments, page)
+		end
+		return comments
+	end
+	return decoded
+end
+
+local function fetch_github_comments(pr)
+	if vim.fn.executable("gh") ~= 1 then
+		return nil, "gh CLI is unavailable; install gh and run gh auth login before importing GitHub comments"
+	end
+
+	local endpoint = ("repos/%s/%s/pulls/%s/comments?per_page=100"):format(pr.owner, pr.repo, pr.pull_number)
+	local output = vim.fn.systemlist({ "gh", "api", "--paginate", "--slurp", endpoint })
+	if vim.v.shell_error ~= 0 then
+		local details = vim.trim(table.concat(output or {}, "\n"))
+		if details ~= "" then
+			return nil, "gh api failed: " .. details
+		end
+		return nil, "gh api failed; check gh auth status and network access"
+	end
+	return decode_github_comments(output)
+end
+
+local function copy_json_field(target, source, key)
+	local value = json_value(source[key])
+	if value ~= nil then
+		target[key] = value
+	end
+end
+
+local function normalize_github_comment(raw, files)
+	if type(raw) ~= "table" then
+		return nil, "invalid"
+	end
+
+	local raw_path = json_value(raw.path)
+	local path = type(raw_path) == "string" and normalize_file(raw_path) or nil
+	if not path then
+		return nil, "missing-path"
+	end
+	if not files[path] then
+		return nil, "unmappable-path"
+	end
+
+	local github_id = string_id(json_value(raw.id))
+	if not github_id then
+		return nil, "missing-id"
+	end
+
+	local user = json_value(raw.user)
+	local current_line = positive_line(json_value(raw.line))
+	local original_line = positive_line(json_value(raw.original_line))
+	local start_line = current_line and positive_line(json_value(raw.start_line)) or nil
+	local original_start_line = positive_line(json_value(raw.original_start_line))
+	local body = tostring(json_value(raw.body) or "")
+	local resolved = json_value(raw.resolved)
+	local sync_status = "github-unknown-resolution"
+	if resolved == true then
+		sync_status = "github-resolved-hidden"
+	elseif resolved == false then
+		sync_status = "imported"
+	end
+	local comment = {
+		author = type(user) == "table" and json_value(user.login) or nil,
+		body = body,
+		file = path,
+		github_body = body,
+		github_id = github_id,
+		github_in_reply_to_id = string_id(json_value(raw.in_reply_to_id)),
+		github_node_id = json_value(raw.node_id),
+		github_review_id = string_id(json_value(raw.pull_request_review_id)),
+		github_thread_id = string_id(json_value(raw.thread_id)),
+		github_url = json_value(raw.html_url) or json_value(raw.url),
+		kind = "github_review_comment",
+		original_line = original_line,
+		original_start_line = original_start_line,
+		path = path,
+		pull_request_url = json_value(raw.pull_request_url),
+		source = "github",
+		start_line = start_line,
+		sync_status = sync_status,
+	}
+
+	if current_line then
+		comment.line = current_line
+		comment.github_line = current_line
+		if start_line and current_line ~= start_line then
+			comment.end_line = current_line
+		end
+	else
+		comment.file_level = true
+	end
+
+	for _, key in ipairs({
+		"commit_id",
+		"created_at",
+		"diff_hunk",
+		"original_commit_id",
+		"original_position",
+		"outdated",
+		"position",
+		"pull_request_url",
+		"resolved",
+		"side",
+		"stale",
+		"start_side",
+		"subject_type",
+		"updated_at",
+	}) do
+		copy_json_field(comment, raw, key)
+	end
+	if not current_line and original_line then
+		comment.file_level = true
+		comment.outdated = true
+	end
+
+	return comment
+end
+
+local function comment_index_by_github_id(state)
+	local index_by_id = {}
+	for index, comment in ipairs(state.comments or {}) do
+		if review_format.is_imported_github_comment(comment) and comment.github_id then
+			index_by_id[tostring(comment.github_id)] = index_by_id[tostring(comment.github_id)] or index
+		end
+	end
+	return index_by_id
+end
+
+local GITHUB_OPTIONAL_FIELDS = {
+	"author",
+	"commit_id",
+	"diff_hunk",
+	"end_line",
+	"file_level",
+	"github_line",
+	"github_in_reply_to_id",
+	"github_node_id",
+	"github_review_id",
+	"github_thread_id",
+	"github_url",
+	"line",
+	"original_commit_id",
+	"original_line",
+	"original_position",
+	"original_start_line",
+	"outdated",
+	"position",
+	"pull_request_url",
+	"resolved",
+	"side",
+	"stale",
+	"start_side",
+	"start_line",
+	"subject_type",
+}
+
+local function update_github_comment(existing, incoming, preserve_body)
+	local changed = false
+	for key, value in pairs(incoming) do
+		if key ~= "body" or not preserve_body then
+			if existing[key] ~= value then
+				existing[key] = value
+				changed = true
+			end
+		end
+	end
+	for _, key in ipairs(GITHUB_OPTIONAL_FIELDS) do
+		if incoming[key] == nil and existing[key] ~= nil then
+			existing[key] = nil
+			changed = true
+		end
+	end
+	return changed
+end
+
+local function apply_imported_github_comment(state, index_by_id, incoming, stats)
+	if state.dismissed_github_comments and state.dismissed_github_comments[incoming.github_id] then
+		stats.dismissed = stats.dismissed + 1
+		return false
+	end
+
+	local index = index_by_id[incoming.github_id]
+	if not index then
+		table.insert(state.comments, incoming)
+		index_by_id[incoming.github_id] = #state.comments
+		stats.imported = stats.imported + 1
+		return true
+	end
+
+	local existing = state.comments[index]
+	local remote_body = tostring(incoming.github_body or "")
+	local prior_remote_body = tostring(existing.github_body or "")
+	local local_body = tostring(existing.body or "")
+	local preserve_body = local_body ~= prior_remote_body and local_body ~= remote_body
+	if preserve_body then
+		incoming.sync_status = "edited-locally"
+		stats.edited_locally = stats.edited_locally + 1
+	end
+
+	if update_github_comment(existing, incoming, preserve_body) then
+		stats.updated = stats.updated + 1
+		return true
+	end
+	stats.unchanged = stats.unchanged + 1
+	return false
+end
+
+local function import_github_comments_into_state(state, raw_comments, files)
+	state.comments = state.comments or {}
+	state.dismissed_github_comments = state.dismissed_github_comments or {}
+	local stats = { dismissed = 0, edited_locally = 0, imported = 0, skipped = 0, unchanged = 0, updated = 0 }
+	local index_by_id = comment_index_by_github_id(state)
+	local changed = false
+
+	for _, raw in ipairs(raw_comments or {}) do
+		local comment = normalize_github_comment(raw, files)
+		if comment then
+			changed = apply_imported_github_comment(state, index_by_id, comment, stats) or changed
+		else
+			stats.skipped = stats.skipped + 1
+		end
+	end
+
+	return changed, stats
+end
+
+local function is_hidden_github_comment(comment)
+	return review_format.is_imported_github_comment(comment)
+		and (comment.resolved == true or comment.sync_status == "github-resolved-hidden")
+end
+
 local function load_state_with_guide(ctx)
 	local state = load_state(ctx)
 	local guide = load_active_guide(ctx)
@@ -633,11 +983,14 @@ local function clamp_comment_range(comment, line_count)
 	end
 
 	local start_line = tonumber(comment.line)
+	if review_format.is_imported_github_comment(comment) then
+		start_line = tonumber(comment.start_line) or start_line
+	end
 	if not start_line then
 		return nil, nil
 	end
 
-	local end_line = tonumber(comment.end_line) or start_line
+	local end_line = tonumber(comment.end_line) or tonumber(comment.line) or start_line
 	start_line, end_line = math.min(start_line, end_line), math.max(start_line, end_line)
 	start_line = math.min(math.max(start_line, 1), line_count)
 	end_line = math.min(math.max(end_line, 1), line_count)
@@ -647,7 +1000,7 @@ end
 local function sorted_file_comments(state, file, line_count)
 	local comments = {}
 	for index, comment in ipairs(state.comments or {}) do
-		if comment.file == file then
+		if comment.file == file and not is_hidden_github_comment(comment) then
 			local start_line, end_line = clamp_comment_range(comment, line_count)
 			if start_line then
 				table.insert(comments, {
@@ -688,15 +1041,18 @@ local function find_comment(state, file, line, opts)
 	line = tonumber(line)
 	for index, comment in ipairs(state.comments) do
 		local is_guide = review_format.is_guide_comment(comment)
+		local is_github = review_format.is_imported_github_comment(comment)
 		local matches_file_level = review_format.is_file_level_comment(comment)
 			and file_level_line
 			and line == file_level_line
-		local start_line = not matches_file_level and tonumber(comment.line) or nil
-		local end_line = start_line and tonumber(comment.end_line) or start_line
+		local start_line, end_line = nil, nil
+		if not matches_file_level then
+			start_line, end_line = clamp_comment_range(comment, math.huge)
+		end
 		if
 			comment.file == file
 			and (matches_file_level or (start_line and start_line <= line and line <= end_line))
-			and (not manual_only or not is_guide)
+			and (not manual_only or (not is_guide and not is_github))
 		then
 			return comment, index
 		end
@@ -725,14 +1081,14 @@ local function range_from_opts(opts)
 	return math.min(start_line, end_line), math.max(start_line, end_line)
 end
 
-local function entry_path(entry)
+entry_path = function(entry)
 	if type(entry) ~= "table" or not entry.path then
 		return nil
 	end
 	return normalize_file(entry.path)
 end
 
-local function ordered_file_list(view)
+ordered_file_list = function(view)
 	if not view or not view.panel then
 		return {}
 	end
@@ -814,7 +1170,7 @@ local apply_buffer_keymaps
 local function comments_for_file(state, file)
 	local comments = {}
 	for index, comment in ipairs(state.comments or {}) do
-		if comment.file == file then
+		if comment.file == file and not is_hidden_github_comment(comment) then
 			local start_line, end_line = clamp_comment_range(comment, math.huge)
 			table.insert(comments, {
 				comment = comment,
@@ -1005,7 +1361,8 @@ local function refresh_buffer(bufnr, file, state, show_comments, winid, spacer_r
 	local spacer_rows = {}
 	for _, entry in ipairs(sorted_file_comments(state, file, line_count)) do
 		local hls = review_format.comment_highlights(entry.comment)
-		local marker = review_format.is_guide_comment(entry.comment) and GUIDE_MARKER or COMMENT_MARKER
+		local marker = review_format.is_imported_github_comment(entry.comment) and GITHUB_MARKER
+			or (review_format.is_guide_comment(entry.comment) and GUIDE_MARKER or COMMENT_MARKER)
 		local file_level = review_format.is_file_level_comment(entry.comment)
 		if not file_level then
 			for lnum = entry.start_line, entry.end_line do
@@ -1224,8 +1581,11 @@ end
 
 function M.set_active_guide_context(context)
 	active_guide_context = context and {
+		owner = context.owner,
 		path = context.path,
 		pr_number = context.pr_number,
+		pr_url = context.pr_url,
+		repo_name = context.repo_name,
 		repo = context.repo,
 		repo_key = context.repo_key,
 	} or nil
@@ -1282,6 +1642,10 @@ function M.apply_highlights()
 	set(0, "DiffviewReviewCommentBorder", { fg = "#0969da" })
 	set(0, "DiffviewReviewCommentRange", { bg = "#ddf4ff", fg = "#0969da", bold = true })
 	set(0, "DiffviewReviewCommentVirt", { fg = "#0969da" })
+	set(0, "DiffviewReviewGithub", { fg = "#8250df", bold = true })
+	set(0, "DiffviewReviewGithubBorder", { fg = "#8250df" })
+	set(0, "DiffviewReviewGithubRange", { bg = "#fbefff", fg = "#8250df", bold = true })
+	set(0, "DiffviewReviewGithubVirt", { fg = "#8250df" })
 	set(0, "DiffviewReviewGuideHigh", { fg = "#cf222e", bold = true })
 	set(0, "DiffviewReviewGuideHighBorder", { fg = "#cf222e" })
 	set(0, "DiffviewReviewGuideHighRange", { bg = "#ffebe9", fg = "#cf222e", bold = true })
@@ -1304,6 +1668,7 @@ function M.apply_highlights()
 	set(0, "DiffviewReviewStatusFile", { fg = "#57606a", bold = true })
 	set(0, "DiffviewReviewStatusMuted", { fg = "#6e7781" })
 	set(0, "DiffviewReviewStatusComment", { fg = "#0969da" })
+	set(0, "DiffviewReviewStatusGithub", { fg = "#8250df", bold = true })
 	set(0, "DiffviewReviewStatusGuideHigh", { fg = "#cf222e", bold = true })
 	set(0, "DiffviewReviewStatusGuideMedium", { fg = "#9a6700", bold = true })
 	set(0, "DiffviewReviewStatusGuideLow", { fg = "#57606a" })
@@ -1480,6 +1845,10 @@ function M.delete_comment(opts)
 		state.dismissed_guide_comments = state.dismissed_guide_comments or {}
 		state.dismissed_guide_comments[comment.guide_id] = true
 	end
+	if review_format.is_imported_github_comment(comment) and comment.github_id then
+		state.dismissed_github_comments = state.dismissed_github_comments or {}
+		state.dismissed_github_comments[tostring(comment.github_id)] = true
+	end
 	table.remove(state.comments, index)
 	if save_state(ctx, state) then
 		notify(("Deleted review comment at %s:%d"):format(ctx.file, line))
@@ -1614,6 +1983,100 @@ function M.next_unviewed_file(direction)
 	jump_to_entry(ctx.view, target.item)
 end
 
+local function import_github_comments(ctx, pr, files)
+	local raw_comments, fetch_error = fetch_github_comments(pr)
+	if not raw_comments then
+		notify(fetch_error, vim.log.levels.ERROR)
+		return
+	end
+
+	local state = load_state_with_guide(ctx)
+	local changed, stats = import_github_comments_into_state(state, raw_comments, files)
+	if changed and not save_state(ctx, state) then
+		return
+	end
+
+	notify(
+		("GitHub import read-only for #%s: %d imported · %d updated · %d unchanged · %d skipped · %d dismissed · %d edited locally; no GitHub mutation performed"):format(
+			pr.pull_number,
+			stats.imported,
+			stats.updated,
+			stats.unchanged,
+			stats.skipped,
+			stats.dismissed,
+			stats.edited_locally
+		)
+	)
+	M.refresh_visible()
+end
+
+function M.import_github_comments()
+	local ctx = current_file_context()
+	if not require_active_diffview(ctx, "importing GitHub review comments") then
+		return
+	end
+	if not require_repo_context(ctx, "importing GitHub review comments") then
+		return
+	end
+
+	local pr, pr_error = active_pr_context(ctx)
+	if not pr then
+		notify(pr_error, vim.log.levels.WARN)
+		return
+	end
+
+	local files = diffview_file_set(ctx.view)
+	if vim.tbl_isempty(files) then
+		notify("No Diffview files available for GitHub comment import", vim.log.levels.WARN)
+		return
+	end
+
+	import_github_comments(ctx, pr, files)
+end
+
+function M.auto_import_github_comments()
+	local ctx = current_file_context()
+	if not (ctx and ctx.view and ctx.state_path) then
+		return
+	end
+
+	local pr = active_pr_context(ctx)
+	if not pr then
+		return
+	end
+
+	local key = github_import_context_key(ctx, pr)
+	if auto_imported_github_contexts[key] or auto_import_scheduled_contexts[key] then
+		return
+	end
+	auto_import_scheduled_contexts[key] = true
+
+	vim.defer_fn(function()
+		auto_import_scheduled_contexts[key] = nil
+		if auto_imported_github_contexts[key] then
+			return
+		end
+
+		local import_ctx = current_file_context()
+		if not (import_ctx and import_ctx.view and import_ctx.state_path) then
+			return
+		end
+
+		local import_pr = active_pr_context(import_ctx)
+		if not import_pr or github_import_context_key(import_ctx, import_pr) ~= key then
+			return
+		end
+
+		local files = diffview_file_set(import_ctx.view)
+		if vim.tbl_isempty(files) then
+			return
+		end
+
+		auto_imported_github_contexts[key] = true
+		import_github_comments(import_ctx, import_pr, files)
+	end, 150)
+end
+
 local function guide_comment_counts(state, guide)
 	local counts = { notes = 0, suggestions = 0, total = 0 }
 	for _, comment in ipairs(state.comments or {}) do
@@ -1723,11 +2186,13 @@ local function add_review_summary(rows, counts)
 	add_status_text(row, "Review:", "DiffviewReviewStatusHeader")
 	add_status_text(
 		row,
-		(" %d files · %d reviewed · %d unreviewed · %d comments · %s %d"):format(
+		(" %d files · %d reviewed · %d unreviewed · %d comments · %s %d · %s %d"):format(
 			counts.files,
 			counts.reviewed,
 			counts.unreviewed,
 			counts.comments,
+			GITHUB_MARKER,
+			counts.github,
 			GUIDE_MARKER,
 			counts.guide
 		),
@@ -1828,8 +2293,9 @@ end
 local function status_comment_row(entry, item, width)
 	local comment = entry.comment
 	local is_guide = review_format.is_guide_comment(comment)
+	local is_github = review_format.is_imported_github_comment(comment)
 	local label
-	if is_guide then
+	if is_guide or is_github then
 		label = review_format.is_file_level_comment(comment) and "File-level"
 			or range_label(entry.start_line, entry.end_line)
 	else
@@ -1838,6 +2304,21 @@ local function status_comment_row(entry, item, width)
 	local row = status_row({ item = item, line = entry.start_line })
 	local indent = "    "
 	add_status_text(row, indent)
+
+	if is_github then
+		local author = comment.author and (" @" .. comment.author) or ""
+		local status = github_status_label(comment)
+		local status_text = status and (" [" .. status .. "]") or ""
+		local prefix = GITHUB_MARKER .. " " .. label .. author .. status_text .. ": "
+		add_status_text(row, GITHUB_MARKER, "DiffviewReviewStatusGithub")
+		add_status_text(row, " " .. label .. author .. status_text .. ": ", "DiffviewReviewStatusMuted")
+		add_status_text(
+			row,
+			truncate_display(comment_preview(comment), width - review_format.display_width(indent .. prefix)),
+			"DiffviewReviewStatusMuted"
+		)
+		return row
+	end
 
 	if not is_guide then
 		local prefix = COMMENT_MARKER .. " " .. label .. ": "
@@ -1873,10 +2354,12 @@ local function status_comment_row(entry, item, width)
 end
 
 local function count_file_comments(comments)
-	local counts = { guide = 0, manual = 0, total = #comments }
+	local counts = { github = 0, guide = 0, manual = 0, total = #comments }
 	for _, entry in ipairs(comments) do
 		if review_format.is_guide_comment(entry.comment) then
 			counts.guide = counts.guide + 1
+		elseif review_format.is_imported_github_comment(entry.comment) then
+			counts.github = counts.github + 1
 		else
 			counts.manual = counts.manual + 1
 		end
@@ -1892,6 +2375,12 @@ local function status_file_row(item, comments, width)
 
 	if counts.guide > 0 then
 		suffix_width = suffix_width + review_format.display_width(GUIDE_MARKER .. counts.guide)
+	end
+	if counts.github > 0 then
+		if suffix_width > 0 then
+			suffix_width = suffix_width + 2
+		end
+		suffix_width = suffix_width + review_format.display_width(GITHUB_MARKER .. counts.github)
 	end
 	if counts.manual > 0 then
 		if suffix_width > 0 then
@@ -1910,8 +2399,14 @@ local function status_file_row(item, comments, width)
 		if counts.guide > 0 then
 			add_status_text(row, GUIDE_MARKER .. counts.guide, "DiffviewReviewStatusGuideInfo")
 		end
-		if counts.manual > 0 then
+		if counts.github > 0 then
 			if counts.guide > 0 then
+				add_status_text(row, "  ")
+			end
+			add_status_text(row, GITHUB_MARKER .. counts.github, "DiffviewReviewStatusGithub")
+		end
+		if counts.manual > 0 then
+			if counts.guide > 0 or counts.github > 0 then
 				add_status_text(row, "  ")
 			end
 			add_status_text(row, "💬" .. counts.manual, "DiffviewReviewStatusComment")
@@ -1936,7 +2431,7 @@ function M.show_status()
 	local rows = {}
 	local line_to_action = {}
 	local comments_by_path = {}
-	local counts = { comments = 0, files = #entries, guide = 0, reviewed = 0, unreviewed = 0 }
+	local counts = { comments = 0, files = #entries, github = 0, guide = 0, reviewed = 0, unreviewed = 0 }
 
 	for _, item in ipairs(entries) do
 		if item.viewed then
@@ -1948,6 +2443,7 @@ function M.show_status()
 		comments_by_path[item.path] = comments
 		local file_counts = count_file_comments(comments)
 		counts.comments = counts.comments + file_counts.total
+		counts.github = counts.github + file_counts.github
 		counts.guide = counts.guide + file_counts.guide
 	end
 
@@ -2080,6 +2576,7 @@ end
 
 function M.setup()
 	vim.fn.sign_define("DiffviewReviewComment", { text = COMMENT_MARKER, texthl = "DiffviewReviewCommentSign" })
+	vim.fn.sign_define("DiffviewReviewGithub", { text = GITHUB_MARKER, texthl = "DiffviewReviewGithub" })
 	for _, sign_name in ipairs(review_format.GUIDE_SIGN_NAMES) do
 		vim.fn.sign_define(sign_name, { text = GUIDE_MARKER, texthl = sign_name })
 	end
@@ -2090,10 +2587,13 @@ function M.setup()
 	vim.api.nvim_create_autocmd("User", {
 		group = group,
 		pattern = { "DiffviewViewPostLayout", "DiffviewDiffBufWinEnter" },
-		callback = function()
+		callback = function(event)
 			vim.defer_fn(function()
 				M.apply_highlights()
 				M.refresh_visible()
+				if event.match == "DiffviewViewPostLayout" then
+					M.auto_import_github_comments()
+				end
 				for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
 					if vim.api.nvim_win_is_valid(winid) then
 						apply_buffer_keymaps(vim.api.nvim_win_get_buf(winid))
@@ -2121,6 +2621,10 @@ function M.setup()
 	vim.api.nvim_create_user_command("DiffviewReviewStatus", M.show_status, {
 		force = true,
 		desc = "Show local Diffview review status",
+	})
+	vim.api.nvim_create_user_command("DiffviewReviewImportGithubComments", M.import_github_comments, {
+		force = true,
+		desc = "Import GitHub PR review comments into local Diffview state",
 	})
 end
 

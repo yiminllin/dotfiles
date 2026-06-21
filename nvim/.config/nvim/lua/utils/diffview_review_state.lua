@@ -9,6 +9,7 @@ local function new_state(ctx)
 		viewed = {},
 		comments = {},
 		dismissed_guide_comments = {},
+		dismissed_github_comments = {},
 	}
 end
 
@@ -16,6 +17,10 @@ local function ensure_state(state, ctx)
 	local dismissed_guide_comments = {}
 	if type(state) == "table" and type(state.dismissed_guide_comments) == "table" then
 		dismissed_guide_comments = state.dismissed_guide_comments
+	end
+	local dismissed_github_comments = {}
+	if type(state) == "table" and type(state.dismissed_github_comments) == "table" then
+		dismissed_github_comments = state.dismissed_github_comments
 	end
 
 	return {
@@ -25,6 +30,7 @@ local function ensure_state(state, ctx)
 		viewed = type(state) == "table" and type(state.viewed) == "table" and state.viewed or {},
 		comments = type(state) == "table" and type(state.comments) == "table" and state.comments or {},
 		dismissed_guide_comments = dismissed_guide_comments,
+		dismissed_github_comments = dismissed_github_comments,
 	}
 end
 
