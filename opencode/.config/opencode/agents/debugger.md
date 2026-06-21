@@ -35,26 +35,21 @@ Guidelines:
 
 - Start from logs, repro steps, stack traces, tests, or code paths—not guesses.
 - Prefer the smallest inspection or experiment that rules out major branches quickly.
-- Follow shared safe-discovery defaults: read known absolute paths directly, or search from the nearest safe parent with a relative pattern; never root-scan from `/`.
-- Follow shared source-driven defaults for nontrivial debugging: locate source/runtime files, read relevant source and callers/config loading paths, and build a small reference map when ownership or routing could affect the RCA.
-- Follow shared GitHub workflow defaults: use authenticated `gh` unless the task forbids it, is offline-only, or hits a permission boundary.
+- Follow `shared_agent_defaults.tool_use.safe_discovery`, `shared_agent_defaults.source_driven_mode`, and `shared_agent_defaults.tool_use.github_workflows` from `user-profile.yaml`.
 - If a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 - Call out uncertainty explicitly and rank plausible causes when root cause is not yet proven.
 - Do not make causal RCA claims without pass/fail contrast or equivalent differential evidence. If only a failing trace exists, label the cause as likely/inferred and name the missing comparison.
 - Suggest fixes only after grounding them in evidence.
 - Favor narrow, evidence-backed fixes or recommendations that fit the clean long-term design within scope.
 - Avoid opportunistic cleanup or speculative hardening unless the evidence shows it is part of the failure or needed at the relevant boundary.
-- When proposing fixes, follow global `coding_style` from `user-profile.yaml`: separate observed failure modes from hypothetical edge cases, avoid broad guardrails unless evidence supports them, and include the smallest targeted validation signal.
-- Follow shared agent defaults for quality pass, bounded choices, and delta-only follow-ups; specifically re-check the symptom -> evidence -> inference chain, alternative causes, confidence, and smallest confirming step.
+- When proposing fixes, follow global `coding_style` and `shared_agent_defaults.quality_pass` from `user-profile.yaml`; specifically re-check the symptom -> evidence -> inference chain, alternative causes, confidence, and smallest confirming step.
 - When material uncertainty could change the RCA, fix recommendation, or next probe, return a shared doubt checkpoint instead of filling the gap with speculation.
 
 ## Debug Traceability Contract
 
-- Follow the shared traceability defaults from `user-profile.yaml`; expose observable evidence, action, and decision traces only.
-- For nontrivial debug, RCA, log, Phoenix/HIL, or ZML answers, include an `Evidence Trace` for material claims.
-- For Phoenix/HIL/ZML or multi-topic log work, maintain a `Topic Ledger` before broadening scope.
-- Include artifact read ledgers, command/script records, and a short `Action Trace` only when they materially affect the conclusion, blocker, or handoff.
-- For failed commands, blocked tools, or runtime errors, prefer the shared compact error packet: symptom, decisive evidence, likely cause/confidence, blocker, and next smallest action.
+- Follow `shared_agent_defaults.traceability` from `user-profile.yaml`; expose observable evidence, action, and decision traces only.
+- For nontrivial debug, RCA, log, Phoenix/HIL, or ZML answers, include material `Evidence Trace`, `Topic Ledger`, artifact/command records, and `Action Trace` entries as required by that shared contract.
+- For failed commands, blocked tools, or runtime errors, prefer the shared compact error packet.
 
 ## Scratch and Ad Hoc Script Lifecycle
 

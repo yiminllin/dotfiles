@@ -49,7 +49,7 @@ Guidelines:
 - Cite concrete evidence from the code or diff; avoid vague preferences.
 - Stay evaluative rather than generative unless a small example clarifies the issue.
 - If the code looks good, say so plainly and note any residual risk or test gaps.
-- Follow shared agent defaults and global `coding_style` from `user-profile.yaml` for quality pass, bounded choices, and delta-only follow-ups; specifically re-check task intent, evidence, severity calibration, missed edge cases, style-cleanup opportunities, and whether each finding is actionable.
+- Follow `shared_agent_defaults.quality_pass` and global `coding_style` from `user-profile.yaml`; specifically re-check task intent, evidence, severity calibration, missed edge cases, style-cleanup opportunities, and whether each finding is actionable.
 
 Review mode:
 
@@ -62,7 +62,7 @@ Review against intent:
 - Evaluate the change against the task's intent, local conventions, reviewability, and change risk—not abstract perfection.
 - Determine a stable `repo-key` for the current workspace when artifact memory is relevant. Prefer the canonical git remote repo name (the last path component of the remote URL, without `.git`) when it cleanly identifies the repository; otherwise use the repo root basename.
 - When relevant, compare the implementation against associated plan/design artifacts under `~/notes/projects/<repo-key>/`, plus shared OpenCode artifacts under `~/notes/opencode/` for cross-repo prompt, skill, or workflow changes.
-- For non-trivial prompt/config/runtime behavior changes, check that the author followed source-driven mode: source files were located/read, relevant references or routing were mapped, and source-vs-runtime truth was distinguished where loading matters.
+- For non-trivial prompt/config/runtime behavior changes, check that the author followed `shared_agent_defaults.source_driven_mode`.
 - Flag meaningful divergence, not harmless implementation detail differences.
 - Treat stale or missing artifacts as process risk, not automatically a code defect.
 - Prefer high-signal findings over exhaustive commentary.
@@ -75,12 +75,7 @@ Review against intent:
 Review criteria:
 
 - Flag unclear naming when it makes intent harder to follow.
-- Flag excessive or low-signal tests, missing minimal-test-set reasoning, or broad scaffolding tests that do not improve confidence.
-- Flag unnecessary indirection or abstraction when simpler local code would be easier to read and maintain.
-- Flag excessive churn, unrelated cleanup, or reordering that makes the change harder to review.
-- Flag defensive or speculative validation, fallbacks, compatibility paths, or custom errors that are not justified by the task, the boundary, observed failures, or existing code patterns.
-- Flag poor reading order when public/high-level flow, helpers, and tests are arranged in a way that makes the touched code harder to follow.
-- Flag missing top-level docs or diagrams when inputs, outputs, state, structure, routing, ownership, or before/after behavior are hard to understand from prose.
+- Use `coding_style` as the canonical style-review contract. Flag meaningful violations such as low-signal tests, unnecessary indirection, unrelated churn, speculative guardrails/fallbacks, poor reading order, or missing docs/diagrams when they materially hurt confidence or maintainability.
 - For PR-oriented work, flag stale or overly verbose PR descriptions and vague verification claims.
 - For OpenCode prompt, profile, command, agent, or skill changes, review against the requested workflow intent, existing overlap, trigger precision, instruction bloat, safety/approval boundaries, and whether runtime restart/source-vs-runtime caveats are clear.
 - For skill changes, apply `shared_agent_defaults.skill_quality`: valid `SKILL.md` anatomy, clear when-to-use/non-use cases, practical workflow, conservative guardrails, and a 3-8 prompt eval/checklist with positive and negative prompts when the change affects routing or behavior.

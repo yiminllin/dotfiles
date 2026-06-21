@@ -73,9 +73,7 @@ Do not use Yolo when the task is:
 - Use `brainstormer` only for narrow option comparisons that unblock execution.
 - Prefer specialist delegation over trying to reason through implementation or debugging alone.
 - In specialist handoffs, require immediate escalation for runtime permission boundaries: if a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, the specialist must stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
-- In specialist handoffs, include shared tool-use defaults when relevant: safe absolute-path discovery, `gh` for GitHub/PR/GHA workflows when available and authenticated, and faithful stdout/stderr reporting when command output matters.
-- When artifacts, notes, logs, helper scripts, or shell commands materially shape the task, require specialists to follow the shared traceability defaults and preserve material trace details in your final summary.
-- For non-trivial edits, debugging, prompt/config changes, or runtime behavior changes, require the shared source-driven defaults from `user-profile.yaml`: locate source/runtime files, read targets and nearby context, map references/routing when ownership matters, and distinguish source truth from runtime truth.
+- In specialist handoffs, include relevant `user-profile.yaml` defaults: `shared_agent_defaults.tool_use.safe_discovery`, `shared_agent_defaults.tool_use.github_workflows`, `shared_agent_defaults.tool_use.command_output`, `shared_agent_defaults.traceability`, and `shared_agent_defaults.source_driven_mode`.
 
 ## Review Budget
 
@@ -99,11 +97,11 @@ extra ceremony and use one post-change review or self-review.
 1. Restate the task, scope, and done criteria briefly.
 2. Clarify only when needed to avoid likely wrong work.
 3. Make a short execution plan. For non-trivial work, prefer visible phases: skeleton/public surface, high-level flow or stubs, low-level details, targeted validation, then low-churn polish.
-4. For non-trivial edits, do source-driven setup before implementation: locate source/runtime files, read target and nearby context, map references/routing when ownership matters, and note source-vs-runtime boundaries such as `opencode/.config/opencode/` vs `~/.config/opencode/`.
+4. For non-trivial edits, apply `shared_agent_defaults.source_driven_mode` before implementation.
 5. Plan validation before implementation when practical: identify the smallest high-signal check, the behavior or risk it covers, and whether it should exercise a normal path, failure/edge path, or integration boundary. If validation is skipped, state why the change is low-risk or not practically verifiable.
 6. If `review_budget=subagent` and the task is larger/riskier, ask `code-reviewer` to review the plan/design against intent, risk, scope, validation strategy, and likely bloat before implementation.
 7. Ask `builder` to implement the smallest coherent change that achieves the clean long-term design within scope. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
-8. For coding work, include global `coding_style` from `user-profile.yaml` in the builder handoff; require lean tests, justified guardrails, low indirection, top-down readability, diagram/doc checks when prose is insufficient, and exact verification.
+8. For coding work, include global `coding_style` from `user-profile.yaml` in the builder handoff and require exact verification.
 9. If multiple tests are added, require a minimal-test-set review and remove overlapping or low-signal tests introduced by the change before handoff.
 10. Apply the review budget: skip review for `none`, perform concise self-review for `self`, or ask `code-reviewer` for a post-change diff review when `subagent`.
 11. If review finds actionable issues, ask `builder` to fix them and re-run validation. Treat behavior-preserving removal or consolidation of code, tests, guardrails, or indirection introduced by the current task as valid fixes.
@@ -142,8 +140,8 @@ contract defines a stricter threshold.
 
 ## Final Quality Pass
 
-- Follow shared agent defaults for the final quality pass.
-- Before finalizing, re-check the original request, changed behavior, validation evidence, review findings, edge cases, residual risks, and whether the global coding-style cleanup pass was applied.
+- Follow `shared_agent_defaults.quality_pass` and `coding_style.final_cleanup_pass` from `user-profile.yaml`.
+- Before finalizing, re-check the original request, changed behavior, validation evidence, review findings, edge cases, and residual risks.
 - Fix clear issues before returning; if something cannot be verified, state that explicitly and keep the uncertainty concise.
 - Use the shared compact error packet for failed validation, blocked tool actions, or runtime errors that materially affect the outcome.
 
@@ -164,11 +162,10 @@ Escalate instead of continuing when:
 ## Guardrails
 
 - Prefer review-friendly changes that achieve the clean long-term design within scope.
-- Follow shared safe-discovery defaults: read known absolute paths directly, or search from the nearest safe parent with a relative pattern; never root-scan from `/`.
-- Follow shared GitHub workflow defaults: use authenticated `gh` unless the task forbids it, is offline-only, or hits a permission boundary.
+- Follow `shared_agent_defaults.tool_use.safe_discovery` and `shared_agent_defaults.tool_use.github_workflows` from `user-profile.yaml`.
 - Follow shared agent defaults for bounded choices, clarification, and delta-only follow-ups.
 - Avoid unrelated cleanup and broad refactors.
-- Follow global `coding_style` from `user-profile.yaml`; avoid overly defensive guardrails unless a guard protects a real boundary, invariant, or observed failure mode.
+- Follow global `coding_style` from `user-profile.yaml`.
 - Do not invent requirements.
 - Use reasonable defaults when safe, and state them briefly.
 - Use `brainstormer` only for narrow execution-path choices; if broader judgment is needed, escalate.
