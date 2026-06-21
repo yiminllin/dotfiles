@@ -24,7 +24,9 @@ Keep this packet private. It may support detailed review order, deep/skim labels
 
 ## Primary output
 
-The default output should be Diffview-centric and include:
+The default output should be raw guide Markdown only: no preface, no meta-wrapper/status prose such as `No existing guide found`, and no wrapping fenced Markdown block. The first visible content should be the guide itself, preferably starting with `## TL;DR` followed by `## High-level summary`.
+
+The guide should be Diffview-centric and include:
 
 1. `## TL;DR`: short private reviewer guidance with the main review path and highest-risk unknowns.
 2. `## High-level summary`: conceptual layers of the change before file details.
@@ -39,9 +41,51 @@ The default output should be Diffview-centric and include:
 
 Prefer high-signal comments over exhaustive commentary.
 
-Final reports are `draft only` by default: state that no GitHub review, comment, approval, request-changes action, or thread resolution was updated. If the user later explicitly asks for a GitHub-facing mutation, report each intended artifact as `updated` or `not updated` with exact evidence such as the PR/comment/thread URL, the `gh` command that succeeded, or the blocker/reason no update happened.
+Outside raw guide-artifact mode, final reports are `draft only` by default: state that no GitHub review, comment, approval, request-changes action, or thread resolution was updated. If the user later explicitly asks for a GitHub-facing mutation, report each intended artifact as `updated` or `not updated` with exact evidence such as the PR/comment/thread URL, the `gh` command that succeeded, or the blocker/reason no update happened.
 
 For complex or unfamiliar subsystems, or when the user asks for explanation, begin with toddler terminology and a small diagram before the normal review order/comments. Keep simple PRs concise.
+
+## Structured JSON artifact mode
+
+When `prdv` or the user explicitly requests a JSON guide artifact, return raw JSON only: no preface, no Markdown, no save-status prose, and no fenced code block. Keep the same private/read-only review behavior, but shape the output for Diffview import:
+
+```json
+{
+  "schema_version": 1,
+  "pr": {
+    "number": 123,
+    "title": "PR title",
+    "url": "https://github.com/org/repo/pull/123",
+    "base": "main",
+    "head": "feature-branch"
+  },
+  "summary": "one concise PR-level review summary",
+  "change_map": ["optional concise ASCII/plain-text relationship map line"],
+  "high_risk": ["highest-risk areas or unknowns"],
+  "validation_focus": ["tests/checks or manual validation to focus on"],
+  "review_strategy": ["optional review step or ordered route"],
+  "files": [
+    {
+      "path": "path/from/diff",
+      "depth": "read carefully",
+      "notes": ["file-level guide note for Diffview overlay"],
+      "suggestions": [
+        {
+          "severity": "Medium",
+          "line": 10,
+          "end_line": 12,
+          "body": "suggested local review comment or question",
+          "why": "why it matters"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Order `files` as the recommended human/Diffview review order. Future Diffview `<Tab>`/`<S-Tab>` navigation may use this order, so do not sort alphabetically unless alphabetical is actually the recommended review order.
+
+Use exact Diffview file paths. `change_map` is optional; include it only when a concise relationship figure, dataflow, or ownership map helps orient the reviewer. It must be an array of short ASCII/plain-text strings only, with no Mermaid/images, ideally no more than 8-12 lines. `review_strategy` is optional and may be a string or array. `depth`, `end_line`, and `why` are optional. Do not invent exact line numbers; use `null` for approximate anchors. Prefer a short high-signal set of file notes and suggestions over exhaustive coverage.
 
 ## Guide artifact refresh mode
 
@@ -51,7 +95,7 @@ When the prompt provides a target guide path, existing guide path, or asks to up
 - Treat the existing guide as prior context, not truth. Preserve still-relevant observations, remove stale ones, and add new findings/questions from the current PR state.
 - Keep the refreshed output in the same primary output structure below so it can replace the previous artifact cleanly.
 - Mention materially stale or removed prior observations only when that helps the human reviewer; do not include a noisy changelog by default.
-- If the guide path is provided, state that the response is intended to be saved there, but do not rely on the shell redirect as proof that it was written.
+- If the guide path is provided, return only raw Markdown guide content that can replace that file; do not add save-status prose or rely on the shell redirect as proof that it was written. When structured JSON artifact mode is requested, return only the raw JSON artifact instead.
 
 ## Workflow
 
@@ -124,15 +168,22 @@ For each file, label the review depth:
 - `skim`
 - `optional/generated`
 
-For each non-generated file section, include:
+Do not create detailed sections for every changed file by default. Use `## File map` and `## Recommended inspection order` for broad coverage, then expand only high-signal files in `## File-by-file Diffview guide`:
+
+- core behavior, public API/config/schema, safety or compatibility paths
+- files with suggested local comments/questions/TODOs
+- representative files for a large mechanical/generated area
+- tests that are central to validating the change
+
+For each expanded file section, include:
 
 - `What this diff does`: a concise explanation of the change in that file.
 - `Inspect in Diffview`: concrete things to verify while looking at that file's diff.
 - `Suggested local comments/questions/TODOs`: only high-signal items that could become local Diffview comments or author self-review follow-ups.
 
-Explain briefly why each file appears in that position, especially when one file should be understood before another.
+Explain briefly why each file appears in the inspection order, especially when one file should be understood before another.
 
-Build a compact `## File map` as a separate orientation aid. For small or medium PRs, a table may list files directly. For huge PRs, do not list every file; group by directory/area and include representative files or directory globs.
+Build a compact `## File map` as a separate orientation aid. For small or medium PRs, a table may list files directly. For huge PRs, do not list every file; group by directory/area and include representative files or directory globs. Summarize files that are intentionally covered by the map but not expanded in detail.
 
 ### 4. Review the code
 
@@ -179,9 +230,8 @@ Do not invent exact line numbers. If the anchor is approximate, say `approx`.
 
 ### 7. Output format
 
-Use this Diffview/prdv-friendly structure. `read carefully` may be replaced with `deep` when the user requested deep/skim labels:
+Use this Diffview/prdv-friendly structure directly as the final response. `read carefully` may be replaced with `deep` when the user requested deep/skim labels. Do not wrap the response in a fenced code block.
 
-```markdown
 ## TL;DR
 - <main review route and highest-risk unknowns>
 - <most important validation or follow-up focus>
@@ -210,6 +260,7 @@ Use this Diffview/prdv-friendly structure. `read carefully` may be replaced with
 | <area> | `path/to/file.rs` or `path/to/**/*.rs` | <what this area owns> |
 
 ## File-by-file Diffview guide
+Only expand high-signal files here; leave routine/low-risk files summarized in the file map.
 
 ### 1. `path/to/file.rs` [read carefully]
 **What this diff does**
@@ -223,15 +274,8 @@ Use this Diffview/prdv-friendly structure. `read carefully` may be replaced with
   - Why it matters: <risk/context>
   - TODO: <optional local follow-up before posting/submitting review>
 
-### 2. `path/to/next_file.rs` [skim]
-**What this diff does**
-- <explanation>
-
-**Inspect in Diffview**
-- <what to skim for>
-
-**Suggested local comments/questions**
-- None.
+## Files covered by map only
+- `<area/glob>` — <why no detailed section is needed, for example mechanical/generated/docs-only or low-risk follow-through>
 
 ## Questions
 | Category | Anchor | Question | Why it matters |
@@ -248,7 +292,6 @@ Use this Diffview/prdv-friendly structure. `read carefully` may be replaced with
 
 ## Public PR body suggestions
 <optional/private; include only when useful. Suggestions may identify public-body improvements, but do not edit the PR body or present this private inspection guide as public text.>
-```
 
 ## Guardrails
 

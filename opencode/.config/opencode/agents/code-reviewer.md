@@ -12,7 +12,19 @@ permission:
   webfetch: allow
   skill: allow
   edit: deny
-  bash: deny
+  bash:
+    "*": deny
+    "git status*": allow
+    "git diff*": allow
+    "git show*": allow
+    "git log*": allow
+    "git rev-parse*": allow
+    "git merge-base*": allow
+    "git ls-files*": allow
+    "git remote get-url*": allow
+    "gh pr view*": allow
+    "gh pr diff*": allow
+    "gh pr checks*": allow
   task: deny
   todowrite: deny
 ---

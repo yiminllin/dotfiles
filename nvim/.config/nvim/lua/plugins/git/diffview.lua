@@ -11,7 +11,25 @@ local function in_systems_dir()
 	return cwd:match("/Systems[^/]*(/|$)") ~= nil
 end
 
-local function diffview_open(extra_args)
+local function review_module()
+	local ok, review = pcall(require, "utils.diffview_review")
+	if ok then
+		return review
+	end
+end
+
+local function clear_review_guide_context()
+	local review = review_module()
+	if review and review.clear_active_guide_context then
+		review.clear_active_guide_context()
+	end
+end
+
+local function diffview_open(extra_args, keep_guide_context)
+	if not keep_guide_context then
+		clear_review_guide_context()
+	end
+
 	local args = extra_args and vim.deepcopy(extra_args) or {}
 	if in_systems_dir() then
 		vim.list_extend(args, { "--", ".", ":!.opencode/skills", ":!notes" })
@@ -20,6 +38,7 @@ local function diffview_open(extra_args)
 end
 
 local function diffview_file_history()
+	clear_review_guide_context()
 	local args = {}
 	if in_systems_dir() then
 		vim.list_extend(args, { ".", ":!.opencode/skills", ":!notes" })
@@ -40,6 +59,24 @@ local function git_command(root, args)
 	vim.list_extend(command, args)
 	local output = vim.fn.systemlist(command)
 	return vim.v.shell_error == 0, output
+end
+
+local function pr_guide_context(root, pr_number)
+	local repo_key = nil
+	local ok, output = git_command(root, { "remote", "get-url", "origin" })
+	if ok then
+		repo_key = trim_command_output(output):gsub("%.git/?$", ""):gsub("/+$", ""):gsub("^.*[:/]", "")
+	end
+	if not repo_key or repo_key == "" then
+		repo_key = vim.fn.fnamemodify(root, ":t")
+	end
+
+	return {
+		path = ("%s/notes/projects/%s/pr-reviews/%s/guide.json"):format(vim.env.HOME or vim.fn.expand("~"), repo_key, pr_number),
+		pr_number = pr_number,
+		repo = root,
+		repo_key = repo_key,
+	}
 end
 
 local function git_root()
@@ -133,7 +170,11 @@ local function open_pr_diffview(opts)
 		return
 	end
 
-	diffview_open({ base_ref .. "..." .. head_ref })
+	local review = review_module()
+	if review and review.set_active_guide_context then
+		review.set_active_guide_context(pr_guide_context(root, pr_number))
+	end
+	diffview_open({ base_ref .. "..." .. head_ref }, true)
 	notify_pr(("Opened PR #%s in Diffview"):format(pr_number))
 end
 
@@ -289,6 +330,7 @@ return {
 		vim.api.nvim_create_autocmd("User", {
 			pattern = "DiffviewViewClosed",
 			callback = function()
+				clear_review_guide_context()
 				vim.o.diffopt = previous_diffopt or vim.o.diffopt
 				previous_diffopt = nil
 				require("gruvbox").setup({

@@ -4,9 +4,13 @@ local review_format = require("utils.diffview_review_format")
 local review_state = require("utils.diffview_review_state")
 
 local NS = vim.api.nvim_create_namespace("diffview_review")
+local STATUS_NS = vim.api.nvim_create_namespace("diffview_review_status")
 local SIGN_GROUP = "diffview_review"
 local COMMENT_MARKER = review_format.COMMENT_MARKER
+local GUIDE_MARKER = review_format.GUIDE_MARKER
 local last_unviewed_path = nil
+local active_guide_context = nil
+local guide_cache = nil
 
 local function notify(message, level)
 	vim.notify(message, level or vim.log.levels.INFO, { title = "Diffview Review" })
@@ -53,6 +57,95 @@ local function normalize_file(path)
 	end
 
 	return path:gsub("\\", "/"):gsub("^%./", "")
+end
+
+local function string_list(value)
+	if type(value) == "string" and value ~= "" then
+		return { value }
+	end
+	if type(value) ~= "table" then
+		return {}
+	end
+
+	local result = {}
+	for _, item in ipairs(value) do
+		if item ~= nil and item ~= vim.NIL and tostring(item) ~= "" then
+			table.insert(result, tostring(item))
+		end
+	end
+	return result
+end
+
+local function positive_line(value)
+	if type(value) ~= "number" and type(value) ~= "string" then
+		return nil
+	end
+
+	local number = tonumber(value)
+	if number and number >= 1 then
+		return math.floor(number)
+	end
+end
+
+local function string_id(value)
+	if type(value) == "string" and value ~= "" then
+		return value
+	end
+	if type(value) == "number" then
+		return tostring(value)
+	end
+end
+
+local function normalize_guide(decoded)
+	if type(decoded) ~= "table" then
+		return nil
+	end
+
+	local guide = {
+		pr_number = type(decoded.pr) == "table" and decoded.pr.number or nil,
+		pr_url = type(decoded.pr) == "table" and decoded.pr.url or nil,
+		schema_version = decoded.schema_version or decoded.version,
+		summary = type(decoded.summary) == "string" and decoded.summary or "",
+		change_map = string_list(decoded.change_map),
+		high_risk = string_list(decoded.high_risk),
+		review_strategy = string_list(decoded.review_strategy),
+		validation_focus = string_list(decoded.validation_focus),
+		files = {},
+		files_by_path = {},
+	}
+
+	for _, file in ipairs(type(decoded.files) == "table" and decoded.files or {}) do
+		local path = type(file) == "table" and normalize_file(file.path) or nil
+		if path then
+			local guide_file = {
+				id = string_id(file.guide_id) or string_id(file.id),
+				notes = string_list(file.notes),
+				path = path,
+				suggestions = {},
+			}
+			for _, suggestion in ipairs(type(file.suggestions) == "table" and file.suggestions or {}) do
+				local body = type(suggestion) == "table" and type(suggestion.body) == "string" and vim.trim(suggestion.body)
+					or ""
+				if body ~= "" then
+					local start_line = positive_line(suggestion.line)
+					local end_line = positive_line(suggestion.end_line) or start_line
+					table.insert(guide_file.suggestions, {
+						body = body,
+						end_line = end_line,
+						id = string_id(suggestion.guide_id) or string_id(suggestion.id),
+						line = start_line,
+						severity = type(suggestion.severity) == "string" and suggestion.severity or "Medium",
+						why = type(suggestion.why) == "string" and suggestion.why or nil,
+					})
+				end
+			end
+
+			table.insert(guide.files, guide_file)
+			guide.files_by_path[path] = guide_file
+		end
+	end
+
+	return guide
 end
 
 local function current_view()
@@ -312,7 +405,59 @@ local function load_state(ctx)
 end
 
 local function save_state(ctx, state)
+	for _, comment in ipairs(state.comments or {}) do
+		if review_format.is_file_level_comment(comment) then
+			comment.line = nil
+			comment.end_line = nil
+		end
+	end
+
 	return review_state.save(ctx, state, notify)
+end
+
+local function active_guide_path(ctx)
+	if not active_guide_context or not active_guide_context.path then
+		return nil
+	end
+	if active_guide_context.repo and ctx and ctx.root and normalize_dir(active_guide_context.repo) ~= ctx.root then
+		return nil
+	end
+	return active_guide_context.path
+end
+
+local function load_active_guide(ctx)
+	local path = active_guide_path(ctx)
+	if not path then
+		return nil
+	end
+
+	local mtime = vim.fn.getftime(path)
+	if mtime < 0 then
+		guide_cache = { path = path, mtime = mtime, guide = nil }
+		return nil
+	end
+	if guide_cache and guide_cache.path == path and guide_cache.mtime == mtime then
+		return guide_cache.guide
+	end
+
+	local read_ok, lines = pcall(vim.fn.readfile, path)
+	if not read_ok then
+		notify("Could not read guide JSON: " .. path, vim.log.levels.WARN)
+		guide_cache = { path = path, mtime = mtime, guide = nil }
+		return nil
+	end
+
+	local decode_ok, decoded = pcall(vim.fn.json_decode, table.concat(lines, "\n"))
+	local guide = decode_ok and normalize_guide(decoded) or nil
+	if not guide then
+		notify("Ignoring invalid guide JSON: " .. path, vim.log.levels.WARN)
+	else
+		guide.source_path = path
+		guide.context_pr_number = active_guide_context and active_guide_context.pr_number or nil
+		guide.repo_key = active_guide_context and active_guide_context.repo_key or nil
+	end
+	guide_cache = { path = path, mtime = mtime, guide = guide }
+	return guide
 end
 
 local normalize_comment_text = review_format.normalize_comment_text
@@ -322,7 +467,171 @@ local line_range_label = review_format.line_range_label
 local range_label = review_format.range_label
 local split_comment_text = review_format.split_comment_text
 
+local function guide_hash(...)
+	return vim.fn.sha256(table.concat({ ... }, "\n")):sub(1, 16)
+end
+
+local function guide_note_id(file)
+	if file.id then
+		return "guide:note:" .. file.path .. ":" .. file.id
+	end
+	return "guide:note:" .. guide_hash(file.path, "guide_note")
+end
+
+local function guide_suggestion_id(file, suggestion)
+	if suggestion.id then
+		return "guide:suggestion:" .. file.path .. ":" .. suggestion.id
+	end
+	local line_key = suggestion.line and tostring(suggestion.line) or "file"
+	local end_line_key = suggestion.line and suggestion.end_line and tostring(suggestion.end_line) or line_key
+	return "guide:suggestion:" .. guide_hash(
+		file.path,
+		"guide_suggestion",
+		line_key,
+		end_line_key,
+		normalize_comment_text(suggestion.body)
+	)
+end
+
+local function guide_note_body(notes)
+	local lines = {}
+	for _, note in ipairs(notes or {}) do
+		table.insert(lines, "• " .. normalize_comment_text(note))
+	end
+	return table.concat(lines, "\n")
+end
+
+local function comment_index_by_guide_id(state)
+	local index_by_id = {}
+	for index, comment in ipairs(state.comments or {}) do
+		if type(comment) == "table" and comment.guide_id then
+			index_by_id[comment.guide_id] = index_by_id[comment.guide_id] or index
+		end
+	end
+	return index_by_id
+end
+
+local function apply_imported_guide_comment(state, index_by_id, comment)
+	if state.dismissed_guide_comments and state.dismissed_guide_comments[comment.guide_id] then
+		return false
+	end
+
+	local index = index_by_id[comment.guide_id]
+	if not index then
+		comment.created_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+		table.insert(state.comments, comment)
+		index_by_id[comment.guide_id] = #state.comments
+		return true
+	end
+
+	local existing = state.comments[index]
+	local changed = false
+	for key, value in pairs(comment) do
+		if existing[key] ~= value then
+			existing[key] = value
+			changed = true
+		end
+	end
+	for _, key in ipairs({ "line", "end_line" }) do
+		if comment[key] == nil and existing[key] ~= nil then
+			existing[key] = nil
+			changed = true
+		end
+	end
+	if changed then
+		existing.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+	end
+	return changed
+end
+
+local function import_guide_comments(state, guide)
+	if not guide then
+		return false
+	end
+
+	state.comments = state.comments or {}
+	state.dismissed_guide_comments = state.dismissed_guide_comments or {}
+	local index_by_id = comment_index_by_guide_id(state)
+	local active_guide_ids = {}
+	local changed = false
+	local guide_pr_number = guide.pr_number or guide.context_pr_number
+
+	for _, file in ipairs(guide.files or {}) do
+		if #(file.notes or {}) > 0 then
+			local guide_id = guide_note_id(file)
+			active_guide_ids[guide_id] = true
+			changed = apply_imported_guide_comment(state, index_by_id, {
+				body = guide_note_body(file.notes),
+				file = file.path,
+				file_level = true,
+				guide_id = guide_id,
+				guide_path = guide.source_path,
+				guide_pr_number = guide_pr_number,
+				kind = "guide_note",
+				repo_key = guide.repo_key,
+				severity = "Info",
+				source = "guide",
+			}) or changed
+		end
+
+		for _, suggestion in ipairs(file.suggestions or {}) do
+			local file_level = not suggestion.line
+			local line = suggestion.line
+			local end_line = suggestion.end_line or line
+			local guide_id = guide_suggestion_id(file, suggestion)
+			active_guide_ids[guide_id] = true
+			local comment = {
+				body = suggestion.body,
+				file = file.path,
+				file_level = file_level,
+				guide_id = guide_id,
+				guide_path = guide.source_path,
+				guide_pr_number = guide_pr_number,
+				kind = "guide_suggestion",
+				repo_key = guide.repo_key,
+				severity = suggestion.severity or "Medium",
+				source = "guide",
+				why = suggestion.why,
+			}
+			if not file_level then
+				comment.line = line
+				comment.end_line = end_line
+			end
+			changed = apply_imported_guide_comment(state, index_by_id, comment) or changed
+		end
+	end
+
+	if guide.source_path then
+		for index = #state.comments, 1, -1 do
+			local comment = state.comments[index]
+			if
+				review_format.is_guide_comment(comment)
+				and comment.guide_path == guide.source_path
+				and not active_guide_ids[comment.guide_id]
+			then
+				table.remove(state.comments, index)
+				changed = true
+			end
+		end
+	end
+
+	return changed
+end
+
+local function load_state_with_guide(ctx)
+	local state = load_state(ctx)
+	local guide = load_active_guide(ctx)
+	if import_guide_comments(state, guide) then
+		save_state(ctx, state)
+	end
+	return state, guide
+end
+
 local function clamp_comment_range(comment, line_count)
+	if review_format.is_file_level_comment(comment) then
+		return 1, 1
+	end
+
 	local start_line = tonumber(comment.line)
 	if not start_line then
 		return nil, nil
@@ -373,12 +682,22 @@ local function sorted_file_comments(state, file, line_count)
 	return comments
 end
 
-
-local function find_comment(state, file, line)
+local function find_comment(state, file, line, opts)
+	local manual_only = opts and opts.manual_only
+	local file_level_line = opts and tonumber(opts.file_level_line)
+	line = tonumber(line)
 	for index, comment in ipairs(state.comments) do
-		local start_line = tonumber(comment.line)
-		local end_line = tonumber(comment.end_line) or start_line
-		if comment.file == file and start_line and start_line <= tonumber(line) and tonumber(line) <= end_line then
+		local is_guide = review_format.is_guide_comment(comment)
+		local matches_file_level = review_format.is_file_level_comment(comment)
+			and file_level_line
+			and line == file_level_line
+		local start_line = not matches_file_level and tonumber(comment.line) or nil
+		local end_line = start_line and tonumber(comment.end_line) or start_line
+		if
+			comment.file == file
+			and (matches_file_level or (start_line and start_line <= line and line <= end_line))
+			and (not manual_only or not is_guide)
+		then
 			return comment, index
 		end
 	end
@@ -455,17 +774,53 @@ local function review_entries(view, state)
 	return entries
 end
 
+local function order_review_entries_by_guide(entries, guide)
+	if not (guide and type(guide.files) == "table") then
+		return entries
+	end
+
+	local entries_by_path = {}
+	for _, item in ipairs(entries) do
+		if item.path and not entries_by_path[item.path] then
+			entries_by_path[item.path] = item
+		end
+	end
+
+	local ordered = {}
+	local added = {}
+	for _, file in ipairs(guide.files) do
+		local path = type(file) == "table" and normalize_file(file.path) or nil
+		local item = path and entries_by_path[path] or nil
+		if item and not added[path] then
+			table.insert(ordered, item)
+			added[path] = true
+		end
+	end
+	if #ordered == 0 then
+		return entries
+	end
+
+	for _, item in ipairs(entries) do
+		if item.path and not added[item.path] then
+			table.insert(ordered, item)
+			added[item.path] = true
+		end
+	end
+	return ordered
+end
+
 local apply_buffer_keymaps
 
 local function comments_for_file(state, file)
 	local comments = {}
 	for index, comment in ipairs(state.comments or {}) do
 		if comment.file == file then
+			local start_line, end_line = clamp_comment_range(comment, math.huge)
 			table.insert(comments, {
 				comment = comment,
-				end_line = tonumber(comment.end_line) or tonumber(comment.line) or 1,
+				end_line = end_line or 1,
 				index = index,
-				start_line = tonumber(comment.line) or 1,
+				start_line = start_line or 1,
 			})
 		end
 	end
@@ -527,7 +882,107 @@ local function basename(path)
 	return tostring(path or ""):match("([^/]+)$") or tostring(path or "")
 end
 
-local function refresh_buffer(bufnr, file, state, show_comments)
+local function with_buffer_window(bufnr, winid, fn)
+	if not winid or not vim.api.nvim_win_is_valid(winid) then
+		return nil
+	end
+
+	local ok, win_bufnr = pcall(vim.api.nvim_win_get_buf, winid)
+	if not ok or win_bufnr ~= bufnr then
+		return nil
+	end
+
+	local call_ok, result = pcall(vim.api.nvim_win_call, winid, fn)
+	if call_ok then
+		return result
+	end
+end
+
+local function first_open_diff_line(bufnr, winid, line_count)
+	return with_buffer_window(bufnr, winid, function()
+		for lnum = 1, line_count do
+			if vim.fn.foldclosed(lnum) == -1 then
+				local ok, hl_id = pcall(vim.fn.diff_hlID, lnum, 1)
+				if not ok then
+					return nil
+				end
+				if (tonumber(hl_id) or 0) > 0 then
+					return lnum
+				end
+			end
+		end
+	end)
+end
+
+local function first_open_nonempty_line(bufnr, winid, line_count)
+	local ok, lines = pcall(vim.api.nvim_buf_get_lines, bufnr, 0, line_count, false)
+	if not ok or type(lines) ~= "table" then
+		return nil
+	end
+
+	return with_buffer_window(bufnr, winid, function()
+		for lnum, line in ipairs(lines) do
+			if vim.fn.foldclosed(lnum) == -1 and line:match("%S") then
+				return lnum
+			end
+		end
+	end)
+end
+
+local function first_open_line(bufnr, winid, line_count)
+	return with_buffer_window(bufnr, winid, function()
+		for lnum = 1, line_count do
+			if vim.fn.foldclosed(lnum) == -1 then
+				return lnum
+			end
+		end
+	end)
+end
+
+local function first_nonempty_line(bufnr, line_count)
+	local ok, lines = pcall(vim.api.nvim_buf_get_lines, bufnr, 0, line_count, false)
+	if not ok or type(lines) ~= "table" then
+		return nil
+	end
+
+	for lnum, line in ipairs(lines) do
+		if line:match("%S") then
+			return lnum
+		end
+	end
+end
+
+local function file_level_display_line(bufnr, winid, line_count)
+	return first_open_diff_line(bufnr, winid, line_count)
+		or first_open_nonempty_line(bufnr, winid, line_count)
+		or first_open_line(bufnr, winid, line_count)
+		or first_nonempty_line(bufnr, line_count)
+		or 1
+end
+
+local function blank_comment_virt_lines(row_count)
+	local lines = {}
+	for _ = 1, row_count do
+		table.insert(lines, { { " ", "DiffviewNormal" } })
+	end
+	return lines
+end
+
+local function render_comment_spacers(bufnr, spacer_rows_by_line, line_count)
+	for display_line, row_count in pairs(spacer_rows_by_line or {}) do
+		display_line = math.min(math.max(tonumber(display_line) or 1, 1), line_count)
+		row_count = tonumber(row_count) or 0
+		if row_count > 0 then
+			vim.api.nvim_buf_set_extmark(bufnr, NS, display_line - 1, 0, {
+				virt_lines = blank_comment_virt_lines(row_count),
+				virt_lines_above = true,
+				priority = 30,
+			})
+		end
+	end
+end
+
+local function refresh_buffer(bufnr, file, state, show_comments, winid, spacer_rows_by_line)
 	bufnr = bufnr == 0 and vim.api.nvim_get_current_buf() or bufnr
 	if not file or not vim.api.nvim_buf_is_valid(bufnr) then
 		return
@@ -542,25 +997,34 @@ local function refresh_buffer(bufnr, file, state, show_comments)
 	end
 
 	if show_comments == false then
+		render_comment_spacers(bufnr, spacer_rows_by_line, line_count)
 		return
 	end
 
 	local comment_boxes = {}
+	local spacer_rows = {}
 	for _, entry in ipairs(sorted_file_comments(state, file, line_count)) do
-		for lnum = entry.start_line, entry.end_line do
-			vim.fn.sign_place(0, SIGN_GROUP, "DiffviewReviewComment", bufnr, { lnum = lnum, priority = 30 })
-			vim.api.nvim_buf_set_extmark(bufnr, NS, lnum - 1, 0, {
-				virt_text = { { COMMENT_MARKER, "DiffviewReviewCommentRange" } },
-				virt_text_pos = "right_align",
-				priority = 35,
-			})
+		local hls = review_format.comment_highlights(entry.comment)
+		local marker = review_format.is_guide_comment(entry.comment) and GUIDE_MARKER or COMMENT_MARKER
+		local file_level = review_format.is_file_level_comment(entry.comment)
+		if not file_level then
+			for lnum = entry.start_line, entry.end_line do
+				vim.fn.sign_place(0, SIGN_GROUP, hls.sign, bufnr, { lnum = lnum, priority = 30 })
+				vim.api.nvim_buf_set_extmark(bufnr, NS, lnum - 1, 0, {
+					virt_text = { { marker, hls.range } },
+					virt_text_pos = "right_align",
+					priority = 35,
+				})
+			end
 		end
 
-		local display_line = entry.start_line
+		local display_line = file_level and file_level_display_line(bufnr, winid, line_count)
+			or entry.start_line
 		comment_boxes[display_line] = comment_boxes[display_line] or {}
 		for _, line in ipairs(boxed_comment_lines(entry.comment, entry.start_line, entry.end_line)) do
 			table.insert(comment_boxes[display_line], line)
 		end
+		spacer_rows[display_line] = #comment_boxes[display_line]
 	end
 
 	local display_lines = vim.tbl_keys(comment_boxes)
@@ -573,6 +1037,7 @@ local function refresh_buffer(bufnr, file, state, show_comments)
 		})
 	end
 
+	return spacer_rows
 end
 
 local function fit_suffix(value, max_width)
@@ -757,6 +1222,21 @@ local function open_comment_editor(ctx, line, end_line, initial, on_save)
 	vim.cmd.startinsert()
 end
 
+function M.set_active_guide_context(context)
+	active_guide_context = context and {
+		path = context.path,
+		pr_number = context.pr_number,
+		repo = context.repo,
+		repo_key = context.repo_key,
+	} or nil
+	guide_cache = nil
+end
+
+function M.clear_active_guide_context()
+	active_guide_context = nil
+	guide_cache = nil
+end
+
 function M.apply_highlights()
 	local set = vim.api.nvim_set_hl
 
@@ -802,11 +1282,35 @@ function M.apply_highlights()
 	set(0, "DiffviewReviewCommentBorder", { fg = "#0969da" })
 	set(0, "DiffviewReviewCommentRange", { bg = "#ddf4ff", fg = "#0969da", bold = true })
 	set(0, "DiffviewReviewCommentVirt", { fg = "#0969da" })
+	set(0, "DiffviewReviewGuideHigh", { fg = "#cf222e", bold = true })
+	set(0, "DiffviewReviewGuideHighBorder", { fg = "#cf222e" })
+	set(0, "DiffviewReviewGuideHighRange", { bg = "#ffebe9", fg = "#cf222e", bold = true })
+	set(0, "DiffviewReviewGuideHighVirt", { fg = "#cf222e" })
+	set(0, "DiffviewReviewGuideMedium", { fg = "#9a6700", bold = true })
+	set(0, "DiffviewReviewGuideMediumBorder", { fg = "#9a6700" })
+	set(0, "DiffviewReviewGuideMediumRange", { bg = "#fff8c5", fg = "#9a6700", bold = true })
+	set(0, "DiffviewReviewGuideMediumVirt", { fg = "#9a6700" })
+	set(0, "DiffviewReviewGuideLow", { fg = "#57606a", bold = true })
+	set(0, "DiffviewReviewGuideLowBorder", { fg = "#57606a" })
+	set(0, "DiffviewReviewGuideLowRange", { bg = "#f6f8fa", fg = "#57606a", bold = true })
+	set(0, "DiffviewReviewGuideLowVirt", { fg = "#57606a" })
+	set(0, "DiffviewReviewGuideInfo", { fg = "#57606a", bold = true })
+	set(0, "DiffviewReviewGuideInfoBorder", { fg = "#57606a" })
+	set(0, "DiffviewReviewGuideInfoRange", { bg = "#f6f8fa", fg = "#57606a", bold = true })
+	set(0, "DiffviewReviewGuideInfoVirt", { fg = "#57606a" })
 	set(0, "DiffviewReviewPanelUnviewed", { fg = "#9a6700", bold = true })
 	set(0, "DiffviewReviewPanelViewed", { fg = "#6e7781" })
-	set(0, "DiffviewReviewStatusComment", { bg = "#ddf4ff", fg = "#0969da" })
-	set(0, "DiffviewReviewStatusUnviewed", { bg = "#fff8c5", fg = "#9a6700", bold = true })
-	set(0, "DiffviewReviewStatusViewed", { bg = "#f6f8fa", fg = "#1a7f37" })
+	set(0, "DiffviewReviewStatusHeader", { fg = "#24292f", bold = true })
+	set(0, "DiffviewReviewStatusFile", { fg = "#57606a", bold = true })
+	set(0, "DiffviewReviewStatusMuted", { fg = "#6e7781" })
+	set(0, "DiffviewReviewStatusComment", { fg = "#0969da" })
+	set(0, "DiffviewReviewStatusGuideHigh", { fg = "#cf222e", bold = true })
+	set(0, "DiffviewReviewStatusGuideMedium", { fg = "#9a6700", bold = true })
+	set(0, "DiffviewReviewStatusGuideLow", { fg = "#57606a" })
+	set(0, "DiffviewReviewStatusGuideInfo", { fg = "#57606a" })
+	set(0, "DiffviewReviewStatusGuideHeader", { fg = "#24292f", bold = true })
+	set(0, "DiffviewReviewStatusUnviewed", { fg = "#9a6700", bold = true })
+	set(0, "DiffviewReviewStatusViewed", { fg = "#1a7f37", bold = true })
 	set(0, "DiffviewReviewWinbarFile", { bg = "#f6f8fa", fg = "#57606a" })
 	set(0, "DiffviewReviewWinbarUnviewed", { bg = "#fff8c5", fg = "#9a6700", bold = true })
 	set(0, "DiffviewReviewWinbarViewed", { bg = "#dafbe1", fg = "#1a7f37", bold = true })
@@ -819,7 +1323,7 @@ function M.refresh_visible()
 		return
 	end
 
-	local state = load_state(ctx)
+	local state = load_state_with_guide(ctx)
 
 	local visible = {}
 	for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
@@ -837,9 +1341,32 @@ function M.refresh_visible()
 		end
 	end
 
+	local current_entry_path = normalize_file(view and view.cur_entry and view.cur_entry.path)
+	local current_entry_buffers = {}
+	for _, file in ipairs(entry_layout_files(view and view.cur_entry)) do
+		if file.bufnr then
+			current_entry_buffers[file.bufnr] = true
+		end
+	end
+
 	local comment_bufnr = review_comment_bufnr(visible, view)
+	local spacer_rows_by_line = {}
+	if comment_bufnr then
+		for _, item in ipairs(visible) do
+			if item.bufnr == comment_bufnr then
+				spacer_rows_by_line = refresh_buffer(item.bufnr, item.file, state, true, item.winid) or {}
+			end
+		end
+	end
+
 	for _, item in ipairs(visible) do
-		refresh_buffer(item.bufnr, item.file, state, item.bufnr == comment_bufnr)
+		if item.bufnr ~= comment_bufnr then
+			local spacers = nil
+			if current_entry_buffers[item.bufnr] or item.file == current_entry_path then
+				spacers = spacer_rows_by_line
+			end
+			refresh_buffer(item.bufnr, item.file, state, false, item.winid, spacers)
+		end
 		refresh_winbar(item.winid, item.file, state)
 	end
 end
@@ -853,8 +1380,8 @@ function M.refresh_current()
 		return
 	end
 
-	local state = load_state(ctx)
-	refresh_buffer(0, ctx.file, state, true)
+	local state = load_state_with_guide(ctx)
+	refresh_buffer(0, ctx.file, state, true, vim.api.nvim_get_current_win())
 	refresh_winbar(0, ctx.file, state)
 end
 
@@ -872,8 +1399,8 @@ function M.add_comment(opts)
 	end
 
 	local line, end_line = range_from_opts(opts)
-	local state = load_state(ctx)
-	local existing = find_comment(state, ctx.file, line)
+	local state = load_state_with_guide(ctx)
+	local existing = find_comment(state, ctx.file, line, { manual_only = true })
 	local provided = opts and opts.args and opts.args ~= "" and opts.args or nil
 
 	local function save_comment(input)
@@ -936,13 +1463,23 @@ function M.delete_comment(opts)
 	end
 
 	local line = line_from_opts(opts)
-	local state = load_state(ctx)
-	local _, index = find_comment(state, ctx.file, line)
+	local state = load_state_with_guide(ctx)
+	local comment, index = find_comment(state, ctx.file, line, { manual_only = true })
+	if not index then
+		local line_count = vim.api.nvim_buf_line_count(0)
+		comment, index = find_comment(state, ctx.file, line, {
+			file_level_line = file_level_display_line(0, vim.api.nvim_get_current_win(), line_count),
+		})
+	end
 	if not index then
 		notify(("No review comment at %s:%d"):format(ctx.file, line), vim.log.levels.WARN)
 		return
 	end
 
+	if review_format.is_guide_comment(comment) and comment.guide_id then
+		state.dismissed_guide_comments = state.dismissed_guide_comments or {}
+		state.dismissed_guide_comments[comment.guide_id] = true
+	end
 	table.remove(state.comments, index)
 	if save_state(ctx, state) then
 		notify(("Deleted review comment at %s:%d"):format(ctx.file, line))
@@ -1008,7 +1545,7 @@ function M.next_review_comment(direction)
 		return
 	end
 
-	local state = load_state(ctx)
+	local state = load_state_with_guide(ctx)
 	local targets = comment_targets(ctx.view, state)
 	if #targets == 0 then
 		notify("No local Diffview review comments")
@@ -1038,7 +1575,8 @@ function M.next_unviewed_file(direction)
 	end
 
 	local state = load_state(ctx)
-	local entries = review_entries(ctx.view, state)
+	local guide = load_active_guide(ctx)
+	local entries = order_review_entries_by_guide(review_entries(ctx.view, state), guide)
 	local unreviewed = {}
 	local current_index = nil
 	local last_index = nil
@@ -1076,46 +1614,381 @@ function M.next_unviewed_file(direction)
 	jump_to_entry(ctx.view, target.item)
 end
 
+local function guide_comment_counts(state, guide)
+	local counts = { notes = 0, suggestions = 0, total = 0 }
+	for _, comment in ipairs(state.comments or {}) do
+		if
+			review_format.is_guide_comment(comment)
+			and (not (guide and guide.source_path) or comment.guide_path == guide.source_path)
+		then
+			counts.total = counts.total + 1
+			if comment.kind == "guide_note" then
+				counts.notes = counts.notes + 1
+			elseif comment.kind == "guide_suggestion" then
+				counts.suggestions = counts.suggestions + 1
+			end
+		end
+	end
+	return counts
+end
+
+local function status_row(action)
+	return { action = action, chunks = {}, text = "" }
+end
+
+local function add_status_text(row, text, hl_group)
+	local start_col = #row.text
+	row.text = row.text .. text
+	if hl_group then
+		table.insert(row.chunks, { end_col = #row.text, hl_group = hl_group, start_col = start_col })
+	end
+end
+
+local function truncate_display(value, width)
+	value = tostring(value or "")
+	if width <= 0 then
+		return ""
+	end
+	if review_format.display_width(value) <= width then
+		return value
+	end
+	if width <= 1 then
+		return "…"
+	end
+
+	local result = ""
+	for index = 0, vim.fn.strchars(value) - 1 do
+		local char = vim.fn.strcharpart(value, index, 1)
+		if review_format.display_width(result .. char .. "…") > width then
+			return result .. "…"
+		end
+		result = result .. char
+	end
+	return result
+end
+
+local function take_display_prefix(value, width)
+	local result = ""
+	for index = 0, vim.fn.strchars(value) - 1 do
+		local char = vim.fn.strcharpart(value, index, 1)
+		if review_format.display_width(result .. char) > width then
+			if result == "" then
+				return char, vim.fn.strcharpart(value, index + 1)
+			end
+			return result, vim.fn.strcharpart(value, index)
+		end
+		result = result .. char
+	end
+	return result, ""
+end
+
+local function wrap_status_text(value, first_width, next_width)
+	local text = review_format.normalize_comment_text(value)
+	if text == "" then
+		return {}
+	end
+
+	local lines = {}
+	local line = ""
+	local width = math.max(first_width, 1)
+	local continuation_width = math.max(next_width, 1)
+	for word in text:gmatch("%S+") do
+		local pending = word
+		while pending ~= "" do
+			local separator = line ~= "" and " " or ""
+			if review_format.display_width(line .. separator .. pending) <= width then
+				line = line .. separator .. pending
+				pending = ""
+			elseif line ~= "" then
+				table.insert(lines, line)
+				line = ""
+				width = continuation_width
+			else
+				local piece, rest = take_display_prefix(pending, width)
+				table.insert(lines, piece)
+				pending = rest
+				width = continuation_width
+			end
+		end
+	end
+
+	if line ~= "" then
+		table.insert(lines, line)
+	end
+	return lines
+end
+
+local function add_review_summary(rows, counts)
+	local row = status_row()
+	add_status_text(row, "Review:", "DiffviewReviewStatusHeader")
+	add_status_text(
+		row,
+		(" %d files · %d reviewed · %d unreviewed · %d comments · %s %d"):format(
+			counts.files,
+			counts.reviewed,
+			counts.unreviewed,
+			counts.comments,
+			GUIDE_MARKER,
+			counts.guide
+		),
+		"DiffviewReviewStatusMuted"
+	)
+	table.insert(rows, row)
+end
+
+local function add_guide_status(rows, state, guide, width)
+	local counts = guide_comment_counts(state, guide)
+	if not guide and counts.total == 0 then
+		return
+	end
+
+	local header = status_row()
+	add_status_text(header, GUIDE_MARKER, "DiffviewReviewStatusGuideInfo")
+	if counts.total > 0 then
+		add_status_text(
+			header,
+			(" · %d notes · %d suggestions"):format(counts.notes, counts.suggestions),
+			"DiffviewReviewStatusMuted"
+		)
+	end
+	table.insert(rows, header)
+
+	if guide and #(guide.change_map or {}) > 0 then
+		local title = status_row()
+		add_status_text(title, "  Change map:", "DiffviewReviewStatusMuted")
+		table.insert(rows, title)
+
+		for _, line in ipairs(guide.change_map) do
+			local prefix = "    "
+			local row = status_row()
+			add_status_text(row, prefix)
+			add_status_text(
+				row,
+				truncate_display(line, width - review_format.display_width(prefix)),
+				"DiffviewReviewStatusGuideInfo"
+			)
+			table.insert(rows, row)
+		end
+	end
+
+	if guide and guide.summary and guide.summary ~= "" then
+		local prefix = "  Summary: "
+		local indent = string.rep(" ", review_format.display_width(prefix))
+		local summary_lines = wrap_status_text(
+			guide.summary,
+			width - review_format.display_width(prefix),
+			width - review_format.display_width(indent)
+		)
+		for index, line in ipairs(summary_lines) do
+			local row = status_row()
+			if index == 1 then
+				add_status_text(row, prefix, "DiffviewReviewStatusMuted")
+			else
+				add_status_text(row, indent)
+			end
+			add_status_text(row, line, "DiffviewReviewStatusGuideInfo")
+			table.insert(rows, row)
+		end
+	end
+
+	local bullet_count = 0
+	for _, section in ipairs({
+		{ hl = "DiffviewReviewStatusGuideHigh", items = guide and guide.high_risk or {}, label = "High" },
+		{ hl = "DiffviewReviewStatusGuideMedium", items = guide and guide.validation_focus or {}, label = "Validate" },
+	}) do
+		for _, item in ipairs(section.items) do
+			if bullet_count >= 3 then
+				break
+			end
+			local prefix = "  • "
+			local label = section.label .. ": "
+			local indent = string.rep(" ", review_format.display_width(prefix .. label))
+			local item_lines = wrap_status_text(
+				item,
+				width - review_format.display_width(prefix .. label),
+				width - review_format.display_width(indent)
+			)
+			for index, line in ipairs(item_lines) do
+				local row = status_row()
+				if index == 1 then
+					add_status_text(row, prefix, "DiffviewReviewStatusMuted")
+					add_status_text(row, label, section.hl)
+				else
+					add_status_text(row, indent)
+				end
+				add_status_text(row, line, "DiffviewReviewStatusGuideInfo")
+				table.insert(rows, row)
+			end
+			bullet_count = bullet_count + 1
+		end
+	end
+	table.insert(rows, status_row())
+end
+
+local function status_comment_row(entry, item, width)
+	local comment = entry.comment
+	local is_guide = review_format.is_guide_comment(comment)
+	local label
+	if is_guide then
+		label = review_format.is_file_level_comment(comment) and "File-level"
+			or range_label(entry.start_line, entry.end_line)
+	else
+		label = line_range_label(entry.start_line, entry.end_line)
+	end
+	local row = status_row({ item = item, line = entry.start_line })
+	local indent = "    "
+	add_status_text(row, indent)
+
+	if not is_guide then
+		local prefix = COMMENT_MARKER .. " " .. label .. ": "
+		add_status_text(row, COMMENT_MARKER, "DiffviewReviewStatusComment")
+		add_status_text(row, " " .. label .. ": ", "DiffviewReviewStatusMuted")
+		add_status_text(
+			row,
+			truncate_display(comment_preview(comment), width - review_format.display_width(indent .. prefix)),
+			"DiffviewReviewStatusMuted"
+		)
+		return row
+	end
+
+	local guide_marker = GUIDE_MARKER
+	local severity_hl = "DiffviewReviewStatusGuideInfo"
+	local prefix = guide_marker .. " "
+	if comment.kind ~= "guide_note" then
+		local severity_key
+		local severity
+		severity, severity_key = review_format.severity_label(comment.severity)
+		guide_marker = review_format.severity_emoji(severity)
+		severity_hl = review_format.comment_highlights({ source = "guide", severity = severity_key }).status
+		prefix = guide_marker .. label .. ": "
+	end
+
+	add_status_text(row, prefix, severity_hl)
+	add_status_text(
+		row,
+		truncate_display(comment_preview(comment), width - review_format.display_width(indent .. prefix)),
+		"DiffviewReviewStatusMuted"
+	)
+	return row
+end
+
+local function count_file_comments(comments)
+	local counts = { guide = 0, manual = 0, total = #comments }
+	for _, entry in ipairs(comments) do
+		if review_format.is_guide_comment(entry.comment) then
+			counts.guide = counts.guide + 1
+		else
+			counts.manual = counts.manual + 1
+		end
+	end
+	return counts
+end
+
+local function status_file_row(item, comments, width)
+	local counts = count_file_comments(comments)
+	local row = status_row({ item = item })
+	local marker_hl = item.viewed and "DiffviewReviewStatusViewed" or "DiffviewReviewStatusUnviewed"
+	local suffix_width = 0
+
+	if counts.guide > 0 then
+		suffix_width = suffix_width + review_format.display_width(GUIDE_MARKER .. counts.guide)
+	end
+	if counts.manual > 0 then
+		if suffix_width > 0 then
+			suffix_width = suffix_width + 2
+		end
+		suffix_width = suffix_width + review_format.display_width("💬" .. counts.manual)
+	end
+
+	local gap_width = suffix_width > 0 and 2 or 0
+	local path_width = math.max(12, width - 2 - gap_width - suffix_width)
+	add_status_text(row, item.viewed and "✓" or "○", marker_hl)
+	add_status_text(row, " ")
+	if suffix_width > 0 then
+		add_status_text(row, review_format.pad_right(truncate_display(item.path, path_width), path_width), "DiffviewReviewStatusFile")
+		add_status_text(row, "  ")
+		if counts.guide > 0 then
+			add_status_text(row, GUIDE_MARKER .. counts.guide, "DiffviewReviewStatusGuideInfo")
+		end
+		if counts.manual > 0 then
+			if counts.guide > 0 then
+				add_status_text(row, "  ")
+			end
+			add_status_text(row, "💬" .. counts.manual, "DiffviewReviewStatusComment")
+		end
+	else
+		add_status_text(row, truncate_display(item.path, path_width), "DiffviewReviewStatusFile")
+	end
+	return row
+end
+
 function M.show_status()
 	local ctx = current_file_context()
 	if not require_active_diffview(ctx, "showing review status") or not require_repo_context(ctx, "showing review status") then
 		return
 	end
 
-	local state = load_state(ctx)
+	local state, guide = load_state_with_guide(ctx)
 	local entries = review_entries(ctx.view, state)
-	local lines = {}
+	local width = math.max(48, math.floor(vim.o.columns * 0.58))
+	width = math.min(width, math.max(48, vim.o.columns - 4))
+	local content_width = math.max(40, width - 2)
+	local rows = {}
 	local line_to_action = {}
-	local line_hls = {}
+	local comments_by_path = {}
+	local counts = { comments = 0, files = #entries, guide = 0, reviewed = 0, unreviewed = 0 }
 
 	for _, item in ipairs(entries) do
-		local marker = item.viewed and "✓" or "○"
-		table.insert(lines, ("%s %s"):format(marker, item.path))
-		line_to_action[#lines] = { item = item, type = "file" }
-		line_hls[#lines] = item.viewed and "DiffviewReviewStatusViewed" or "DiffviewReviewStatusUnviewed"
+		if item.viewed then
+			counts.reviewed = counts.reviewed + 1
+		else
+			counts.unreviewed = counts.unreviewed + 1
+		end
+		local comments = comments_for_file(state, item.path)
+		comments_by_path[item.path] = comments
+		local file_counts = count_file_comments(comments)
+		counts.comments = counts.comments + file_counts.total
+		counts.guide = counts.guide + file_counts.guide
+	end
 
-		for _, comment in ipairs(comments_for_file(state, item.path)) do
-			local label = line_range_label(comment.start_line, comment.end_line)
-			table.insert(lines, ("  " .. COMMENT_MARKER .. " %s: %s"):format(label, comment_preview(comment.comment)))
-			line_to_action[#lines] = { item = item, line = comment.start_line, type = "comment" }
-			line_hls[#lines] = "DiffviewReviewStatusComment"
+	add_review_summary(rows, counts)
+	add_guide_status(rows, state, guide, content_width)
+
+	for _, item in ipairs(entries) do
+		local comments = comments_by_path[item.path] or {}
+		local file_row = status_file_row(item, comments, content_width)
+		table.insert(rows, file_row)
+
+		for _, comment in ipairs(comments) do
+			table.insert(rows, status_comment_row(comment, item, content_width))
 		end
 	end
 	if #entries == 0 then
-		table.insert(lines, "No files in current Diffview")
+		local row = status_row()
+		add_status_text(row, "No files in current Diffview", "DiffviewReviewStatusMuted")
+		table.insert(rows, row)
 	end
 
-	local width = math.max(40, math.floor(vim.o.columns * 0.58))
-	width = math.min(width, math.max(40, vim.o.columns - 4))
 	local height = math.max(10, math.floor(vim.o.lines * 0.82))
-	height = math.min(height, math.max(10, #lines))
+	height = math.min(height, math.max(10, #rows))
 	local bufnr = vim.api.nvim_create_buf(false, true)
+	local lines = {}
+	for index, row in ipairs(rows) do
+		lines[index] = row.text
+		line_to_action[index] = row.action
+	end
 	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
 	vim.bo[bufnr].bufhidden = "wipe"
 	vim.bo[bufnr].filetype = "markdown"
 	vim.bo[bufnr].modifiable = false
-	for lnum, hl in pairs(line_hls) do
-		pcall(vim.api.nvim_buf_set_extmark, bufnr, NS, lnum - 1, 0, { line_hl_group = hl })
+	for lnum, row in ipairs(rows) do
+		for _, chunk in ipairs(row.chunks) do
+			pcall(vim.api.nvim_buf_set_extmark, bufnr, STATUS_NS, lnum - 1, chunk.start_col, {
+				end_col = chunk.end_col,
+				hl_group = chunk.hl_group,
+				strict = false,
+			})
+		end
 	end
 
 	local winid = vim.api.nvim_open_win(bufnr, true, {
@@ -1132,14 +2005,25 @@ function M.show_status()
 	vim.wo[winid].cursorline = true
 
 	local function close_popup()
+		if vim.api.nvim_buf_is_valid(bufnr) then
+			pcall(vim.api.nvim_buf_clear_namespace, bufnr, STATUS_NS, 0, -1)
+		end
 		if vim.api.nvim_win_is_valid(winid) then
-			vim.api.nvim_win_close(winid, true)
+			pcall(vim.api.nvim_win_close, winid, true)
+		end
+		if vim.api.nvim_buf_is_valid(bufnr) then
+			pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
 		end
 	end
 
 	vim.keymap.set("n", "q", close_popup, { buffer = bufnr, nowait = true, silent = true })
 	vim.keymap.set("n", "<CR>", function()
-		local action = line_to_action[vim.api.nvim_win_get_cursor(winid)[1]]
+		local cursor_ok, cursor = pcall(vim.api.nvim_win_get_cursor, winid)
+		if not cursor_ok then
+			close_popup()
+			return
+		end
+		local action = line_to_action[cursor[1]]
 		if not action then
 			return
 		end
@@ -1169,7 +2053,7 @@ end
 function M.diffview_keymaps()
 	-- Diffview local-review keymap contract:
 	-- <leader>gda/gdd edit local comments, <leader>gdv toggles reviewed,
-	-- <leader>gds opens the minimal status popup, <leader>gd[/] jump comments,
+	-- <leader>gds opens the review dashboard, <leader>gd[/] jump comments,
 	-- and <Tab>/<S-Tab> move only through unreviewed files.
 	return {
 		view = {
@@ -1196,6 +2080,9 @@ end
 
 function M.setup()
 	vim.fn.sign_define("DiffviewReviewComment", { text = COMMENT_MARKER, texthl = "DiffviewReviewCommentSign" })
+	for _, sign_name in ipairs(review_format.GUIDE_SIGN_NAMES) do
+		vim.fn.sign_define(sign_name, { text = GUIDE_MARKER, texthl = sign_name })
+	end
 	vim.fn.sign_define("DiffviewReviewFileReviewed", { text = "✓", texthl = "DiffviewReviewPanelViewed" })
 	vim.fn.sign_define("DiffviewReviewFileUnreviewed", { text = "○", texthl = "DiffviewReviewPanelUnviewed" })
 

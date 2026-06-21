@@ -8,16 +8,23 @@ local function new_state(ctx)
 		repo = ctx.root,
 		viewed = {},
 		comments = {},
+		dismissed_guide_comments = {},
 	}
 end
 
 local function ensure_state(state, ctx)
+	local dismissed_guide_comments = {}
+	if type(state) == "table" and type(state.dismissed_guide_comments) == "table" then
+		dismissed_guide_comments = state.dismissed_guide_comments
+	end
+
 	return {
 		version = STATE_VERSION,
 		repo = ctx.root,
 		updated_at = type(state) == "table" and state.updated_at or nil,
 		viewed = type(state) == "table" and type(state.viewed) == "table" and state.viewed or {},
 		comments = type(state) == "table" and type(state.comments) == "table" and state.comments or {},
+		dismissed_guide_comments = dismissed_guide_comments,
 	}
 end
 

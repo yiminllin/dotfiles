@@ -2,6 +2,52 @@ local M = {}
 
 M.COMMENT_BOX_WIDTH = 88
 M.COMMENT_MARKER = "▌"
+M.GUIDE_MARKER = "🤖"
+M.GUIDE_SIGN_NAMES = {
+	"DiffviewReviewGuideHigh",
+	"DiffviewReviewGuideMedium",
+	"DiffviewReviewGuideLow",
+	"DiffviewReviewGuideInfo",
+}
+
+local GUIDE_STYLE_BY_SEVERITY = {
+	High = {
+		border = "DiffviewReviewGuideHighBorder",
+		range = "DiffviewReviewGuideHighRange",
+		sign = "DiffviewReviewGuideHigh",
+		status = "DiffviewReviewStatusGuideHigh",
+		virt = "DiffviewReviewGuideHighVirt",
+	},
+	Medium = {
+		border = "DiffviewReviewGuideMediumBorder",
+		range = "DiffviewReviewGuideMediumRange",
+		sign = "DiffviewReviewGuideMedium",
+		status = "DiffviewReviewStatusGuideMedium",
+		virt = "DiffviewReviewGuideMediumVirt",
+	},
+	Low = {
+		border = "DiffviewReviewGuideLowBorder",
+		range = "DiffviewReviewGuideLowRange",
+		sign = "DiffviewReviewGuideLow",
+		status = "DiffviewReviewStatusGuideLow",
+		virt = "DiffviewReviewGuideLowVirt",
+	},
+	Info = {
+		border = "DiffviewReviewGuideInfoBorder",
+		range = "DiffviewReviewGuideInfoRange",
+		sign = "DiffviewReviewGuideInfo",
+		status = "DiffviewReviewStatusGuideInfo",
+		virt = "DiffviewReviewGuideInfoVirt",
+	},
+}
+
+local MANUAL_STYLE = {
+	border = "DiffviewReviewCommentBorder",
+	range = "DiffviewReviewCommentRange",
+	sign = "DiffviewReviewComment",
+	status = "DiffviewReviewStatusComment",
+	virt = "DiffviewReviewCommentVirt",
+}
 
 function M.normalize_comment_text(value)
 	return vim.trim(tostring(value or ""):gsub("\r\n", " "):gsub("\r", " "):gsub("\n", " "):gsub("%s+", " "))
@@ -66,21 +112,110 @@ function M.range_label(start_line, end_line)
 	return ("%d-%d"):format(start_line, end_line)
 end
 
+function M.is_guide_comment(comment)
+	return type(comment) == "table" and comment.source == "guide"
+end
+
+function M.is_file_level_comment(comment)
+	return M.is_guide_comment(comment) and (comment.file_level == true or comment.kind == "guide_note")
+end
+
+function M.severity_label(value)
+	local severity = type(value) == "string" and vim.trim(value) or ""
+	local key = severity:lower()
+	if key == "blocker" then
+		return "Blocker", "High"
+	elseif key == "high" then
+		return "High", "High"
+	elseif key == "medium" then
+		return "Medium", "Medium"
+	elseif key == "low" then
+		return "Low", "Low"
+	elseif key == "nit" then
+		return "Nit", "Low"
+	elseif key == "curiosity" then
+		return "Curiosity", "Low"
+	elseif key == "info" then
+		return "Info", "Info"
+	end
+	return severity ~= "" and severity or "Info", "Info"
+end
+
+function M.severity_emoji(value)
+	local severity = type(value) == "string" and vim.trim(value):lower() or ""
+	if severity == "blocker" or severity == "critical" or severity == "high" then
+		return "🚨"
+	elseif severity == "medium" then
+		return "⚠️"
+	elseif severity == "low" then
+		return "💡"
+	elseif severity == "curiosity" then
+		return "🤔"
+	elseif severity == "nit" then
+		return "🧹"
+	end
+	return M.GUIDE_MARKER
+end
+
+function M.comment_highlights(comment)
+	if not M.is_guide_comment(comment) then
+		return MANUAL_STYLE
+	end
+
+	local _, severity_key = M.severity_label(comment.severity)
+	return GUIDE_STYLE_BY_SEVERITY[severity_key] or GUIDE_STYLE_BY_SEVERITY.Info
+end
+
+local function boxed_comment_header(comment, start_line, end_line)
+	local label = M.line_range_label(start_line, end_line)
+	if M.is_guide_comment(comment) then
+		if comment.kind == "guide_note" then
+			return " " .. M.GUIDE_MARKER .. " "
+		end
+		if M.is_file_level_comment(comment) then
+			local severity = M.severity_label(comment.severity)
+			return " " .. M.severity_emoji(severity) .. " • File-level "
+		end
+
+		local severity = M.severity_label(comment.severity)
+		return " " .. M.severity_emoji(severity) .. " • " .. label .. " "
+	end
+
+	return " Review comment • " .. label .. " "
+end
+
+local function boxed_comment_body(comment)
+	local body = tostring(comment and comment.body or "")
+	if M.is_guide_comment(comment) and comment.kind == "guide_suggestion" and comment.why and tostring(comment.why) ~= "" then
+		body = body .. "\nWhy it matters: " .. tostring(comment.why)
+	end
+	return body
+end
+
+local function wrap_comment_body(value, width)
+	local lines = {}
+	for _, body_line in ipairs(vim.split(tostring(value or ""), "\n", { plain = true })) do
+		vim.list_extend(lines, M.wrap_comment_preview(body_line, width))
+	end
+	return #lines > 0 and lines or { "" }
+end
+
 function M.boxed_comment_lines(comment, start_line, end_line)
 	local body_width = M.COMMENT_BOX_WIDTH - 4
-	local header = " Review comment • " .. M.line_range_label(start_line, end_line) .. " "
+	local hls = M.comment_highlights(comment)
+	local header = boxed_comment_header(comment, start_line, end_line)
 	local top = "╭─" .. header
 	top = top .. string.rep("─", math.max(M.COMMENT_BOX_WIDTH - M.display_width(top) - 1, 0)) .. "╮"
 
-	local lines = { { { top, "DiffviewReviewCommentBorder" } } }
-	for _, body_line in ipairs(M.wrap_comment_preview(comment.body, body_width)) do
+	local lines = { { { top, hls.border } } }
+	for _, body_line in ipairs(wrap_comment_body(boxed_comment_body(comment), body_width)) do
 		table.insert(lines, {
-			{ "│ ", "DiffviewReviewCommentBorder" },
-			{ M.pad_right(body_line, body_width), "DiffviewReviewCommentVirt" },
-			{ " │", "DiffviewReviewCommentBorder" },
+			{ "│ ", hls.border },
+			{ M.pad_right(body_line, body_width), hls.virt },
+			{ " │", hls.border },
 		})
 	end
-	table.insert(lines, { { "╰" .. string.rep("─", M.COMMENT_BOX_WIDTH - 2) .. "╯", "DiffviewReviewCommentBorder" } })
+	table.insert(lines, { { "╰" .. string.rep("─", M.COMMENT_BOX_WIDTH - 2) .. "╯", hls.border } })
 	return lines
 end
 
