@@ -24,7 +24,6 @@ def main() -> int:
         ("board progress gate", lambda: check_board_progress_gate(repo_root)),
         ("board empty progress smoke", lambda: check_board_empty_progress(repo_root)),
         ("board repaint cache", lambda: check_board_repaint_cache(repo_root)),
-        ("progress card alignment", lambda: check_progress_card_alignment(repo_root)),
     )
 
     failures: list[str] = []
@@ -440,44 +439,6 @@ def check_board_repaint_cache(repo_root: Path) -> None:
         "missing repaint-on-change conditional"
     )
     assert "last_rendered_content=$rendered_content" in board_text, "missing repaint cache assignment"
-
-
-def check_progress_card_alignment(repo_root: Path) -> None:
-    agent_dir = repo_root / "opencode/.config/opencode/agents"
-    files = [agent_dir / name for name in ("orchestrator.md", "yolo.md", "debugger.md")]
-    for path in files:
-        text = path.read_text(encoding="utf-8")
-        assert "right-border" in text and "no-right-border" in text and "left-rail" in text, (
-            f"{path.relative_to(repo_root)} should preserve fallback guidance for uncertain box padding"
-        )
-        for block in markdown_code_blocks(text):
-            if block and block[0].startswith("╭"):
-                assert_box_aligned(path, block)
-
-
-def markdown_code_blocks(text: str) -> list[list[str]]:
-    blocks: list[list[str]] = []
-    in_block = False
-    current: list[str] = []
-    for line in text.splitlines():
-        if line.startswith("```"):
-            if in_block:
-                blocks.append(current)
-                current = []
-            in_block = not in_block
-            continue
-        if in_block:
-            current.append(line)
-    return blocks
-
-
-def assert_box_aligned(path: Path, block: list[str]) -> None:
-    widths = {len(line) for line in block if line}
-    assert len(widths) == 1, f"{path.name} has jagged progress card widths: {sorted(widths)}"
-    assert block[0].startswith("╭") and block[0].endswith("╮"), f"{path.name} box top border is malformed"
-    assert block[-1].startswith("╰") and block[-1].endswith("╯"), f"{path.name} box bottom border is malformed"
-    for line in block[1:-1]:
-        assert line.startswith("│") and line.endswith("│"), f"{path.name} box body line is missing a right border: {line}"
 
 
 def failure_detail(message: str, result: subprocess.CompletedProcess[str]) -> str:

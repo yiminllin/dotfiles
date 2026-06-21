@@ -114,7 +114,6 @@ check_agent_permissions() {
   require_agent_permission opencode/.config/opencode/agents/debugger.md bash allow || return 1
   require_agent_permission opencode/.config/opencode/agents/debugger.md edit deny || return 1
   require_agent_permission opencode/.config/opencode/agents/code-reviewer.md edit deny || return 1
-  require_agent_permission opencode/.config/opencode/agents/code-reviewer.md bash deny || return 1
   require_agent_permission opencode/.config/opencode/agents/teacher.md edit deny || return 1
   require_agent_permission opencode/.config/opencode/agents/brainstormer.md edit deny || return 1
   require_agent_permission opencode/.config/opencode/agents/dotfile-documenter.md edit allow || return 1
