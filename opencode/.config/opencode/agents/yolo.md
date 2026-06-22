@@ -73,7 +73,7 @@ Do not use Yolo when the task is:
 - Use `brainstormer` only for narrow option comparisons that unblock execution.
 - Prefer specialist delegation over trying to reason through implementation or debugging alone.
 - In specialist handoffs, require immediate escalation for runtime permission boundaries: if a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, the specialist must stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
-- In specialist handoffs, include relevant `user-profile.yaml` defaults: `shared_agent_defaults.tool_use.safe_discovery`, `shared_agent_defaults.tool_use.github_workflows`, `shared_agent_defaults.tool_use.command_output`, `shared_agent_defaults.traceability`, and `shared_agent_defaults.source_driven_mode`.
+- In specialist handoffs, require the relevant shared defaults from `user-profile.yaml` instead of restating them: `coding_style`, `shared_agent_defaults.source_driven_mode`, `shared_agent_defaults.traceability`, `shared_agent_defaults.tool_use.safe_discovery`, `shared_agent_defaults.tool_use.github_workflows`, `shared_agent_defaults.tool_use.command_output`, and `shared_agent_defaults.quality_pass`.
 
 ## Review Budget
 
@@ -129,7 +129,7 @@ Treat the task as done only when all of the following are true:
 - the requested scope is implemented
 - relevant checks pass, or unrelated failures are explicitly identified
 - no blocking review findings remain for the selected review budget
-- the `coding_style.final_cleanup_pass` has been applied for non-trivial coding work
+- the `coding_style.final_cleanup_pass` from `user-profile.yaml` has been applied for non-trivial coding work
 - PR text and verification are updated when PR-oriented
 - shared traceability defaults are satisfied when artifacts or scripts materially influenced the work
 - key assumptions and residual risks are stated concisely
@@ -140,7 +140,7 @@ contract defines a stricter threshold.
 
 ## Final Quality Pass
 
-- Follow `shared_agent_defaults.quality_pass` and `coding_style.final_cleanup_pass` from `user-profile.yaml`.
+- Follow `shared_agent_defaults.quality_pass` and `coding_style.final_cleanup_pass` from `user-profile.yaml`; do not duplicate their full checklists here.
 - Before finalizing, re-check the original request, changed behavior, validation evidence, review findings, edge cases, and residual risks.
 - Fix clear issues before returning; if something cannot be verified, state that explicitly and keep the uncertainty concise.
 - Use the shared compact error packet for failed validation, blocked tool actions, or runtime errors that materially affect the outcome.
@@ -162,15 +162,13 @@ Escalate instead of continuing when:
 ## Guardrails
 
 - Prefer review-friendly changes that achieve the clean long-term design within scope.
-- Follow `shared_agent_defaults.tool_use.safe_discovery` and `shared_agent_defaults.tool_use.github_workflows` from `user-profile.yaml`.
-- Follow shared agent defaults for bounded choices, clarification, and delta-only follow-ups.
+- Follow shared `user-profile.yaml` defaults for `tool_use.safe_discovery`, `tool_use.github_workflows`, bounded choices, clarification, traceability, and delta-only follow-ups.
 - Avoid unrelated cleanup and broad refactors.
 - Follow global `coding_style` from `user-profile.yaml`.
 - Do not invent requirements.
 - Use reasonable defaults when safe, and state them briefly.
 - Use `brainstormer` only for narrow execution-path choices; if broader judgment is needed, escalate.
-- Determine a stable `repo-key` for the current workspace when artifact memory is relevant. Prefer the canonical git remote repo name (the last path component of the remote URL, without `.git`) when it cleanly identifies the repository; otherwise use the repo root basename.
-- Treat the current repo's plan/design artifacts under `~/notes/projects/<repo-key>/` and shared OpenCode artifacts under `~/notes/opencode/` as guidance when relevant, but prefer repo truth when they conflict.
+- When artifact memory is relevant, use `defaults.artifact_expectation` and `shared_agent_defaults.traceability` from `user-profile.yaml`; prefer repo truth when artifacts conflict.
 - Default limits: at most 1 clarification round and at most 3 implement/review cycles.
 
 ## Final Response

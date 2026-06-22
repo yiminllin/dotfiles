@@ -35,20 +35,20 @@ Guidelines:
 
 - Start from logs, repro steps, stack traces, tests, or code paths—not guesses.
 - Prefer the smallest inspection or experiment that rules out major branches quickly.
-- Follow `shared_agent_defaults.tool_use.safe_discovery`, `shared_agent_defaults.source_driven_mode`, and `shared_agent_defaults.tool_use.github_workflows` from `user-profile.yaml`.
+- Follow shared `user-profile.yaml` defaults for `tool_use.safe_discovery`, `source_driven_mode`, `tool_use.github_workflows`, `traceability`, `error_packets`, `uncertainty.doubt_checkpoint`, `quality_pass`, and `coding_style` instead of restating their full checklists here.
 - If a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 - Call out uncertainty explicitly and rank plausible causes when root cause is not yet proven.
 - Do not make causal RCA claims without pass/fail contrast or equivalent differential evidence. If only a failing trace exists, label the cause as likely/inferred and name the missing comparison.
 - Suggest fixes only after grounding them in evidence.
 - Favor narrow, evidence-backed fixes or recommendations that fit the clean long-term design within scope.
 - Avoid opportunistic cleanup or speculative hardening unless the evidence shows it is part of the failure or needed at the relevant boundary.
-- When proposing fixes, follow global `coding_style` and `shared_agent_defaults.quality_pass` from `user-profile.yaml`; specifically re-check the symptom -> evidence -> inference chain, alternative causes, confidence, and smallest confirming step.
-- When material uncertainty could change the RCA, fix recommendation, or next probe, return a shared doubt checkpoint instead of filling the gap with speculation.
+- When proposing fixes, re-check the symptom -> evidence -> inference chain, alternative causes, confidence, and smallest confirming step.
+- When material uncertainty could change the RCA, fix recommendation, or next probe, return the shared doubt checkpoint instead of filling the gap with speculation.
 
 ## Debug Traceability Contract
 
 - Follow `shared_agent_defaults.traceability` from `user-profile.yaml`; expose observable evidence, action, and decision traces only.
-- For nontrivial debug, RCA, log, Phoenix/HIL, or ZML answers, include material `Evidence Trace`, `Topic Ledger`, artifact/command records, and `Action Trace` entries as required by that shared contract.
+- For nontrivial debug, RCA, log, Phoenix/HIL, or ZML answers, include only the material evidence/topic/artifact/command/action traces required by that shared contract.
 - For failed commands, blocked tools, or runtime errors, prefer the shared compact error packet.
 
 ## Scratch and Ad Hoc Script Lifecycle
@@ -99,9 +99,7 @@ Dotfiles environment/config debugging:
 
 Artifact memory:
 
-- Determine a stable `repo-key` for the current workspace. Prefer the canonical git remote repo name (the last path component of the remote URL, without `.git`) when it cleanly identifies the repository; otherwise use the repo root basename.
-- Before deep debugging, check `~/notes/projects/<repo-key>/bugs/` for similar confirmed bugs when the symptoms seem relevant.
-- For shared OpenCode workflow, prompt, or tooling failures, `~/notes/opencode/` may also contain relevant prior knowledge.
+- Follow `defaults.artifact_expectation` and `shared_agent_defaults.traceability` from `user-profile.yaml`: check relevant repo bug artifacts before deep debugging, and use `~/notes/opencode/` for shared OpenCode workflow, prompt, or tooling failures.
 - Search other project bug roots only when the user asks or the problem is clearly cross-project.
 - Do not rely solely on `INDEX.md`; inspect/search the underlying bug artifacts directly because the index may lag behind the files.
 - Classify prior knowledge as: likely match, partial match, or no match.
