@@ -5,382 +5,134 @@ description: Inspect, track, reparent, restack, squash, and submit stacked PR br
 
 # Stacked PR Workflow
 
-## Overview
+## Purpose
 
-Manage a stacked PR chain conservatively:
+Manage a stacked PR chain conservatively with `git-spice` as the stack topology source of truth and plain `git` as the local diff/log source of truth. Focus on stack structure, PR boundaries, restacking, and submission discipline.
 
-- inspect the current tracked stack
-- track manually created branches when needed
-- verify each PR boundary with local diffs and logs
-- reparent branches when the stack shape is wrong
-- restack the stack cleanly
-- optionally squash branches to one commit each
-- submit or update one PR or a full upstack
+Lazy-load `references/command-recipes.md` only when exact command syntax, local alias notes, rare branch surgery, or longer examples are needed.
 
-This skill is about stack structure and submission discipline. It is not the primary skill for PR-body writing or review-comment triage.
+## Use / do not use
 
-## Related skills
+Use this skill when the user wants to:
 
-- If the user wants PR descriptions, use `pr-description-chain-writer`.
-- If the user wants actionable review comments handled, use `pr-address-comments`.
+- inspect a tracked stack, branch order, PR mapping, or dirty-worktree safety
+- track manually created branches in `git-spice`
+- verify PR boundaries before or after mutation
+- reparent, restack, squash, sync, submit, or resubmit stacked branches
+- keep PR boundaries clean while addressing stack feedback
 
-## Guardrails
+Do not use this as the primary workflow for:
 
-- Ensure `git-spice` is available before proceeding. If it is not installed, stop and ask whether the user wants a plain-git fallback.
-- Do not mutate a stack until the local worktree is understood.
-- Stop if unrelated local changes are mixed in; ask whether to stash, split, or commit them first.
-- Treat tracking, reparenting, restack, squash, and submit operations as stateful history-shaping actions.
-- Prefer canonical `git-spice` commands in instructions; local aliases like `gs`, `gsl`, `gsur`, and `gsus` are conveniences, not the canonical interface.
-- Plain `git` is fine for local inspection and branch creation; `git-spice` owns stack tracking and topology.
-- Do not rely on GitHub UI alone; verify PR boundaries locally with `git diff`, `git log`, and `git-spice log long`.
-- When addressing stacked review feedback, fix the lowest affected PR first.
-- After each mutation, re-check branch order, diff boundaries, and PR mapping before continuing.
-- Keep each PR reviewer-friendly; avoid unrelated cleanup that blurs boundaries.
-- When updating PR descriptions in a stack, follow global `coding_style.pr_descriptions`: keep the chain-level Reason for Change paragraph/context identical, update only the PR Tree arrow, and put per-PR details in Description of Change.
-- Avoid interactive git-spice prompts and editors in autonomous runs. Supply explicit flags when possible; otherwise stop and ask instead of hanging on a prompt.
-- Do not use force push or `--no-verify` unless the user explicitly asks for it.
-- Prefer the least invasive git-spice command that matches the intended change.
+- public PR-body writing; use `pr-description-chain-writer`
+- actionable review-comment triage; use `pr-address-comments`
+- private human review guides; use `pr-human-review-guide`
+- broad Jira/project lifecycle coordination; use `project-workflow` first
 
-## Useful local shorthand notes
+## Guardrails and boundaries
 
-If the local fish config is in effect, these abbreviations may exist:
+- Prefer `git-spice` for stack tracking, topology, navigation, reparenting, restacking, squashing, syncing, and submitting. Use plain `git status`, `git diff`, and `git log` for local source-of-truth inspection.
+- Ensure `git-spice` is available before stack work. If missing, stop and ask whether the user wants a plain-git fallback.
+- Do not mutate a stack until the worktree is understood. Stop if unrelated local changes are mixed in; ask whether to stash, split, commit, or leave them untouched.
+- Treat tracking, reparenting, restacking, squashing, syncing, and submitting as stateful history-shaping actions. Use the least invasive command that matches the requested change.
+- Avoid interactive prompts and editors in autonomous runs. Supply explicit flags when possible; otherwise stop and ask.
+- Do not force push, pass `--force`, or pass `--no-verify` unless the user explicitly requests it.
+- Use GitHub/`gh` only for requested PR inspection or submission verification when authenticated. Do not run auth/login flows; if auth is missing, report the blocker.
+- Submit/update PRs only when the user asked for submission or resubmission. Prefer a dry run after recent reparent/restack/squash work.
+- When addressing stacked review feedback, fix the lowest affected PR first and re-check all upstack boundaries.
+- When updating stacked PR descriptions, keep the chain-level reason/context identical, update only the PR Tree arrow, and put per-PR details in Description of Change.
 
-- `gs` = `git-spice`
-- `gsl` = `git-spice log long`
-- `gsu` = `git-spice up`
-- `gsd` = `git-spice down`
-- `gsm` = `git-spice trunk`
-- `gsur` = `git-spice upstack restack`
-- `gsus` = `git-spice upstack submit`
-- `gsrc` = `git-spice rebase continue`
-- `gsra` = `git-spice rebase abort`
-- `gsrs` = `git-spice repo sync`
+## Core workflow
 
-Use canonical commands in responses unless the user explicitly prefers the shorthands.
+Start with the safest read-only mode that answers the request, then move to mutations only after the stack and worktree are safe.
+
+1. Inspect stack state.
+2. Verify PR boundaries before mutation.
+3. Perform one narrow mutation mode if requested or clearly required.
+4. Verify branch order, diff boundaries, PR mapping, and worktree state after each mutation.
+5. Stop and report blockers before crossing auth, destructive, force, or interactive boundaries.
 
 ## Modes
 
-1. `inspect-stack`
-2. `track-branches`
-3. `verify-boundaries`
-4. `reparent-stack`
-5. `restack-stack`
-6. `squash-stack`
-7. `submit-stack`
-8. `sync-stack`
+### inspect-stack
 
-If a request spans multiple modes, start with the safest read-only mode first.
+Use first for most stack requests. Collect:
 
-## 1) inspect-stack
+- `git status`
+- current branch
+- `git-spice log long` stack order and tracking state
+- existing PR number/url/title/head/base/draft/review state when `gh` is available and relevant
 
-Start by inspecting local and remote state:
+Summarize stack order, tracked/untracked branches, PR mapping, dirty-worktree safety, and the likely next operation.
 
-```bash
-git status
-git branch --show-current
-git-spice log long
-gh pr view --json number,url,title,headRefName,baseRefName,isDraft,reviewDecision
-```
+### track-branches
 
-Useful variants:
+Use when branches already exist but are not tracked by `git-spice`, or after creating a new branch with plain `git`. Prefer `git-spice branch track` for one branch and `git-spice downstack track` for an already-created untracked stack. Include an explicit base when inference is ambiguous or boundary-critical.
 
-```bash
-git-spice log long --all
-git-spice log long --json
-```
+After tracking, re-run `git-spice log long` and confirm the stack shape before restack or submit.
 
-Notes:
-- `git-spice log long` is the primary stack-aware inspection view.
-- It shows branches and commits for the current stack by default.
-- Use `--all` when the current branch is not enough to understand the broader tracked topology.
-- Use `--json` when you want machine-readable stack metadata.
+### verify-boundaries
 
-Summarize:
-- stack order
-- whether branches are tracked
-- which branches already have PRs
-- whether the worktree is safe to mutate
-- the likely next operation
+For each adjacent stack pair, use local diffs and logs to confirm reviewer-visible scope:
 
-## 2) track-branches
+- `git diff <base>...<branch>` for each PR boundary
+- `git log --oneline --decorate <base>..<branch>` for commit scope
+- `git-spice log long` for tracked branch order
 
-Use this when branches already exist but are not yet tracked by git-spice, or immediately after creating a new stack branch with plain `git`.
+Check that each PR contains only intended changes, higher-PR work has not leaked downward, no boundary depends on uncommitted changes, and one-commit expectations are met when requested.
 
-Create and track a new branch:
+### reparent-stack
 
-```bash
-git switch -c <branch>
-git-spice branch track <branch> --base <base-branch>
-```
+Use when the stack shape is wrong, not merely stale. Prefer direct `branch onto` or `upstack onto` operations when the intended parent change is simple. Treat `stack edit` as a manual fallback for complex reorderings because it opens an editor.
 
-Use `git checkout -b <branch>` instead of `git switch -c <branch>` when that better matches the local Git version or repo habit. Include `--base` when the intended parent is known or important.
+After reparenting, re-run stack inspection and boundary verification before continuing.
 
-Track one branch:
+### restack-stack
 
-```bash
-git-spice branch track <branch>
-```
+Use when branch relationships are correct but history needs to be rebased cleanly onto tracked bases. Prefer whole-stack restack for “clean up this stack” and upstack restack for “start here and restack this branch plus higher branches”. Use skip-start only when the starting branch is already correct.
 
-If base inference is wrong or ambiguous:
+If a rebase stops on conflicts, report the conflict state and use the normal git-spice continue/abort flow only after the conflict resolution path is clear.
 
-```bash
-git-spice branch track <branch> --base <base-branch>
-```
+### squash-stack
 
-If the user manually created a whole stack and you are near the top, prefer:
+Only squash when the user explicitly asks or clearly wants one-commit PRs. Squash one branch at a time, usually lowest to highest, and avoid editors by using an explicit commit message or `--no-edit` when appropriate.
 
-```bash
-git-spice downstack track <branch>
-```
+After each squash, inspect status, stack order, commit log, and boundary diffs. Remember that branch squash can restack upstack branches.
 
-Notes:
-- `branch track` is best for one branch.
-- `downstack track` is better for an already-created untracked stack below the current or specified branch.
+### submit-stack
 
-After tracking, re-run:
+Submit only the narrowest requested scope: one branch or a branch plus its upstack. Before submitting, confirm branch order, starting branch, draft/non-draft intent, title/body readiness, and clean boundary diffs.
 
-```bash
-git-spice log long
-```
+Use dry run first when the stack was recently restacked, squashed, or reparented. Prefer non-interactive metadata flags (`--fill` or explicit title/body) rather than allowing prompts. After submission, collect PR URLs and verify head/base refs and intended stack order.
 
-and confirm the stack shape looks right before any restack or submit step.
+### sync-stack
 
-## 3) verify-boundaries
+Use only when the user wants to refresh from remote trunk before continuing stack work. Treat remote sync as network/state mutation; be conservative when local changes are in progress. Re-verify stack order and boundaries afterward, especially if merged branches were deleted or a restack occurred.
 
-For each adjacent pair in the stack:
+## Pre/post verification expectations
 
-```bash
-git diff <base>...<pr1>
-git diff <pr1>...<pr2>
-git log --oneline --decorate <base>..<branch>
-git-spice log long
-```
+Before any mutation:
 
-Check that:
-- each PR contains only its intended scope
-- no higher-PR changes leaked into a lower PR
-- there is no hidden dependency on uncommitted local changes
-- if one-commit PRs are desired, whether each branch is already squashed
+- know the current branch, stack order, PR mapping, and dirty-worktree state
+- identify the exact branch range affected
+- verify relevant diff/log boundaries locally
+- confirm user intent for stateful, network, or history-shaping operations
 
-Use plain `git diff` as the source of truth for reviewer-visible branch boundaries.
+After any mutation:
 
-## 4) reparent-stack
-
-Use this when the stack shape is wrong, not merely stale.
-
-### Move one branch onto a different base, leaving its upstack alone
-
-```bash
-git-spice branch onto <new-base> --branch <branch>
-```
-
-Use this when only one branch should move and the branches above it should stay attached to the original structure.
-
-### Move a branch and everything above it onto a different base
-
-```bash
-git-spice upstack onto <new-base> --branch <branch>
-```
-
-Use this when the branch and its upstack all belong on a different parent.
-
-### Edit stack order directly
-
-```bash
-git-spice stack edit --branch <branch>
-```
-
-Use this when the branch ordering itself is wrong and needs explicit manual reshaping.
-
-Notes:
-- `git-spice stack edit` opens an editor, so treat it as a manual fallback rather than an autonomous default.
-- Prefer `branch onto` or `upstack onto` when the intended change is simple and clear.
-- Prefer `stack edit` when multiple branch relationships are wrong and a one-shot reorder is clearer.
-- After any reparenting, re-run `git-spice log long` and verify boundaries again.
-
-## 5) restack-stack
-
-Use restack when branch relationships are correct but history needs to be rebased cleanly onto their tracked bases.
-
-### Restack the whole current stack
-
-```bash
-git-spice stack restack
-```
-
-Useful variant:
-
-```bash
-git-spice stack restack --branch <branch>
-```
-
-### Restack only a branch and its upstack
-
-```bash
-git-spice upstack restack
-```
-
-Useful variants:
-
-```bash
-git-spice upstack restack --branch <branch>
-git-spice upstack restack --branch <branch> --skip-start
-```
-
-Guidance:
-- Prefer `stack restack` for “clean up this whole stack”.
-- Prefer `upstack restack` for “start here and restack this branch plus higher branches”.
-- Use `--skip-start` only when the starting branch is already correct and only higher branches need movement.
-
-After each restack:
 - re-check `git status`
 - re-run `git-spice log long`
-- re-run boundary diffs
-- confirm the next branch still bases on the intended parent
+- re-run affected boundary diffs/logs
+- verify PR head/base refs when PRs exist or were updated
+- stop if branch order, scope, or worktree cleanliness no longer matches expectations
 
-If a rebase stops on conflicts, use the normal git-spice continuation flow:
-
-```bash
-git-spice rebase continue
-# or
-git-spice rebase abort
-```
-
-## 6) squash-stack
-
-Only do this if the user explicitly asked to squash or wants one-commit PRs.
-
-Use git-spice's branch squash flow:
-
-```bash
-git-spice branch squash --branch <branch> -m "<commit message>"
-```
-
-Or, from the branch itself:
-
-```bash
-git-spice branch squash -m "<commit message>"
-```
-
-Useful variant:
-
-```bash
-git-spice branch squash --branch <branch> --no-edit
-```
-
-Notes:
-- `git-spice branch squash` squashes all commits in the branch into one commit.
-- It already restacks upstack branches automatically.
-- Squash one branch at a time, usually in stack order from lowest to highest when preparing a clean stacked submission.
-- In autonomous use, prefer `-m` or `--no-edit` to avoid launching an editor.
-
-After each squash:
-- re-check `git status`
-- re-run `git-spice log long`
-- re-check `git log --oneline`
-- re-run boundary diffs to confirm each PR still has the intended scope
-
-Do not use `--no-verify` unless the user explicitly asks for it.
-
-## 7) submit-stack
-
-Choose the narrowest submit command that matches the task.
-
-### Submit or update one branch only
-
-```bash
-git-spice branch submit --branch <branch>
-```
-
-Useful safe first pass:
-
-```bash
-git-spice branch submit --branch <branch> --dry-run
-```
-
-Useful non-interactive variants:
-
-```bash
-git-spice branch submit --branch <branch> --fill --draft
-git-spice branch submit --branch <branch> --title "<title>" --body "<body>" --draft
-```
-
-### Submit or update a branch and everything above it
-
-```bash
-git-spice upstack submit
-```
-
-Useful safe first pass:
-
-```bash
-git-spice upstack submit --dry-run
-```
-
-Useful variants:
-
-```bash
-git-spice upstack submit --branch <branch>
-git-spice upstack submit --branch <branch> --fill --draft
-```
-
-Guidance:
-- Prefer `branch submit` when only one PR should be created or updated.
-- Prefer `upstack submit` when the user wants the current branch and all higher branches updated together.
-- Use `--dry-run` first when the stack was recently restacked, squashed, or reparented.
-- In autonomous use, prefer `--fill` or explicit `--title` / `--body` to avoid metadata prompts.
-- Avoid `--force` and `--no-verify` unless the user explicitly requests them.
-
-Before submitting:
-- confirm branch order
-- confirm draft vs non-draft intent
-- confirm PR body/title updates are ready
-- confirm the correct starting branch
-
-After submitting:
-- collect PR URLs
-- verify head/base refs on each PR
-- confirm GitHub shows the intended stack order
-
-## 8) sync-stack
-
-Use this when the user wants to refresh from remote trunk before continuing stack work.
-
-```bash
-git-spice repo sync
-```
-
-Useful variant:
-
-```bash
-git-spice repo sync --restack
-```
-
-Notes:
-- This pulls the latest changes from the remote.
-- Merged branches may be deleted after syncing.
-- `--restack` is useful when the user explicitly wants the current stack refreshed against the latest remote state in one step.
-
-Use this conservatively when there are local in-progress changes.
-
-## Navigation helpers
-
-These are convenience commands, not primary workflow steps:
-
-```bash
-git-spice up
-git-spice down
-git-spice trunk
-```
-
-Use them to move around the stack quickly during inspection or after mutations.
-
-## Response pattern
+## Response contract
 
 When using this skill, reply with:
-- chosen mode
-- detected stack order
-- whether branches are tracked
-- cleanliness / mutation safety
-- exact next check or mutation
-- any confirmation needed before track, reparent, restack, squash, submit, or sync
+
+- chosen mode and why
+- detected stack order and PR mapping
+- tracked/untracked branch status
+- cleanliness and mutation safety
+- actions taken or exact next check/mutation
+- blockers or confirmations needed before track, reparent, restack, squash, sync, submit, auth, force, or destructive operations
+- validation performed and what it proves or does not prove
