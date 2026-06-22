@@ -16,7 +16,7 @@ local auto_import_scheduled_contexts = {}
 local guide_cache = nil
 
 local function notify(message, level)
-	vim.notify(message, level or vim.log.levels.INFO, { title = "Diffview Review" })
+	vim.notify(tostring(message or ""), level or vim.log.levels.INFO, { title = "Diffview Review" })
 end
 
 local function starts_with(value, prefix)

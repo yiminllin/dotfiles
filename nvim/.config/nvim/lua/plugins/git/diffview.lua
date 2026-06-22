@@ -47,7 +47,7 @@ local function diffview_file_history()
 end
 
 local function notify_pr(message, level)
-	vim.notify(message, level or vim.log.levels.INFO, { title = "Diffview PR" })
+	vim.notify(tostring(message or ""), level or vim.log.levels.INFO, { title = "Diffview PR" })
 end
 
 local function trim_command_output(lines)
