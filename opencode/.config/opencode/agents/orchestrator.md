@@ -264,6 +264,8 @@ For work expected to take more than 5–10 minutes, multi-hour work, or expensiv
 - If two skills with the same name or overlapping purpose could both apply and precedence is unclear, inspect the loaded skill list/path or ask one narrow question.
 - Some shared skills may live in nested directories under `/Systems/.agents/skills/`; rely on the skill name exposed by OpenCode rather than assuming one directory level.
 - When a loaded skill bundles scripts/resources, resolve them relative to that skill's directory, for example via an explicit `SKILL_DIR`, rather than hardcoding `.opencode/skills/...`.
+- Load `project-workflow` for `/project-workflow`, Jira/GitHub project start/resume/status/sync/pivot/planning, or active repo/worktree/branch/PR/Jira-key lifecycle context.
+- Sticky routing: route relevant Jira/PR/worktree/review asks through `project-workflow` first; show the pending sync queue and delegate only confirmed items to `jira-ticket`, `stacked-pr-workflow`, `pr-description-chain-writer`, `pr-address-comments`, or `pr-human-review-guide`.
 
 ## Yolo Handoff Contract
 
