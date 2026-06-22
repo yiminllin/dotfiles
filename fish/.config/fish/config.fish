@@ -210,7 +210,25 @@ function git_worktree_remove --description "Interactive Removing Git Worktree"
     set worktree_out (git worktree list | fzf --prompt="Select Worktree to Remove > ")
     if test -n "$worktree_out"
         set worktree_path (echo "$worktree_out" | awk '{print $1}')
-        git worktree remove "$worktree_path"
+        set bazel_output_base ""
+
+        if command -q bazel; and test -d "$worktree_path"
+            if pushd "$worktree_path" >/dev/null
+                set bazel_output_base (command bazel info output_base 2>/dev/null | string trim)
+                command bazel shutdown >/dev/null 2>/dev/null
+                popd >/dev/null
+            end
+        end
+
+        if git worktree remove "$worktree_path"
+            if test -n "$bazel_output_base"; and test -e "$bazel_output_base"; and string match -q -- "$HOME/.cache/bazel/_bazel_*/*" "$bazel_output_base"
+                echo "Removing Bazel output_base: $bazel_output_base"
+                command chmod -R u+w -- "$bazel_output_base"
+                command rm -rf -- "$bazel_output_base"
+            else if test -n "$bazel_output_base"; and test -e "$bazel_output_base"
+                echo "Skipping Bazel output_base outside expected cache: $bazel_output_base"
+            end
+        end
     end
 end
 
