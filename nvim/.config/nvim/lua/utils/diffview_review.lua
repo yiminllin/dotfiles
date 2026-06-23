@@ -14,6 +14,8 @@ local active_guide_context = nil
 local auto_imported_github_contexts = {}
 local auto_import_scheduled_contexts = {}
 local guide_cache = nil
+local post_confirmation_open = false
+local github_post_in_progress = false
 
 local function notify(message, level)
 	vim.notify(tostring(message or ""), level or vim.log.levels.INFO, { title = "Diffview Review" })
@@ -440,6 +442,14 @@ local function current_file_context()
 	return ctx
 end
 
+local function side_from_current_buffer(view)
+	local file = entry_file_for_buffer(view and view.cur_entry, vim.api.nvim_get_current_buf())
+	if not file then
+		return nil
+	end
+	return file.symbol == "a" and "LEFT" or "RIGHT"
+end
+
 local function require_active_diffview(ctx, action)
 	if ctx and ctx.view then
 		return true
@@ -679,15 +689,26 @@ end
 local entry_path
 local ordered_file_list
 
-local function active_pr_context(ctx)
+local function active_pr_context_matches_view(context, ctx)
+	if not (context and context.diffview_rev_arg) then
+		return true
+	end
+
+	return ctx and ctx.view and ctx.view.rev_arg == context.diffview_rev_arg
+end
+
+local function active_pr_context(ctx, action)
 	local context = active_guide_context
 	if context and context.repo and ctx and ctx.root and normalize_dir(context.repo) ~= ctx.root then
+		context = nil
+	end
+	if context and not active_pr_context_matches_view(context, ctx) then
 		context = nil
 	end
 
 	local pr_number = string_id(context and context.pr_number)
 	if not pr_number then
-		return nil, "Open a PR Diffview with :DiffviewPrOpen before importing GitHub comments"
+		return nil, "Open a PR Diffview with :DiffviewPrOpen before " .. (action or "using GitHub PR comments")
 	end
 
 	local owner = context and context.owner or nil
@@ -703,10 +724,116 @@ local function active_pr_context(ctx)
 	end
 
 	return {
+		base_oid = string_id(context and context.base_oid),
+		body = context and context.pr_body or nil,
+		head_oid = string_id(context and (context.head_oid or context.pr_head_oid)),
 		owner = owner,
 		pull_number = pr_number,
 		repo = repo,
+		title = context and context.pr_title or nil,
+		url = context and context.pr_url or nil,
 	}
+end
+
+local function is_already_posted(comment)
+	local sync_status = tostring(comment.sync_status or "")
+	return sync_status == "posted"
+		or sync_status == "exported"
+		or sync_status == "exported-to-github"
+		or comment.github_posted_at ~= nil
+		or comment.github_posted_pr ~= nil
+		or comment.github_comment_id ~= nil
+		or comment.github_id ~= nil
+		or comment.github_review_id ~= nil
+end
+
+local function is_local_manual_comment(comment)
+	local source = json_value(comment and comment.source)
+	return type(comment) == "table"
+		and (source == nil or source == "manual")
+		and not review_format.is_guide_comment(comment)
+		and not review_format.is_imported_github_comment(comment)
+		and not is_already_posted(comment)
+end
+
+local function set_comment_pr_context(comment, pr)
+	if not (comment and pr) then
+		return
+	end
+
+	local pull_number = tostring(pr.pull_number)
+	local review_context = type(comment.review_context) == "table" and comment.review_context or {}
+	comment.pr_number = pull_number
+	if pr.url then
+		comment.pr_url = pr.url
+	end
+	if pr.head_oid then
+		comment.pr_head_oid = pr.head_oid
+	end
+	review_context.kind = "pr"
+	review_context.head_oid = pr.head_oid
+	review_context.owner = pr.owner
+	review_context.repo = pr.repo
+	review_context.pull_number = pull_number
+	review_context.url = pr.url
+	comment.review_context = review_context
+end
+
+local function comment_pr_metadata(comment)
+	local review_context = type(comment.review_context) == "table" and comment.review_context or {}
+	if json_value(review_context.kind) ~= "pr" then
+		return nil
+	end
+
+	local pull_number = string_id(json_value(review_context.pull_number))
+		or string_id(json_value(review_context.pr_number))
+		or string_id(json_value(comment.pr_number))
+	if not pull_number then
+		return nil
+	end
+
+	local owner = json_value(review_context.owner) or json_value(comment.pr_owner) or json_value(comment.owner)
+	local repo = json_value(review_context.repo) or json_value(comment.pr_repo) or json_value(comment.repo_name)
+	local head_oid = json_value(review_context.head_oid) or json_value(review_context.pr_head_oid) or json_value(comment.pr_head_oid)
+	local pr_url = json_value(review_context.url) or json_value(comment.pr_url)
+	if (not owner or not repo) and pr_url then
+		local url_owner, url_repo = github_repo_from_url(pr_url)
+		owner = owner or url_owner
+		repo = repo or url_repo
+	end
+
+	return {
+		head_oid = head_oid and tostring(head_oid) or nil,
+		owner = owner and tostring(owner) or nil,
+		pull_number = pull_number,
+		repo = repo and tostring(repo) or nil,
+	}
+end
+
+local function comment_matches_pr(comment, pr)
+	local metadata = comment_pr_metadata(comment)
+	if not metadata then
+		return false, "missing-pr-context"
+	end
+	if not metadata.owner or not metadata.repo then
+		return false, "missing-pr-context"
+	end
+	if metadata.pull_number ~= tostring(pr.pull_number) then
+		return false, "different-pr-context"
+	end
+	if metadata.owner:lower() ~= tostring(pr.owner):lower() then
+		return false, "different-pr-context"
+	end
+	if metadata.repo:lower() ~= tostring(pr.repo):lower() then
+		return false, "different-pr-context"
+	end
+	if not metadata.head_oid or metadata.head_oid == "" or not pr.head_oid or pr.head_oid == "" then
+		return false, "missing-head-context"
+	end
+	if metadata.head_oid:lower() ~= tostring(pr.head_oid):lower() then
+		return false, "different-head-context"
+	end
+	return true
 end
 
 local function diffview_file_set(view)
@@ -1581,9 +1708,15 @@ end
 
 function M.set_active_guide_context(context)
 	active_guide_context = context and {
+		base_oid = context.base_oid,
+		context_kind = context.context_kind,
+		diffview_rev_arg = context.diffview_rev_arg,
+		head_oid = context.head_oid or context.pr_head_oid,
 		owner = context.owner,
 		path = context.path,
+		pr_body = context.pr_body,
 		pr_number = context.pr_number,
+		pr_title = context.pr_title,
 		pr_url = context.pr_url,
 		repo_name = context.repo_name,
 		repo = context.repo,
@@ -1767,6 +1900,8 @@ function M.add_comment(opts)
 	local state = load_state_with_guide(ctx)
 	local existing = find_comment(state, ctx.file, line, { manual_only = true })
 	local provided = opts and opts.args and opts.args ~= "" and opts.args or nil
+	local side = side_from_current_buffer(ctx.view)
+	local pr = active_pr_context(ctx)
 
 	local function save_comment(input)
 		if not input then
@@ -1780,6 +1915,12 @@ function M.add_comment(opts)
 
 		if existing then
 			existing.body = input
+			if side then
+				existing.side = side
+			end
+			if pr and is_local_manual_comment(existing) then
+				set_comment_pr_context(existing, pr)
+			end
 			existing.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
 		else
 			local comment = {
@@ -1787,9 +1928,13 @@ function M.add_comment(opts)
 				line = line,
 				body = input,
 				created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+				side = side,
 			}
 			if end_line ~= line then
 				comment.end_line = end_line
+			end
+			if pr then
+				set_comment_pr_context(comment, pr)
 			end
 			table.insert(state.comments, comment)
 		end
@@ -2019,7 +2164,7 @@ function M.import_github_comments()
 		return
 	end
 
-	local pr, pr_error = active_pr_context(ctx)
+	local pr, pr_error = active_pr_context(ctx, "importing GitHub comments")
 	if not pr then
 		notify(pr_error, vim.log.levels.WARN)
 		return
@@ -2077,6 +2222,347 @@ function M.auto_import_github_comments()
 	end, 150)
 end
 
+local truncate_display
+
+local function increment_skipped(stats, reason)
+	stats.skipped[reason] = (stats.skipped[reason] or 0) + 1
+end
+
+local function skipped_total(stats)
+	local total = 0
+	for _, count in pairs(stats.skipped or {}) do
+		total = total + count
+	end
+	return total
+end
+
+local function posting_side(comment)
+	local side = tostring(comment.side or "")
+	if side == "" then
+		return nil, "missing-side/legacy-anchor"
+	end
+	side = side:upper()
+	if side == "LEFT" or side == "RIGHT" then
+		return side, nil
+	end
+	return nil, "invalid-side"
+end
+
+local function github_post_candidates(state, files, pr)
+	local candidates = {}
+	local stats = { skipped = {} }
+	for index, comment in ipairs(state.comments or {}) do
+		if type(comment) ~= "table" then
+			increment_skipped(stats, "invalid")
+		else
+			local source = json_value(comment.source)
+			local body = vim.trim(tostring(comment.body or ""))
+			local file = normalize_file(comment.file or comment.path)
+			local line = positive_line(comment.line)
+			local end_line = positive_line(comment.end_line) or line
+			local side, side_error = posting_side(comment)
+			local matches_pr, pr_skip_reason = comment_matches_pr(comment, pr)
+
+			if source == "guide" then
+				increment_skipped(stats, "guide/robot")
+			elseif source == "github" then
+				increment_skipped(stats, "github/imported")
+			elseif source ~= nil and source ~= "manual" then
+				increment_skipped(stats, "other-source")
+			elseif body == "" then
+				increment_skipped(stats, "empty-body")
+			elseif review_format.is_file_level_comment(comment) then
+				increment_skipped(stats, "file-level")
+			elseif is_already_posted(comment) then
+				increment_skipped(stats, "already-posted/exported")
+			elseif not matches_pr then
+				increment_skipped(stats, pr_skip_reason)
+			elseif comment.stale == true or comment.outdated == true or comment.sync_status == "unmapped" or comment.sync_status == "stale-anchor" then
+				increment_skipped(stats, "stale/unmapped")
+			elseif not file or not line then
+				increment_skipped(stats, "missing-anchor")
+			elseif not files[file] then
+				increment_skipped(stats, "not-in-current-diff")
+			elseif not side then
+				increment_skipped(stats, side_error)
+			else
+				local start_line = math.min(line, end_line)
+				end_line = math.max(line, end_line)
+				local start_side = tostring(comment.start_side or ""):upper()
+				if start_side ~= "LEFT" and start_side ~= "RIGHT" then
+					start_side = side
+				end
+				local payload = {
+					body = body,
+					line = end_line,
+					path = file,
+					side = side,
+				}
+				if start_line ~= end_line then
+					payload.start_line = start_line
+					payload.start_side = start_side
+				end
+				table.insert(candidates, {
+					body = body,
+					comment = comment,
+					index = index,
+					payload = payload,
+				})
+			end
+		end
+	end
+	return candidates, stats
+end
+
+local function skipped_summary(stats)
+	local reasons = vim.tbl_keys(stats.skipped or {})
+	table.sort(reasons)
+	local parts = {}
+	for _, reason in ipairs(reasons) do
+		table.insert(parts, ("%s=%d"):format(reason, stats.skipped[reason]))
+	end
+	return #parts > 0 and table.concat(parts, " · ") or "none"
+end
+
+local function create_github_review(pr, candidates)
+	if vim.fn.executable("gh") ~= 1 then
+		return nil, "gh CLI is unavailable; install gh and run gh auth login before posting GitHub comments"
+	end
+	if not pr.head_oid or pr.head_oid == "" then
+		return nil, "missing pinned PR head SHA; reopen with :DiffviewPrOpen before posting GitHub comments"
+	end
+
+	local comments = {}
+	for _, candidate in ipairs(candidates) do
+		table.insert(comments, candidate.payload)
+	end
+	local payload = vim.fn.json_encode({
+		body = "Diffview local review comments.",
+		commit_id = pr.head_oid,
+		event = "COMMENT",
+		comments = comments,
+	})
+	local endpoint = ("repos/%s/%s/pulls/%s/reviews"):format(pr.owner, pr.repo, pr.pull_number)
+	local output = vim.fn.systemlist({ "gh", "api", "--method", "POST", endpoint, "--input", "-" }, payload)
+	if vim.v.shell_error ~= 0 then
+		local details = vim.trim(table.concat(output or {}, "\n"))
+		return nil, details ~= "" and details or "gh api review creation failed"
+	end
+
+	local ok, decoded = pcall(vim.fn.json_decode, table.concat(output or {}, "\n"))
+	return ok and type(decoded) == "table" and decoded or {}
+end
+
+local function same_pr_head_context(left, right)
+	if not (left and right) then
+		return false
+	end
+	if tostring(left.pull_number or "") ~= tostring(right.pull_number or "") then
+		return false
+	end
+	if tostring(left.owner or ""):lower() ~= tostring(right.owner or ""):lower() then
+		return false
+	end
+	if tostring(left.repo or ""):lower() ~= tostring(right.repo or ""):lower() then
+		return false
+	end
+	if tostring(left.head_oid or ""):lower() ~= tostring(right.head_oid or ""):lower() then
+		return false
+	end
+	return tostring(left.head_oid or "") ~= ""
+end
+
+local function mark_candidates_posted(pr, candidates, response)
+	local posted_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+	local review_id = string_id(json_value(response.id))
+	local review_url = json_value(response.html_url) or json_value(response.url)
+	for _, candidate in ipairs(candidates) do
+		local comment = candidate.comment
+		local payload = candidate.payload
+		comment.source = "manual"
+		comment.sync_status = "posted"
+		comment.github_posted_at = posted_at
+		comment.github_posted_pr = tostring(pr.pull_number)
+		comment.github_body = payload.body
+		comment.github_line = payload.line
+		comment.github_path = payload.path
+		comment.github_side = payload.side
+		comment.github_start_line = payload.start_line
+		comment.github_start_side = payload.start_side
+		comment.github_review_id = review_id
+		comment.github_review_url = review_url
+		comment.updated_at = posted_at
+	end
+end
+
+local function post_confirm_preview_lines(pr, candidates, stats)
+	local lines = {
+		("Post %d local Diffview comment(s) to PR #%s"):format(#candidates, pr.pull_number),
+	}
+	if pr.title and pr.title ~= "" then
+		table.insert(lines, "Title: " .. pr.title)
+	end
+	if pr.url and pr.url ~= "" then
+		table.insert(lines, "URL: " .. pr.url)
+	end
+	table.insert(lines, "Mode: one REST create-review call with event=COMMENT")
+	table.insert(lines, "Skipped: " .. skipped_summary(stats))
+	table.insert(lines, "")
+	table.insert(lines, "Press p to post. Press q or Esc to cancel.")
+	table.insert(lines, "")
+	for _, candidate in ipairs(candidates) do
+		local payload = candidate.payload
+		local range = payload.start_line and line_range_label(payload.start_line, payload.line) or line_range_label(payload.line, payload.line)
+		local preview = truncate_display(comment_preview({ body = candidate.body }), 80)
+		table.insert(lines, ("- %s:%s %s — %s"):format(payload.path, range, payload.side, preview))
+	end
+	return lines
+end
+
+local function post_github_review(ctx, pr, state, candidates, stats)
+	if github_post_in_progress then
+		notify("A GitHub comment post is already in progress", vim.log.levels.WARN)
+		return
+	end
+
+	local active_pr, active_error = active_pr_context(ctx, "posting GitHub comments")
+	if not same_pr_head_context(active_pr, pr) then
+		notify(active_error or "Active PR context no longer matches the pinned PR head; no GitHub post was made", vim.log.levels.ERROR)
+		return
+	end
+
+	github_post_in_progress = true
+	local ok, response, post_error = pcall(create_github_review, pr, candidates)
+	github_post_in_progress = false
+	if not ok then
+		post_error = response
+		response = nil
+	end
+	if not response then
+		notify(
+			("GitHub post failed for #%s: posted=0 · skipped=%d · failed=%d · %s"):format(
+				pr.pull_number,
+				skipped_total(stats),
+				#candidates,
+				post_error
+			),
+			vim.log.levels.ERROR
+		)
+		return
+	end
+
+	mark_candidates_posted(pr, candidates, response)
+	if not save_state(ctx, state) then
+		notify(
+			("REMOTE POST SUCCEEDED for #%s, but local state was not marked. Rerunning may duplicate %d posted comment(s)."):format(
+				pr.pull_number,
+				#candidates
+			),
+			vim.log.levels.ERROR
+		)
+		return
+	end
+
+	notify(
+		("Posted %d local Diffview comment(s) to #%s · skipped=%d · failed=0"):format(
+			#candidates,
+			pr.pull_number,
+			skipped_total(stats)
+		)
+	)
+	M.refresh_visible()
+end
+
+local function open_post_confirmation(ctx, pr, state, candidates, stats)
+	post_confirmation_open = true
+
+	local width = math.min(math.max(64, math.floor(vim.o.columns * 0.68)), math.max(64, vim.o.columns - 4))
+	local lines = post_confirm_preview_lines(pr, candidates, stats)
+	local height = math.min(math.max(8, #lines), math.max(8, vim.o.lines - 4))
+	local bufnr = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+	vim.bo[bufnr].bufhidden = "wipe"
+	vim.bo[bufnr].filetype = "markdown"
+	vim.bo[bufnr].modifiable = false
+
+	local winid = vim.api.nvim_open_win(bufnr, true, {
+		border = "rounded",
+		col = math.max(math.floor((vim.o.columns - width) / 2), 0),
+		height = height,
+		relative = "editor",
+		row = math.max(math.floor((vim.o.lines - height) / 2), 0),
+		style = "minimal",
+		title = " Confirm GitHub Comment Post ",
+		title_pos = "center",
+		width = width,
+	})
+	vim.wo[winid].cursorline = true
+
+	local function close_popup()
+		post_confirmation_open = false
+		if vim.api.nvim_win_is_valid(winid) then
+			pcall(vim.api.nvim_win_close, winid, true)
+		end
+		if vim.api.nvim_buf_is_valid(bufnr) then
+			pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+		end
+	end
+	vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
+		buffer = bufnr,
+		once = true,
+		callback = function()
+			post_confirmation_open = false
+		end,
+	})
+
+	vim.keymap.set("n", "q", close_popup, { buffer = bufnr, nowait = true, silent = true })
+	vim.keymap.set("n", "<Esc>", close_popup, { buffer = bufnr, nowait = true, silent = true })
+	vim.keymap.set("n", "p", function()
+		close_popup()
+		post_github_review(ctx, pr, state, candidates, stats)
+	end, { buffer = bufnr, nowait = true, silent = true })
+end
+
+function M.post_github_comments()
+	if post_confirmation_open then
+		notify("A GitHub comment post confirmation is already open", vim.log.levels.WARN)
+		return
+	end
+	if github_post_in_progress then
+		notify("A GitHub comment post is already in progress", vim.log.levels.WARN)
+		return
+	end
+
+	local ctx = current_file_context()
+	if not require_active_diffview(ctx, "posting GitHub review comments") then
+		return
+	end
+	if not require_repo_context(ctx, "posting GitHub review comments") then
+		return
+	end
+
+	local pr, pr_error = active_pr_context(ctx, "posting GitHub comments")
+	if not pr then
+		notify(pr_error, vim.log.levels.WARN)
+		return
+	end
+
+	local files = diffview_file_set(ctx.view)
+	if vim.tbl_isempty(files) then
+		notify("No Diffview files available for GitHub comment posting", vim.log.levels.WARN)
+		return
+	end
+
+	local state = load_state_with_guide(ctx)
+	local candidates, stats = github_post_candidates(state, files, pr)
+	if #candidates == 0 then
+		notify(("No eligible local Diffview comments to post · skipped=%d (%s)"):format(skipped_total(stats), skipped_summary(stats)), vim.log.levels.WARN)
+		return
+	end
+
+	open_post_confirmation(ctx, pr, state, candidates, stats)
+end
+
 local function guide_comment_counts(state, guide)
 	local counts = { notes = 0, suggestions = 0, total = 0 }
 	for _, comment in ipairs(state.comments or {}) do
@@ -2107,7 +2593,7 @@ local function add_status_text(row, text, hl_group)
 	end
 end
 
-local function truncate_display(value, width)
+truncate_display = function(value, width)
 	value = tostring(value or "")
 	if width <= 0 then
 		return ""
@@ -2179,6 +2665,175 @@ local function wrap_status_text(value, first_width, next_width)
 		table.insert(lines, line)
 	end
 	return lines
+end
+
+local function status_markdown_continuation_prefix(line)
+	return line:match("^(%s*[-*+]%s+%[[xX ]%]%s+)")
+		or line:match("^(%s*[-*+]%s+)")
+		or line:match("^(%s*%d+[.)]%s+)")
+		or line:match("^(%s*>%s*)")
+		or line:match("^%s*")
+		or ""
+end
+
+local function wrap_status_body_line(value, width)
+	local text = tostring(value or "")
+	if vim.trim(text) == "" then
+		return { "" }
+	end
+
+	width = math.max(width, 1)
+	if review_format.display_width(text) <= width then
+		return { text }
+	end
+
+	local first_prefix = text:match("^%s*") or ""
+	local continuation_prefix = string.rep(" ", review_format.display_width(status_markdown_continuation_prefix(text)))
+	local lines = {}
+	local line = first_prefix
+	local line_has_text = false
+
+	for word in text:sub(#first_prefix + 1):gmatch("%S+") do
+		local pending = word
+		while pending ~= "" do
+			local separator = line_has_text and " " or ""
+			if review_format.display_width(line .. separator .. pending) <= width then
+				line = line .. separator .. pending
+				line_has_text = true
+				pending = ""
+			elseif line_has_text then
+				table.insert(lines, line)
+				line = continuation_prefix
+				line_has_text = false
+			else
+				local piece_width = math.max(width - review_format.display_width(line), 1)
+				local piece, rest = take_display_prefix(pending, piece_width)
+				table.insert(lines, line .. piece)
+				pending = rest
+				line = continuation_prefix
+				line_has_text = false
+			end
+		end
+	end
+
+	if line_has_text then
+		table.insert(lines, line)
+	end
+	return lines
+end
+
+local function wrap_status_body(value, width)
+	local text = tostring(value or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
+	local lines = {}
+	for _, body_line in ipairs(vim.split(text, "\n", { plain = true })) do
+		for _, wrapped_line in ipairs(wrap_status_body_line(body_line, width)) do
+			table.insert(lines, wrapped_line)
+		end
+	end
+	return lines
+end
+
+local function fetch_pr_description(pr)
+	if vim.fn.executable("gh") ~= 1 then
+		return nil, "gh CLI is unavailable"
+	end
+
+	local output = vim.fn.systemlist({
+		"gh",
+		"pr",
+		"view",
+		pr.pull_number,
+		"-R",
+		pr.owner .. "/" .. pr.repo,
+		"--json",
+		"body,title,url",
+	})
+	if vim.v.shell_error ~= 0 then
+		local details = vim.trim(table.concat(output or {}, "\n"))
+		return nil, details ~= "" and details or "gh PR description lookup failed"
+	end
+
+	local ok, decoded = pcall(vim.fn.json_decode, table.concat(output or {}, "\n"))
+	if not ok or type(decoded) ~= "table" then
+		return nil, "gh PR description lookup returned invalid JSON"
+	end
+	if active_guide_context then
+		active_guide_context.pr_body = decoded.body
+		active_guide_context.pr_title = decoded.title
+		active_guide_context.pr_url = decoded.url
+	end
+	return decoded
+end
+
+local function add_pr_description_status(rows, ctx, width)
+	local context = active_guide_context
+	if not context or not context.pr_number then
+		return
+	end
+	if context.repo and ctx and ctx.root and normalize_dir(context.repo) ~= ctx.root then
+		return
+	end
+	if not active_pr_context_matches_view(context, ctx) then
+		return
+	end
+
+	local pr, pr_error = active_pr_context(ctx, "showing the PR description")
+	local title = status_row()
+	add_status_text(title, "PR:", "DiffviewReviewStatusHeader")
+	if not pr then
+		add_status_text(title, " " .. pr_error, "DiffviewReviewStatusMuted")
+		table.insert(rows, title)
+		table.insert(rows, status_row())
+		return
+	end
+
+	local description = pr
+	if description.title == nil or description.body == nil or description.url == nil then
+		local fetched, fetch_error = fetch_pr_description(pr)
+		if fetched then
+			description = vim.tbl_extend("force", description, fetched)
+		else
+			add_status_text(title, (" #%s · description unavailable: %s"):format(pr.pull_number, fetch_error), "DiffviewReviewStatusMuted")
+			table.insert(rows, title)
+			table.insert(rows, status_row())
+			return
+		end
+	end
+
+	local heading = description.title and description.title ~= "" and description.title or "Untitled PR"
+	add_status_text(title, (" #%s · "):format(pr.pull_number), "DiffviewReviewStatusMuted")
+	add_status_text(title, truncate_display(heading, width - review_format.display_width(title.text)), "DiffviewReviewStatusFile")
+	table.insert(rows, title)
+
+	if description.url and description.url ~= "" then
+		local url = status_row()
+		add_status_text(url, "  ")
+		add_status_text(url, truncate_display(description.url, width - 2), "DiffviewReviewStatusMuted")
+		table.insert(rows, url)
+	end
+
+	local body = tostring(description.body or "")
+	if vim.trim(body) == "" then
+		local row = status_row()
+		add_status_text(row, "  No PR description", "DiffviewReviewStatusMuted")
+		table.insert(rows, row)
+	else
+		local header = status_row()
+		add_status_text(header, "  Description:", "DiffviewReviewStatusMuted")
+		table.insert(rows, header)
+
+		local body_indent = "  "
+		local body_lines = wrap_status_body(body, width - review_format.display_width(body_indent))
+		for _, line in ipairs(body_lines) do
+			local row = status_row()
+			if line ~= "" then
+				add_status_text(row, body_indent)
+				add_status_text(row, line, "DiffviewReviewStatusMuted")
+			end
+			table.insert(rows, row)
+		end
+	end
+	table.insert(rows, status_row())
 end
 
 local function add_review_summary(rows, counts)
@@ -2448,6 +3103,7 @@ function M.show_status()
 	end
 
 	add_review_summary(rows, counts)
+	add_pr_description_status(rows, ctx, content_width)
 	add_guide_status(rows, state, guide, content_width)
 
 	for _, item in ipairs(entries) do
@@ -2549,7 +3205,8 @@ end
 function M.diffview_keymaps()
 	-- Diffview local-review keymap contract:
 	-- <leader>gda/gdd edit local comments, <leader>gdv toggles reviewed,
-	-- <leader>gds opens the review dashboard, <leader>gd[/] jump comments,
+	-- <leader>gds opens the review dashboard, <leader>gdp posts after confirmation,
+	-- <leader>gd[/] jump comments,
 	-- and <Tab>/<S-Tab> move only through unreviewed files.
 	return {
 		view = {
@@ -2558,6 +3215,7 @@ function M.diffview_keymaps()
 			{ "n", "<leader>gdd", M.delete_comment, { desc = "[G]it [D]iffview [D]elete Review Comment" } },
 			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File Reviewed" } },
 			{ "n", "<leader>gds", M.show_status, { desc = "[G]it [D]iffview Review [S]tatus" } },
+			{ "n", "<leader>gdp", M.post_github_comments, { desc = "[G]it [D]iffview [P]ost GitHub Comments" } },
 			{ "n", "<leader>gd]", function() M.next_review_comment(1) end, { desc = "Next Diffview review comment" } },
 			{ "n", "<leader>gd[", function() M.next_review_comment(-1) end, { desc = "Previous Diffview review comment" } },
 			{ "n", "<Tab>", function() M.next_unviewed_file(1) end, { desc = "Next unreviewed Diffview file" } },
@@ -2566,6 +3224,7 @@ function M.diffview_keymaps()
 		file_panel = {
 			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File Reviewed" } },
 			{ "n", "<leader>gds", M.show_status, { desc = "[G]it [D]iffview Review [S]tatus" } },
+			{ "n", "<leader>gdp", M.post_github_comments, { desc = "[G]it [D]iffview [P]ost GitHub Comments" } },
 			{ "n", "<leader>gd]", function() M.next_review_comment(1) end, { desc = "Next Diffview review comment" } },
 			{ "n", "<leader>gd[", function() M.next_review_comment(-1) end, { desc = "Previous Diffview review comment" } },
 			{ "n", "<Tab>", function() M.next_unviewed_file(1) end, { desc = "Next unreviewed Diffview file" } },
@@ -2625,6 +3284,10 @@ function M.setup()
 	vim.api.nvim_create_user_command("DiffviewReviewImportGithubComments", M.import_github_comments, {
 		force = true,
 		desc = "Import GitHub PR review comments into local Diffview state",
+	})
+	vim.api.nvim_create_user_command("DiffviewReviewPostGithubComments", M.post_github_comments, {
+		force = true,
+		desc = "Post eligible local Diffview comments to the active GitHub PR",
 	})
 end
 

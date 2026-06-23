@@ -71,7 +71,17 @@ local function github_repo_from_url(value)
 	return nil, nil
 end
 
-local function pr_guide_context(root, pr_number, pr_url)
+local function resolve_commit_oid(root, ref)
+	local ok, output = git_command(root, { "rev-parse", ref .. "^{commit}" })
+	local details = trim_command_output(output)
+	if ok and details ~= "" then
+		return details
+	end
+	return nil, details ~= "" and details or "git rev-parse failed"
+end
+
+local function pr_guide_context(root, pr, diffview_rev_arg, base_oid, head_oid)
+	local pr_number = tostring(pr.number)
 	local repo_key = nil
 	local ok, output = git_command(root, { "remote", "get-url", "origin" })
 	local remote_url = ok and trim_command_output(output) or ""
@@ -81,16 +91,22 @@ local function pr_guide_context(root, pr_number, pr_url)
 	if not repo_key or repo_key == "" then
 		repo_key = vim.fn.fnamemodify(root, ":t")
 	end
-	local owner, repo = github_repo_from_url(pr_url)
+	local owner, repo = github_repo_from_url(pr.url)
 	if not owner or not repo then
 		owner, repo = github_repo_from_url(remote_url)
 	end
 
 	return {
+		base_oid = base_oid,
+		context_kind = "pr",
+		diffview_rev_arg = diffview_rev_arg,
+		head_oid = head_oid,
 		owner = owner,
 		path = ("%s/notes/projects/%s/pr-reviews/%s/guide.json"):format(vim.env.HOME or vim.fn.expand("~"), repo_key, pr_number),
+		pr_body = pr.body,
 		pr_number = pr_number,
-		pr_url = pr_url,
+		pr_title = pr.title,
+		pr_url = pr.url,
 		repo_name = repo,
 		repo = root,
 		repo_key = repo_key,
@@ -110,8 +126,9 @@ local function ref_exists(root, ref)
 	return ok
 end
 
-local function fetch_ref(root, source, destination)
-	local ok, output = git_command(root, { "fetch", "--no-tags", "origin", source .. ":" .. destination })
+local function fetch_ref(root, source, destination, force)
+	local refspec = (force and "+" or "") .. source .. ":" .. destination
+	local ok, output = git_command(root, { "fetch", "--no-tags", "origin", refspec })
 	if ok and ref_exists(root, destination) then
 		return true
 	elseif ok then
@@ -136,7 +153,7 @@ local function gh_pr_view(selector)
 	end
 	vim.list_extend(command, {
 		"--json",
-		"number,headRefName,baseRefName,url",
+		"number,headRefName,baseRefName,url,title,body",
 	})
 
 	local output = vim.fn.systemlist(command)
@@ -182,17 +199,30 @@ local function open_pr_diffview(opts)
 		return
 	end
 
-	local fetched_pr, pr_fetch_error = fetch_ref(root, "refs/pull/" .. pr_number .. "/head", head_ref)
+	local fetched_pr, pr_fetch_error = fetch_ref(root, "refs/pull/" .. pr_number .. "/head", head_ref, true)
 	if not fetched_pr then
 		notify_pr(("Could not fetch PR #%s ref: %s"):format(pr_number, pr_fetch_error), vim.log.levels.ERROR)
 		return
 	end
 
+	local base_oid, base_oid_error = resolve_commit_oid(root, base_ref)
+	if not base_oid then
+		notify_pr(("Could not resolve base ref %s: %s"):format(base_ref, base_oid_error), vim.log.levels.ERROR)
+		return
+	end
+
+	local head_oid, head_error = resolve_commit_oid(root, head_ref)
+	if not head_oid then
+		notify_pr(("Could not resolve PR #%s head ref %s: %s"):format(pr_number, head_ref, head_error), vim.log.levels.ERROR)
+		return
+	end
+	local diffview_rev_arg = base_oid .. "..." .. head_oid
+
 	local review = review_module()
 	if review and review.set_active_guide_context then
-		review.set_active_guide_context(pr_guide_context(root, pr_number, pr.url))
+		review.set_active_guide_context(pr_guide_context(root, pr, diffview_rev_arg, base_oid, head_oid))
 	end
-	diffview_open({ base_ref .. "..." .. head_ref }, true)
+	diffview_open({ diffview_rev_arg }, true)
 	notify_pr(("Opened PR #%s in Diffview"):format(pr_number))
 end
 
@@ -206,6 +236,7 @@ return {
 		"DiffviewRefresh",
 		"DiffviewPrOpen",
 		"DiffviewReviewImportGithubComments",
+		"DiffviewReviewPostGithubComments",
 	},
 	dependencies = {
 		{ "lifepillar/vim-solarized8", branch = "neovim" }, -- Pin to master branch
