@@ -57,6 +57,15 @@ AREA_TITLES = {
     "other": "Additional supporting changes",
 }
 
+SECTION_TITLE_OVERRIDES = {
+    "Mission-planner geometry/params/constants": "Mission planner geometry",
+    "Auto-kiosk state-machine/command handling": "Auto-kiosk flow",
+    "Mission runner/workflow/simulation wiring": "Mission wiring",
+    "Physics/contact handedness wiring": "Tether-guide behavior",
+    "Graph/domain bring-up": "Graph and domain bring-up",
+    "Inter-domain routing and bridge classification": "Inter-domain routing",
+}
+
 SECTION_HEADER_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
@@ -91,6 +100,8 @@ DECLARATION_RE = re.compile(
     r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:const|fn|struct|enum|type)\s+([A-Za-z_][A-Za-z0-9_]*)"
 )
 SCOPED_SYMBOL_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)::([A-Za-z_][A-Za-z0-9_]*)\b")
+PATH_TOKEN_RE = re.compile(r"[A-Za-z]+[0-9]*|[0-9]+")
+VERSION_TOPIC_RE = re.compile(r"^(?:gen|generation|v|version)\d+[a-z]*$", re.IGNORECASE)
 
 KNOWN_SCENARIO_STEPS = {
     "takeoff",
@@ -138,6 +149,142 @@ class Snippet:
     label: str
     language: str
     code: str
+
+
+@dataclass(frozen=True)
+class SemanticRole:
+    title: str
+    summary: str
+    title_topic: str
+    path_signals: tuple[str, ...]
+    content_signals: tuple[str, ...]
+
+
+SEMANTIC_ROLES = (
+    SemanticRole(
+        title="Mission-planner geometry/params/constants",
+        summary="Updates mission-planner params/constants for the changed geometry.",
+        title_topic="planner geometry/params",
+        path_signals=("mission_planner", "planner", "param", "params", "constant", "constants"),
+        content_signals=(
+            "gen2",
+            "offset",
+            "seating",
+            "solar",
+            "array",
+            "geometry",
+            "portal",
+            "yaw",
+            "tether",
+        ),
+    ),
+    SemanticRole(
+        title="Auto-kiosk state-machine/command handling",
+        summary="Adjusts auto-kiosk state-machine and command handling for the updated flow.",
+        title_topic="auto-kiosk state/commands",
+        path_signals=("auto_kiosk", "kiosk", "state_machine", "state-machine", "fsm"),
+        content_signals=(
+            "autokiosk",
+            "auto kiosk",
+            "droidmissionstate",
+            "command",
+            "transition",
+            "current_state",
+            "next_state",
+            "state::",
+        ),
+    ),
+    SemanticRole(
+        title="Mission runner/workflow/simulation wiring",
+        summary="Wires mission runner, workflow, graph, mock, or simulator plumbing for the updated flow.",
+        title_topic="runner/workflow/sim wiring",
+        path_signals=(
+            "mission_runner",
+            "mission",
+            "runner",
+            "workflow",
+            "work",
+            "graph",
+            "mock",
+            "mocks",
+            "sim",
+            "simulation",
+            "build.bazel",
+            "cargo.toml",
+        ),
+        content_signals=(
+            "mission_runner",
+            "mission",
+            "runner",
+            "workflow",
+            "work",
+            "graph",
+            "mock",
+            "simulate",
+            "simulation",
+            "add_to_graph",
+            "deps",
+            "dependency",
+        ),
+    ),
+    SemanticRole(
+        title="Physics/contact handedness wiring",
+        summary="Updates physics/contact/tether handedness wiring for the changed behavior.",
+        title_topic="physics/contact handedness",
+        path_signals=("physics", "contact", "collision", "dynamics"),
+        content_signals=(
+            "physics",
+            "contact",
+            "collision",
+            "tether",
+            "handedness",
+            "left_handed",
+            "left-handed",
+            "right_handed",
+            "right-handed",
+            "for_handedness",
+            "friction",
+            "force",
+            "torque",
+            "mass",
+        ),
+    ),
+    SemanticRole(
+        title="Message contracts",
+        summary="Updates message/topic contracts or identifiers shared across the changed components.",
+        title_topic="message contracts",
+        path_signals=("proto", "msg", "message", "messages", "schema", "contract", "topic"),
+        content_signals=("message", "topic", "proto", "schema", "publisher", "subscriber", "identifier"),
+    ),
+    SemanticRole(
+        title="Tests and assertions",
+        summary="Updates tests/assertions that cover the changed behavior or expected branch outcomes.",
+        title_topic="tests/assertions",
+        path_signals=("test", "tests", "pytest", "spec"),
+        content_signals=("#[test]", "pytest", "test_"),
+    ),
+    SemanticRole(
+        title="Build and dependency wiring",
+        summary="Adds build/dependency wiring needed for the changed code to compile or run.",
+        title_topic="build",
+        path_signals=(
+            "build.bazel",
+            "cargo.toml",
+            "cmakelists",
+            "requirements",
+            "package.json",
+            ".bzl",
+        ),
+        content_signals=("deps", "dependency", "rust_library", "py_library", "load(", "bazel"),
+    ),
+    SemanticRole(
+        title="Docs and reviewer context",
+        summary="Updates docs or reviewer-facing context for the behavior changed in this PR.",
+        title_topic="docs",
+        path_signals=("docs/", "readme", ".md"),
+        content_signals=("markdown", "documentation"),
+    ),
+)
 
 
 def _run_cmd(cmd: list[str]) -> str:
@@ -370,6 +517,424 @@ def _join_codes(values: list[str], *, limit: int = 5) -> str:
     if len(formatted) == 2:
         return f"{formatted[0]} and {formatted[1]}"
     return ", ".join(formatted[:-1]) + f", and {formatted[-1]}"
+
+
+def _join_plain(values: list[str]) -> str:
+    items = [value for value in values if value]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
+def _readable_section_title(title: str) -> str:
+    override = SECTION_TITLE_OVERRIDES.get(title)
+    if override:
+        return override
+    cleaned = re.sub(r"\s*/\s*", " ", title)
+    cleaned = cleaned.replace("mission-planner", "mission planner")
+    cleaned = cleaned.replace("state-machine", "state machine")
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _formatted_section_title(title: str) -> str:
+    return f"**{_readable_section_title(title)}**"
+
+
+def _is_version_topic_phrase(phrase: str) -> bool:
+    return VERSION_TOPIC_RE.fullmatch(re.sub(r"\s+", "", phrase)) is not None
+
+
+def _order_title_topic_phrases(values: list[str]) -> list[str]:
+    version_phrases = [value for value in values if _is_version_topic_phrase(value)]
+    other_phrases = [value for value in values if not _is_version_topic_phrase(value)]
+    return version_phrases + other_phrases
+
+
+def _join_title_topic_phrases(values: list[str]) -> str:
+    version_phrases = [value for value in values if _is_version_topic_phrase(value)]
+    other_phrases = [value for value in values if not _is_version_topic_phrase(value)]
+    if version_phrases and other_phrases:
+        return f"{' '.join(version_phrases)} {_join_plain(other_phrases)}"
+    return _join_plain(version_phrases or other_phrases)
+
+
+def _path_tokens(value: str) -> list[str]:
+    split_camel = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", value)
+    return [token.lower() for token in PATH_TOKEN_RE.findall(split_camel)]
+
+
+def _display_token(token: str) -> str:
+    if token in {"api", "ci", "hil", "ipc", "mil", "sil"}:
+        return token.upper()
+    return token[:1].upper() + token[1:]
+
+
+def _display_tokens(tokens: list[str]) -> str:
+    return " ".join(_display_token(token) for token in tokens)
+
+
+def _common_directory_prefix(files: list[PatchedFile]) -> str:
+    directory_parts = [file_info.filename.split("/")[:-1] for file_info in files]
+    directory_parts = [parts for parts in directory_parts if parts]
+    if not directory_parts:
+        return ""
+
+    common = directory_parts[0]
+    for parts in directory_parts[1:]:
+        shared_len = 0
+        for left, right in zip(common, parts):
+            if left != right:
+                break
+            shared_len += 1
+        common = common[:shared_len]
+        if not common:
+            break
+    return "/".join(common)
+
+
+def _meaningful_path_component(parts: list[str]) -> str:
+    generic_components = {
+        "build",
+        "configs",
+        "data",
+        "include",
+        "lib",
+        "machines",
+        "params",
+        "scripts",
+        "src",
+        "test",
+        "tests",
+    }
+    for part in reversed(parts):
+        lowered = part.lower()
+        if lowered in generic_components or lowered.endswith(".bazel"):
+            continue
+        return part
+    return parts[-1] if parts else ""
+
+
+def _topic_phrases_from_paths(
+    files: list[PatchedFile],
+    excluded_tokens: set[str],
+) -> list[str]:
+    generic_tokens = {
+        "ash",
+        "bazel",
+        "build",
+        "code",
+        "command",
+        "config",
+        "configs",
+        "data",
+        "file",
+        "files",
+        "flight",
+        "lib",
+        "machine",
+        "machines",
+        "mod",
+        "param",
+        "params",
+        "src",
+        "test",
+        "tests",
+        "toml",
+        "work",
+    }
+    phrase_counts: dict[tuple[str, ...], int] = defaultdict(int)
+    token_counts: dict[str, int] = defaultdict(int)
+    first_seen: dict[tuple[str, ...], int] = {}
+    seen_index = 0
+
+    def record_component(component: str) -> None:
+        nonlocal seen_index
+        tokens = [
+            token
+            for token in _path_tokens(component)
+            if token not in generic_tokens and token not in excluded_tokens
+        ]
+        for token in tokens:
+            token_counts[token] += 1
+            key = (token,)
+            if key not in first_seen:
+                first_seen[key] = seen_index
+                seen_index += 1
+        for left, right in zip(tokens, tokens[1:]):
+            key = (left, right)
+            phrase_counts[key] += 1
+            if key not in first_seen:
+                first_seen[key] = seen_index
+                seen_index += 1
+
+    for file_info in files:
+        for component in file_info.filename.split("/"):
+            record_component(component)
+    for symbol in _extract_declared_symbols(files):
+        record_component(symbol)
+
+    selected: list[tuple[str, ...]] = []
+    used_tokens: set[str] = set()
+    repeated_phrases = [
+        phrase
+        for phrase, count in phrase_counts.items()
+        if count > 1 and set(phrase) - excluded_tokens
+    ]
+    repeated_phrases.sort(key=lambda phrase: (-phrase_counts[phrase], first_seen[phrase]))
+    for phrase in repeated_phrases:
+        if any(token in used_tokens for token in phrase):
+            continue
+        selected.append(phrase)
+        used_tokens.update(phrase)
+        if len(selected) >= 2:
+            break
+
+    repeated_tokens = [
+        (token,)
+        for token, count in token_counts.items()
+        if count > 1 and token not in used_tokens and token not in excluded_tokens
+    ]
+    repeated_tokens.sort(
+        key=lambda phrase: (
+            not any(char.isdigit() for char in phrase[0]),
+            -token_counts[phrase[0]],
+            first_seen[phrase],
+        )
+    )
+    for phrase in repeated_tokens:
+        selected.append(phrase)
+        used_tokens.update(phrase)
+        if len(selected) >= 3:
+            break
+
+    return [_display_tokens(list(phrase)) for phrase in selected]
+
+
+def _signal_count(text: str, signal: str) -> int:
+    if re.fullmatch(r"[a-z0-9]+", signal):
+        return len(re.findall(rf"(?<![a-z0-9]){re.escape(signal)}(?![a-z0-9])", text))
+    return text.count(signal)
+
+
+def _signal_score(text: str, signals: tuple[str, ...]) -> int:
+    return sum(_signal_count(text, signal) for signal in signals)
+
+
+def _semantic_role_score(file_info: PatchedFile, role: SemanticRole) -> int:
+    path = file_info.filename.lower()
+    path_score = _signal_score(path, role.path_signals)
+    content_score = _signal_score("\n".join(file_info.added_lines).lower(), role.content_signals)
+    if role.title == "Tests and assertions" and path_score == 0:
+        return 0
+    score = (3 * path_score) + content_score
+    if role.title == "Mission-planner geometry/params/constants" and "/params/" in path:
+        score += 20
+    if role.title == "Auto-kiosk state-machine/command handling" and "auto_kiosk" in path:
+        score += 20
+    if role.title == "Mission runner/workflow/simulation wiring" and any(
+        signal in path for signal in ("mission_runner", "droid_sim", "graph", "mock")
+    ):
+        score += 20
+    if role.title == "Mission runner/workflow/simulation wiring" and "mission_runner" in path:
+        score += 100
+    if role.title == "Physics/contact handedness wiring" and any(
+        signal in path for signal in ("physics", "contact", "tether")
+    ):
+        score += 20
+    return score
+
+
+def _semantic_role_for_file(file_info: PatchedFile) -> SemanticRole | None:
+    scored_roles = [
+        (_semantic_role_score(file_info, role), index, role)
+        for index, role in enumerate(SEMANTIC_ROLES)
+    ]
+    scored_roles.sort(key=lambda item: (-item[0], item[1]))
+    score, _, role = scored_roles[0]
+    return role if score > 0 else None
+
+
+def _semantic_groups(files: list[PatchedFile]) -> list[tuple[SemanticRole, list[PatchedFile]]]:
+    grouped: dict[str, list[PatchedFile]] = defaultdict(list)
+    roles_by_title = {role.title: role for role in SEMANTIC_ROLES}
+    for file_info in files:
+        if file_info.filename in NOISE_FILES:
+            continue
+        role = _semantic_role_for_file(file_info)
+        if role is not None:
+            grouped[role.title].append(file_info)
+    return [
+        (roles_by_title[role.title], grouped[role.title])
+        for role in SEMANTIC_ROLES
+        if grouped.get(role.title)
+    ]
+
+
+def _has_file_signal(files: list[PatchedFile], signals: tuple[str, ...]) -> bool:
+    text = "\n".join(
+        [file_info.filename for file_info in files]
+        + [line for file_info in files for line in file_info.added_lines]
+    ).lower()
+    return _signal_score(text, signals) > 0
+
+
+def _role_bullets(
+    role: SemanticRole,
+    files: list[PatchedFile],
+    *,
+    context_files: list[PatchedFile],
+) -> list[str]:
+    if role.title == "Mission-planner geometry/params/constants":
+        has_gen2 = _has_file_signal(files, ("gen2",))
+        has_seating_or_contact = _has_file_signal(files, ("seating", "contact"))
+        subject = "mission-planner geometry params"
+        if has_gen2 and has_seating_or_contact:
+            subject = "Gen2 seating/contact geometry params"
+        elif has_gen2:
+            subject = "Gen2 mission-planner geometry params"
+        elif has_seating_or_contact:
+            subject = "seating/contact geometry params"
+        if _has_file_signal(files, ("offset",)):
+            subject = f"{subject} and offsets"
+
+        bullets = [f"Updates {subject}."]
+        placement_inputs = []
+        if _has_file_signal(files, ("solar",)):
+            placement_inputs.append("solar-array placement")
+        has_yaw = _has_file_signal(files, ("yaw",))
+        has_portal = _has_file_signal(files, ("portal",))
+        has_contact = _has_file_signal(files, ("contact",))
+        if has_portal or (has_yaw and (has_contact or has_seating_or_contact)):
+            placement_inputs.append("portal/contact yaw inputs")
+        elif has_yaw:
+            placement_inputs.append("yaw inputs")
+        if placement_inputs:
+            bullets.append(f"Covers {_join_plain(placement_inputs)}.")
+        return bullets
+
+    if role.title == "Auto-kiosk state-machine/command handling":
+        pieces = ["command handling"]
+        if _has_file_signal(files, ("transition", "current_state", "next_state", "state::")):
+            pieces.append("state transitions")
+        flow = (
+            "updated Gen2 flow"
+            if _has_file_signal(context_files, ("gen2",))
+            else "updated flow"
+        )
+        bullets = [f"Adjusts {_join_plain(pieces)} for the {flow}."]
+        if _has_file_signal(files, ("droidmissionstate",)):
+            has_geometry_context = _has_file_signal(
+                context_files,
+                ("geometry", "seating", "contact", "offset"),
+            )
+            target = "new geometry" if has_geometry_context else flow
+            bullets.append(f"Keeps DroidMissionState progression aligned with the {target}.")
+        return bullets
+
+    if role.title == "Mission runner/workflow/simulation wiring":
+        has_runner = _has_file_signal(files, ("mission_runner", "runner"))
+        has_graph = _has_file_signal(files, ("graph", "add_to_graph", "mil"))
+        has_sim = _has_file_signal(files, ("mock", "sim", "simulation"))
+        if has_runner and has_graph and has_sim:
+            bullets = ["Wires mission-runner setup through the MIL graph/mock simulation path."]
+        elif has_runner:
+            bullets = ["Wires mission-runner setup for the updated flow."]
+        else:
+            bullets = ["Wires mission-runner and simulation plumbing for the updated flow."]
+        return bullets
+
+    if role.title == "Physics/contact handedness wiring":
+        has_tether = _has_file_signal(files, ("tether",))
+        has_handedness = _has_file_signal(
+            files,
+            (
+                "handedness",
+                "left_handed",
+                "left-handed",
+                "left handed",
+                "right_handed",
+                "right-handed",
+                "right handed",
+                "for_handedness",
+            ),
+        )
+        has_handedness_pair = _has_file_signal(files, ("for_handedness",)) or (
+            _has_file_signal(files, ("left_handed", "left-handed", "left handed"))
+            and _has_file_signal(files, ("right_handed", "right-handed", "right handed"))
+        )
+        if has_tether and has_handedness_pair:
+            return ["Plumbs physics/contact behavior for left- and right-handed guide cases."]
+        if has_tether and has_handedness:
+            return ["Plumbs physics/contact behavior for tether-guide handedness cases."]
+        if has_tether:
+            return ["Plumbs physics/contact behavior for tether-guide handling."]
+        if has_handedness:
+            return ["Plumbs physics/contact behavior for handedness branches."]
+        return ["Plumbs physics/contact behavior for the updated geometry."]
+
+    return [role.summary]
+
+
+def _infer_semantic_other_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]]]:
+    groups = _semantic_groups(files)
+    non_doc_groups = [group for group in groups if group[0].title != "Docs and reviewer context"]
+    if len(non_doc_groups) >= 4:
+        groups = non_doc_groups
+    if len(groups) < 2:
+        return []
+    return [
+        (role.title, _role_bullets(role, role_files, context_files=files))
+        for role, role_files in groups
+    ]
+
+
+def _infer_primary_other_section(files: list[PatchedFile]) -> tuple[str, list[str]]:
+    file_paths = _dedupe([
+        file_info.filename
+        for file_info in files
+        if file_info.filename not in NOISE_FILES and not file_info.filename.endswith(".md")
+    ])
+    common_prefix = _common_directory_prefix(files)
+    common_parts = common_prefix.split("/") if common_prefix else []
+    base_component = _meaningful_path_component(common_parts)
+    base_token_list = _path_tokens(base_component)
+    common_prefix_tokens = {
+        token for component in common_parts for token in _path_tokens(component)
+    }
+    base_title = _display_tokens(base_token_list) if base_token_list else ""
+    topic_phrases = _topic_phrases_from_paths(files, common_prefix_tokens)
+    if base_title and topic_phrases:
+        title = f"{base_title} {_join_title_topic_phrases(topic_phrases[:2])} updates"
+    elif base_title:
+        title = f"{base_title} updates"
+    elif topic_phrases:
+        title = f"{_join_title_topic_phrases(topic_phrases[:3])} implementation updates"
+    else:
+        title = "Implementation updates"
+
+    bullets: list[str] = []
+    if common_prefix:
+        bullets.append(f"Updates supporting implementation under `{common_prefix}`.")
+    else:
+        bullets.append("Updates supporting implementation in this PR scope.")
+    if topic_phrases:
+        ordered_topics = _order_title_topic_phrases(topic_phrases[:3])
+        bullets.append(
+            "Focuses the touched implementation around "
+            f"{_join_plain([f'`{phrase}`' for phrase in ordered_topics])}."
+        )
+    declared_symbols = _extract_declared_symbols(files)
+    if declared_symbols:
+        bullets.append(
+            f"Adds or extends implementation symbols {_join_codes(declared_symbols, limit=5)}."
+        )
+    if file_paths:
+        bullets.append(f"Files touched: {', '.join(f'`{path}`' for path in file_paths[:5])}.")
+    return title, bullets
 
 
 def _classify_area(path: str) -> str:
@@ -680,12 +1245,19 @@ def _build_human_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]
         buckets[_classify_area(file_info.filename)].append(file_info)
 
     sections: list[tuple[str, list[str]]] = []
+    known_bucket_sizes = [
+        len(area_files)
+        for area, area_files in buckets.items()
+        if area != "other" and area_files
+    ]
+    largest_known_bucket = max(known_bucket_sizes, default=0)
 
     for area in AREA_ORDER:
         area_files = buckets.get(area, [])
         if not area_files:
             continue
 
+        section_title = AREA_TITLES[area]
         bullets: list[str] = []
 
         if area == "scenario":
@@ -878,25 +1450,32 @@ def _build_human_sections(files: list[PatchedFile]) -> list[tuple[str, list[str]
                 )
 
         else:
-            misc_files = [
-                f.filename
-                for f in area_files
-                if f.filename not in NOISE_FILES and not f.filename.endswith(".md")
-            ]
-            if misc_files:
-                bullets.append(
-                    "Updates supporting implementation files that back the main behavior change in this PR."
-                )
-                bullets.append(
-                    f"Supporting files: {', '.join(f'`{p}`' for p in _dedupe(misc_files)[:5])}."
-                )
+            if len(area_files) >= largest_known_bucket:
+                semantic_sections = _infer_semantic_other_sections(area_files)
+                if semantic_sections:
+                    sections.extend(semantic_sections)
+                    continue
+                section_title, bullets = _infer_primary_other_section(area_files)
+            else:
+                misc_files = [
+                    f.filename
+                    for f in area_files
+                    if f.filename not in NOISE_FILES and not f.filename.endswith(".md")
+                ]
+                if misc_files:
+                    bullets.append(
+                        "Updates supporting implementation files that back the main behavior change in this PR."
+                    )
+                    bullets.append(
+                        f"Supporting files: {', '.join(f'`{p}`' for p in _dedupe(misc_files)[:5])}."
+                    )
 
         if bullets:
-            sections.append((AREA_TITLES[area], bullets))
+            sections.append((section_title, bullets))
 
     if not sections:
         sections.append(
-            ("Implementation details", ["Updates implementation files in this PR scope."])
+            ("Implementation details", ["Updates supporting implementation in this PR scope."])
         )
 
     return sections
@@ -914,6 +1493,7 @@ def _is_listing_bullet(bullet: str) -> bool:
         "ci files touched:",
         "primary wiring file:",
         "supporting files:",
+        "files touched:",
         "updates scenario build registration",
         "wires additional validator/injection configs",
     )
@@ -937,6 +1517,220 @@ def _compact_sections(
         if len(compacted) >= max_sections:
             break
     return compacted
+
+
+def _checkpoint_source(title: str, bullets: list[str]) -> str:
+    return f"{title}\n" + "\n".join(bullets)
+
+
+def _checkpoint_category(title: str, bullets: list[str]) -> tuple[str, str]:
+    text = _checkpoint_source(title, bullets).lower()
+    if "mission-planner" in text or (
+        "geometry" in text and ("param" in text or "constant" in text)
+    ):
+        if "gen2" in text and ("seating" in text or "contact" in text):
+            checkpoint = "params match the updated Gen2 seating/contact assumptions."
+        elif "gen2" in text:
+            checkpoint = "params match the updated Gen2 assumptions."
+        else:
+            checkpoint = "params match the updated geometry assumptions."
+        return "Geometry params", checkpoint
+    if "auto-kiosk" in text or "state-machine" in text:
+        return "Auto-kiosk state flow", "commands and transitions match the updated progression."
+    if "physics" in text or "contact" in text or "handedness" in text:
+        if "tether" in text or "handed" in text:
+            return (
+                "Physics/contact",
+                "logic handles the expected tether-guide handedness branches.",
+            )
+        return "Physics/contact", "behavior matches the updated assumptions."
+    if "ci" in text or "workflow dispatch" in text or "test-plan" in text:
+        return "CI selectors", "selectors include the intended scenario/test plan."
+    if "runner" in text or "workflow" in text or "simulation" in text or "mock" in text:
+        label = "Mission-runner wiring" if "mission" in text else "Runner/sim wiring"
+        if "graph" in text or "mil" in text:
+            return label, "runner/graph setup matches the simulation path."
+        return label, "runner/simulation wiring reaches the updated flow."
+    if "test" in text or "assert" in text:
+        return "Tests/assertions", "assertions cover the changed branches."
+    if "scenario" in text or "mission progression" in text:
+        return "Scenario flow", "flow exercises the intended mission steps."
+    if "routing" in text or "bridge" in text:
+        return "Routing", "bridge classification sends traffic to the intended path."
+    if "validator" in text or "guardrail" in text:
+        return "Validators", "rules cover the updated flow constraints."
+    if "injection" in text or "redirection" in text or "redirect" in text:
+        return "Injection", "redirects map simulated topics to runtime identifiers."
+    if "message" in text or "topic" in text or "identifier" in text:
+        return "Message contracts", "contracts align across touched components."
+    if "build" in text or "dependency" in text or "compile" in text:
+        return "Build", "dependency wiring includes the touched code paths."
+    if "config" in text or "param" in text or "domain" in text:
+        return "Config", "runtime planning matches the intended domain setup."
+    if "docs" in text or "reviewer-facing" in text:
+        return "Docs", "reviewer docs match the changed behavior."
+    return "", "Review the changed behavior in this section."
+
+
+def _semantic_review_step(bullet: str) -> str:
+    label, _ = _checkpoint_category("", [bullet])
+    return label
+
+
+def _route_step_text(label: str, fallback: str) -> str:
+    route_steps = {
+        "Geometry params": "Start with geometry/params changes.",
+        "Auto-kiosk state flow": "Review auto-kiosk command/state transitions.",
+        "Mission-runner wiring": "Check mission-runner wiring.",
+        "Runner/sim wiring": "Check runner/simulation wiring.",
+        "Physics/contact": "Check physics/contact behavior.",
+        "CI selectors": "Review CI selector wiring.",
+        "Tests/assertions": "Review tests/assertions.",
+        "Scenario flow": "Check scenario flow.",
+        "Routing": "Review routing changes.",
+        "Validators": "Check validator rules.",
+        "Injection": "Review injection redirects.",
+        "Message contracts": "Check message/topic contracts.",
+        "Build": "Confirm build/dependency wiring.",
+        "Config": "Check config/runtime setup.",
+        "Docs": "Review docs/context updates.",
+    }
+    return route_steps.get(label, _ensure_sentence(_readable_section_title(fallback)))
+
+
+def _format_checkpoint(label: str, checkpoint: str) -> str:
+    display_labels = {
+        "Geometry params": "Geometry",
+        "Auto-kiosk state flow": "Auto-kiosk flow",
+        "Mission-runner wiring": "Mission wiring",
+        "Runner/sim wiring": "Simulation wiring",
+    }
+    display_label = display_labels.get(label, label or "Review")
+    return f"- **{display_label}**: {checkpoint}"
+
+
+def _single_section_review_steps(bullets: list[str]) -> list[str]:
+    steps: list[str] = []
+    for bullet in bullets:
+        step = _semantic_review_step(bullet)
+        if step and step not in steps:
+            steps.append(step)
+        if len(steps) >= 3:
+            break
+    return steps
+
+
+def _single_section_checkpoints(bullets: list[str]) -> list[str]:
+    checkpoints: list[str] = []
+    used_labels: set[str] = set()
+    for bullet in bullets:
+        if _is_listing_bullet(bullet):
+            continue
+        label, checkpoint = _checkpoint_category("", [bullet])
+        if not label or label in used_labels:
+            continue
+        checkpoints.append(_format_checkpoint(label, checkpoint))
+        used_labels.add(label)
+        if len(checkpoints) >= 3:
+            break
+    return checkpoints
+
+
+def _has_specific_verification_context(verification_block: str) -> bool:
+    cleaned = _strip_comments(verification_block).strip().lower()
+    if not cleaned or cleaned == DEFAULT_VERIFICATION.lower():
+        return False
+    return "[x]" in cleaned or "```" in verification_block or "http" in cleaned
+
+
+def _verification_checkpoint(verification_block: str) -> str:
+    cleaned = _strip_comments(verification_block).strip().lower()
+    if "mil" in cleaned and "left" in cleaned and "right" in cleaned and "tether" in cleaned:
+        return _format_checkpoint(
+            "MIL evidence",
+            "left- and right-handed cases cover both tether-guide cases.",
+        )
+    if "mil" in cleaned and ("left" in cleaned or "right" in cleaned or "hand" in cleaned):
+        return _format_checkpoint("MIL evidence", "covers the relevant handedness case.")
+    if "mil" in cleaned:
+        return _format_checkpoint("MIL evidence", "is linked in Verification.")
+    return _format_checkpoint("Verification", "evidence is linked below.")
+
+
+def _is_high_value_verification_checkpoint(checkpoint: str) -> bool:
+    lowered = checkpoint.lower()
+    return "mil evidence" in lowered and (
+        "left- and right-handed" in lowered or "handedness" in lowered
+    )
+
+
+def _build_reviewer_map(
+    sections: list[tuple[str, list[str]]],
+    *,
+    verification_block: str,
+    tiny: bool,
+) -> str:
+    if tiny:
+        return ""
+
+    semantic_sections = [(title, bullets) for title, bullets in sections if bullets]
+    total_bullets = sum(len(bullets) for _, bullets in semantic_sections)
+    if not semantic_sections or (len(semantic_sections) == 1 and total_bullets <= 1):
+        return ""
+
+    lines = [
+        "### Map for Reviewers",
+        "",
+        "**Suggested route**:",
+    ]
+    if len(semantic_sections) == 1:
+        _, bullets = semantic_sections[0]
+        review_steps = _single_section_review_steps(bullets)
+        if len(review_steps) >= 2:
+            for index, step in enumerate(review_steps, start=1):
+                lines.append(f"{index}. {_route_step_text(step, step)}")
+        else:
+            title, bullets = semantic_sections[0]
+            label, _ = _checkpoint_category(title, bullets)
+            lines.append(f"1. {_route_step_text(label, title)}")
+    else:
+        used_steps: set[str] = set()
+        for title, bullets in semantic_sections:
+            label, _ = _checkpoint_category(title, bullets)
+            step = label or title
+            if step in used_steps:
+                continue
+            lines.append(f"{len(used_steps) + 1}. {_route_step_text(label, title)}")
+            used_steps.add(step)
+            if len(used_steps) >= 3:
+                break
+
+    checkpoints: list[str] = []
+    if len(semantic_sections) == 1:
+        checkpoints = _single_section_checkpoints(semantic_sections[0][1])
+        if not checkpoints:
+            _, bullets = semantic_sections[0]
+            label, checkpoint = _checkpoint_category("", bullets)
+            checkpoints.append(_format_checkpoint(label, checkpoint))
+    else:
+        used_checkpoints: set[str] = set()
+        for title, bullets in semantic_sections:
+            label, checkpoint = _checkpoint_category(title, bullets)
+            if label in used_checkpoints:
+                continue
+            checkpoints.append(_format_checkpoint(label, checkpoint))
+            used_checkpoints.add(label)
+            if len(checkpoints) >= 3:
+                break
+    if _has_specific_verification_context(verification_block):
+        verification_checkpoint = _verification_checkpoint(verification_block)
+        if len(checkpoints) < 3 or _is_high_value_verification_checkpoint(
+            verification_checkpoint
+        ):
+            checkpoints.append(verification_checkpoint)
+    lines.extend(["", "**Key checkpoints**:"])
+    lines.extend(checkpoints[:4])
+    return "\n".join(lines)
 
 
 def _ensure_sentence(text: str) -> str:
@@ -982,11 +1776,11 @@ def _build_bulleted_description(
 ) -> str:
     lines = [f"This PR {_humanize_title(pr.title)}. In particular:", ""]
     for title, bullets in sections:
-        lines.append(f"- {title}")
+        lines.append(f"- {_formatted_section_title(title)}")
         lines.extend(f"  - {bullet}" for bullet in bullets)
 
     if include_snippets and snippets:
-        lines.append("- Illustrative snippets")
+        lines.append("- **Illustrative snippets**")
         for snippet in snippets:
             lines.append(f"  - `{snippet.label}`")
             lines.append(f"    ```{snippet.language}")
@@ -1010,11 +1804,11 @@ def _build_hybrid_description(
         "",
     ]
     for title, bullets in sections:
-        lines.append(f"- {title}")
+        lines.append(f"- {_formatted_section_title(title)}")
         lines.extend(f"  - {bullet}" for bullet in bullets)
 
     if include_snippets and snippets:
-        lines.append("- Illustrative snippets")
+        lines.append("- **Illustrative snippets**")
         for snippet in snippets:
             lines.append(f"  - `{snippet.label}`")
             lines.append(f"    ```{snippet.language}")
@@ -1028,11 +1822,13 @@ def _build_description_of_change(
     repo: str,
     pr: PullRequestInfo,
     *,
+    verification_block: str,
     description_style: str,
     include_snippets: bool,
     max_snippets: int,
     snippet_lines: int,
     compact: bool,
+    tiny: bool,
     max_sections: int,
     max_bullets_per_section: int,
 ) -> str:
@@ -1060,27 +1856,35 @@ def _build_description_of_change(
         )
 
     if description_style == "bullets":
-        return _build_bulleted_description(
+        description = _build_bulleted_description(
+            pr,
+            sections,
+            include_snippets=include_snippets,
+            snippets=snippets,
+        )
+    elif description_style == "hybrid":
+        description = _build_hybrid_description(
+            pr,
+            sections,
+            include_snippets=include_snippets,
+            snippets=snippets,
+        )
+    else:
+        description = _build_prose_description(
             pr,
             sections,
             include_snippets=include_snippets,
             snippets=snippets,
         )
 
-    if description_style == "hybrid":
-        return _build_hybrid_description(
-            pr,
-            sections,
-            include_snippets=include_snippets,
-            snippets=snippets,
-        )
-
-    return _build_prose_description(
-        pr,
+    reviewer_map = _build_reviewer_map(
         sections,
-        include_snippets=include_snippets,
-        snippets=snippets,
+        verification_block=verification_block,
+        tiny=tiny,
     )
+    if reviewer_map:
+        description = f"{description}\n\n{reviewer_map}"
+    return description
 
 
 def _format_context_link(context_link: str | None) -> str:
@@ -1107,23 +1911,26 @@ def _build_pr_body(
     max_snippets: int,
     snippet_lines: int,
     compact: bool,
+    tiny: bool,
     max_sections: int,
     max_bullets_per_section: int,
 ) -> str:
     reason_text = reason_override.strip() if reason_override else style.reason_text.strip()
     context_link_text = _format_context_link(context_link)
+    verification_block = style.verification_block.strip()
     description_of_change = _build_description_of_change(
         repo=repo,
         pr=pr,
+        verification_block=verification_block,
         description_style=description_style,
         include_snippets=include_snippets,
         max_snippets=max_snippets,
         snippet_lines=snippet_lines,
         compact=compact,
+        tiny=tiny,
         max_sections=max_sections,
         max_bullets_per_section=max_bullets_per_section,
     )
-    verification_block = style.verification_block.strip()
     include_verification_comment = "<!--" not in verification_block
 
     lines = [
@@ -1324,6 +2131,7 @@ def main(argv: list[str]) -> int:
             max_snippets=max(0, args.max_snippets),
             snippet_lines=max(2, args.snippet_lines),
             compact=not args.detailed,
+            tiny=args.tiny,
             max_sections=max_sections,
             max_bullets_per_section=max_sub_bullets,
         )
