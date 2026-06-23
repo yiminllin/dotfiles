@@ -9,6 +9,10 @@ Coordinate Jira/GitHub/project lifecycle work across OpenCode, branches,
 worktrees, PRs, and git-spice stacks. Own diagnosis and sequencing; delegate
 concrete Jira/PR/stack/review actions to existing owner skills.
 
+For nested/stacked branches, prefer `git-spice` (`gs`) as the stack topology
+interface. Observe stack position/order when it affects lifecycle state, then
+queue confirmed track/reparent/restack/submit work for `stacked-pr-workflow`.
+
 Principle: **observe automatically, recommend explicitly, write only after
 confirmation**. Source truth is `opencode/.config/opencode/`; runtime config is
 usually `~/.config/opencode/` and needs stow/reload plus OpenCode restart.
@@ -45,6 +49,8 @@ Do not use for:
   plugin/MCP config unless the user confirms that exact action.
 - Destructive branch deletion, PR close/merge, Jira Done/Blocked/closed moves, and
   broad stack reparenting need separate confirmation after target/consequence.
+- `git-spice` stack mutations such as track, reparent, restack, or submit are
+  branch topology actions: recommend explicitly and delegate only after confirmation.
 - Delegate confirmed writes/actions; do not duplicate owner-skill workflows.
 - Treat local project state as memory, not authority. Reconcile against git,
   GitHub, and Jira before recommending writes.
@@ -65,8 +71,8 @@ write proposals, and last observed summary.
 
 ## Workflow
 
-1. Identify anchors: repo/worktree, branch, Jira key, PR number/URL, stack
-   position, active plan, and desired outcome.
+1. Identify anchors: repo/worktree, branch, Jira key, PR number/URL,
+   `git-spice` stack position/order, active plan, and desired outcome.
 2. Build a read-only packet when available:
    `python3 opencode/.config/opencode/scripts/opencode_project_workflow_packet.py packet --repo . --format markdown`.
    Add `--pivot` for pivot/reconsolidation. If a read would cross auth/network,
@@ -120,7 +126,7 @@ Use shadow mode first. Queue only concrete write/action proposals in these kinds
 
 - Jira status move, comment, description update, or link update
 - PR body refresh
-- stack submit/restack or worktree action
+- `git-spice` track/reparent/restack/submit or worktree action
 - review reply or resolution
 
 All queued items require explicit confirmation. Queue/reconciliation schema:
@@ -152,7 +158,8 @@ approval as permission to write.
 ## Delegation Map
 
 - Jira status move/comment/description/link update: `jira-ticket`
-- Stack/worktree branch topology, tracking, restack, submit: `stacked-pr-workflow`
+- Stack/worktree branch topology, `git-spice` tracking, reparenting, restack,
+  submit: `stacked-pr-workflow`
 - Public PR body/Jira-link drafting: `pr-description-chain-writer`
 - Existing PR review comments or bot feedback: `pr-address-comments`
 - Private human review order, local comments, or Diffview guide: `pr-human-review-guide`
@@ -163,7 +170,7 @@ approval as permission to write.
 
 Default response:
 
-1. **Current state** — concise repo/Jira/PR/branch/worktree summary and evidence limits.
+1. **Current state** — concise repo/Jira/PR/branch/worktree/stack summary and evidence limits.
 2. **Recommended next action** — one primary next step and owner skill.
 3. **Pending sync/reconciliation queue** — proposed writes or `empty`.
 4. **Need from you** — only decisions or confirmations required now.
