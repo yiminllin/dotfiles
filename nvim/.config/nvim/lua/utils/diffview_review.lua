@@ -236,6 +236,24 @@ local function origin_repo(ctx)
 	return github_repo_from_url(table.concat(output or {}, "\n"))
 end
 
+local function active_guide_path(ctx)
+	if not active_guide_context or not active_guide_context.path then
+		return nil
+	end
+	if active_guide_context.repo and ctx and ctx.root and normalize_dir(active_guide_context.repo) ~= ctx.root then
+		return nil
+	end
+	return active_guide_context.path
+end
+
+local function review_state_path(ctx)
+	local guide_path = active_guide_path(ctx)
+	if guide_path then
+		return join_path(vim.fn.fnamemodify(guide_path, ":p:h"), "diffview-review.json")
+	end
+	return join_path(ctx.root, "diffview-review.json")
+end
+
 local function repo_context(view)
 	local root = nil
 	local gitdir = nil
@@ -259,11 +277,12 @@ local function repo_context(view)
 		return nil
 	end
 
-	return {
+	local ctx = {
 		root = root,
 		gitdir = gitdir,
-		state_path = join_path(root, "diffview-review.json"),
 	}
+	ctx.state_path = review_state_path(ctx)
+	return ctx
 end
 
 local function file_from_panel(view)
@@ -481,16 +500,6 @@ local function save_state(ctx, state)
 	end
 
 	return review_state.save(ctx, state, notify)
-end
-
-local function active_guide_path(ctx)
-	if not active_guide_context or not active_guide_context.path then
-		return nil
-	end
-	if active_guide_context.repo and ctx and ctx.root and normalize_dir(active_guide_context.repo) ~= ctx.root then
-		return nil
-	end
-	return active_guide_context.path
 end
 
 local function load_active_guide(ctx)
