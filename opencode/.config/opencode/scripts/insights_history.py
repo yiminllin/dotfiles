@@ -183,6 +183,7 @@ BROAD_ROOT_COMMAND_RE = re.compile(
 )
 SUSPICIOUS_TOOL_DURATION_MS = 5 * 60 * 1000
 STALE_TOOL_AGE_MS = 5 * 60 * 1000
+LATENCY_ATTRIBUTION_BUCKETS = 8
 
 DEFAULT_LOOKBACK_DAYS = 30
 DEFAULT_SESSION_EXAMPLES = 12
@@ -321,7 +322,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def safe_json_loads(raw: str | None) -> dict:
+def safe_json_loads(raw: object) -> dict:
+    if isinstance(raw, dict):
+        return raw
     if not raw:
         return {}
     try:
@@ -329,6 +332,68 @@ def safe_json_loads(raw: str | None) -> dict:
     except Exception:
         return {}
     return loaded if isinstance(loaded, dict) else {}
+
+
+def sqlite_table_columns(cur: sqlite3.Cursor, table: str) -> set[str]:
+    rows = cur.execute(f"pragma table_info({table})").fetchall()
+    return {row["name"] for row in rows}
+
+
+def first_string(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def extract_reasoning_effort(value: object) -> str | None:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            normalized = str(key).replace("_", "").replace("-", "").lower()
+            if normalized == "reasoningeffort":
+                found = first_string(nested)
+                if found:
+                    return found
+            if normalized == "reasoning" and isinstance(nested, dict):
+                found = first_string(nested.get("effort"))
+                if found:
+                    return found
+            found = extract_reasoning_effort(nested)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = extract_reasoning_effort(item)
+            if found:
+                return found
+    return None
+
+
+def extract_model_id(value: object) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    for key in ("modelID", "model_id", "model"):
+        found = first_string(value.get(key))
+        if found:
+            return found
+    for nested in value.values():
+        if isinstance(nested, dict):
+            found = extract_model_id(nested)
+            if found:
+                return found
+        elif isinstance(nested, list):
+            for item in nested:
+                found = extract_model_id(item)
+                if found:
+                    return found
+    return None
+
+
+def model_label(model_id: str | None, provider_id: str | None = None) -> str | None:
+    if not model_id:
+        return None
+    if provider_id and not model_id.startswith(f"{provider_id}/"):
+        return f"{provider_id}/{model_id}"
+    return model_id
 
 
 def parse_since_timestamp(raw: str) -> int:
@@ -482,8 +547,14 @@ def print_cache_written(path: str | None) -> None:
 
 
 def fetch_sessions(cur: sqlite3.Cursor, since_ms: int, until_ms: int) -> list[dict]:
+    session_columns = sqlite_table_columns(cur, "session")
+    optional_selects = [
+        "s.agent as session_agent" if "agent" in session_columns else "null as session_agent",
+        "s.data as session_data" if "data" in session_columns else "null as session_data",
+        "s.metadata as session_metadata" if "metadata" in session_columns else "null as session_metadata",
+    ]
     rows = cur.execute(
-        """
+        f"""
     select
       s.id,
       s.title,
@@ -492,6 +563,7 @@ def fetch_sessions(cur: sqlite3.Cursor, since_ms: int, until_ms: int) -> list[di
       s.path,
       s.time_created,
       s.time_updated,
+      {", ".join(optional_selects)},
       p.id as project_id,
       p.worktree as project_worktree
     from session s
@@ -503,7 +575,16 @@ def fetch_sessions(cur: sqlite3.Cursor, since_ms: int, until_ms: int) -> list[di
     """,
         (since_ms, until_ms),
     ).fetchall()
-    return [dict(row) for row in rows]
+    sessions = []
+    for row in rows:
+        session = dict(row)
+        session_data = safe_json_loads(session.pop("session_data", None))
+        session_metadata = safe_json_loads(session.pop("session_metadata", None))
+        session["metadata"] = {**session_data, **session_metadata}
+        session["reasoning_effort"] = extract_reasoning_effort(session["metadata"])
+        session["model_id"] = extract_model_id(session["metadata"])
+        sessions.append(session)
+    return sessions
 
 
 def fetch_session_lookup_rows(cur: sqlite3.Cursor) -> list[dict]:
@@ -716,6 +797,7 @@ def collect_assistant_messages(cur: sqlite3.Cursor, session_ids: list[str]) -> l
           s.path,
           p.worktree as project_worktree,
           m.session_id,
+          m.id as message_id,
           m.time_created as message_time,
           m.data as message_data
         from message m
@@ -732,9 +814,11 @@ def collect_assistant_messages(cur: sqlite3.Cursor, session_ids: list[str]) -> l
             if message.get("role") != "assistant":
                 continue
             tokens = message.get("tokens") if isinstance(message.get("tokens"), dict) else {}
+            model_id = extract_model_id(message)
             messages.append(
                 {
                     "session_id": row["session_id"],
+                    "message_id": row["message_id"],
                     "session_title": row["session_title"],
                     "parent_id": row["parent_id"],
                     "directory": row["directory"],
@@ -742,8 +826,10 @@ def collect_assistant_messages(cur: sqlite3.Cursor, session_ids: list[str]) -> l
                     "project_worktree": row["project_worktree"],
                     "message_time": row["message_time"],
                     "agent": message.get("agent"),
-                    "model_id": message.get("modelID"),
+                    "model_id": model_id,
                     "provider_id": message.get("providerID"),
+                    "model": model_label(model_id, message.get("providerID")),
+                    "reasoning_effort": extract_reasoning_effort(message),
                     "reasoning_tokens": tokens.get("reasoning"),
                 }
             )
@@ -767,6 +853,7 @@ def collect_parts(cur: sqlite3.Cursor, session_ids: list[str]) -> list[dict]:
           s.path,
           p.worktree as project_worktree,
           part.session_id,
+          part.message_id,
           part.time_created,
           part.time_updated,
           part.data as part_data
@@ -784,6 +871,7 @@ def collect_parts(cur: sqlite3.Cursor, session_ids: list[str]) -> list[dict]:
             parts.append(
                 {
                     "session_id": row["session_id"],
+                    "message_id": row["message_id"],
                     "session_title": row["session_title"],
                     "parent_id": row["parent_id"],
                     "directory": row["directory"],
@@ -1010,7 +1098,23 @@ def tool_part_summary(parts: list[dict]) -> tuple[Counter, Counter, list[dict]]:
         tool = data.get("tool") or "unknown-tool"
         state = data.get("state") if isinstance(data.get("state"), dict) else {}
         metadata = state.get("metadata") if isinstance(state.get("metadata"), dict) else {}
+        top_metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
         status = state.get("status") or "unknown-status"
+        input_data = state.get("input") if isinstance(state.get("input"), dict) else {}
+        combined_metadata = {**top_metadata, **metadata}
+        task_session_id = None
+        task_parent_session_id = None
+        if tool == "task":
+            task_session_id = (
+                combined_metadata.get("sessionId")
+                or combined_metadata.get("session_id")
+                or combined_metadata.get("sessionID")
+            )
+            task_parent_session_id = (
+                combined_metadata.get("parentSessionId")
+                or combined_metadata.get("parent_session_id")
+                or combined_metadata.get("parentSessionID")
+            )
         duration_ms = None
         if part.get("time_created") and part.get("time_updated"):
             duration_ms = max(0, part["time_updated"] - part["time_created"])
@@ -1019,9 +1123,18 @@ def tool_part_summary(parts: list[dict]) -> tuple[Counter, Counter, list[dict]]:
             "tool": tool,
             "status": status,
             "duration_ms": duration_ms,
-            "input": state.get("input") if isinstance(state.get("input"), dict) else {},
+            "input": input_data,
+            "metadata": combined_metadata,
             "exit": metadata.get("exit"),
             "output": str(metadata.get("output") or state.get("output") or ""),
+            "task_subagent_type": input_data.get("subagent_type") if tool == "task" else None,
+            "task_description": input_data.get("description") if tool == "task" else None,
+            "task_id": input_data.get("task_id") if tool == "task" else None,
+            "task_command": input_data.get("command") if tool == "task" else None,
+            "task_prompt": input_data.get("prompt") if tool == "task" else None,
+            "task_session_id": task_session_id,
+            "task_parent_session_id": task_parent_session_id,
+            "reasoning_effort": extract_reasoning_effort({"input": input_data, "metadata": combined_metadata}),
         }
         tool_counts[tool] += 1
         status_counts[status] += 1
@@ -1283,6 +1396,164 @@ def model_setting_evidence_line(assistant_messages: list[dict]) -> str:
     )
 
 
+def most_common_label(values: list[str | None]) -> str | None:
+    counts = Counter(value for value in values if value)
+    if not counts:
+        return None
+    return counts.most_common(1)[0][0]
+
+
+def assistant_session_summaries(assistant_messages: list[dict]) -> dict[str, dict]:
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for message in assistant_messages:
+        grouped[message["session_id"]].append(message)
+
+    summaries = {}
+    for session_id, messages in grouped.items():
+        summaries[session_id] = {
+            "agent": most_common_label([message.get("agent") for message in messages]),
+            "model": most_common_label([message.get("model") or message.get("model_id") for message in messages]),
+            "reasoning_effort": most_common_label([message.get("reasoning_effort") for message in messages]),
+            "reasoning_tokens": any(
+                isinstance(message.get("reasoning_tokens"), int) and message["reasoning_tokens"] > 0
+                for message in messages
+            ),
+            "assistant_messages": len(messages),
+        }
+    return summaries
+
+
+def task_descriptor(part: dict, session_by_id: dict[str, dict]) -> str | None:
+    child_session = session_by_id.get(part.get("task_session_id"))
+    for value in (
+        part.get("task_subagent_type"),
+        child_session.get("title") if child_session else None,
+        part.get("task_description"),
+        part.get("task_command"),
+        part.get("task_prompt"),
+    ):
+        text = first_string(value)
+        if text:
+            return shorten(text, 90)
+    return None
+
+
+def attribution_reasoning_label(summary: dict, part: dict, direct_message: dict | None, session: dict | None) -> str:
+    effort = (
+        summary.get("reasoning_effort")
+        or part.get("reasoning_effort")
+        or (direct_message or {}).get("reasoning_effort")
+        or (session or {}).get("reasoning_effort")
+    )
+    if effort:
+        return f"configured effort={effort}"
+    if summary.get("reasoning_tokens") or (
+        direct_message
+        and isinstance(direct_message.get("reasoning_tokens"), int)
+        and direct_message["reasoning_tokens"] > 0
+    ):
+        return "configured effort unknown; reasoning tokens present"
+    if summary.get("assistant_messages") or direct_message:
+        return "configured effort unknown; no reasoning-token evidence"
+    return "unknown"
+
+
+def long_call_attribution_records(
+    tool_parts: list[dict],
+    assistant_messages: list[dict],
+    sessions: list[dict],
+) -> list[dict]:
+    session_by_id = {session["id"]: session for session in sessions}
+    message_by_key = {
+        (message.get("session_id"), message.get("message_id")): message
+        for message in assistant_messages
+        if message.get("message_id")
+    }
+    summaries_by_session = assistant_session_summaries(assistant_messages)
+
+    records = []
+    for part in suspicious_long_tool_parts(tool_parts):
+        session = session_by_id.get(part.get("session_id"))
+        direct_message = message_by_key.get((part.get("session_id"), part.get("message_id")))
+        child_summary = summaries_by_session.get(part.get("task_session_id"), {})
+        current_summary = summaries_by_session.get(part.get("session_id"), {})
+        summary = child_summary if child_summary else current_summary
+
+        descriptor = task_descriptor(part, session_by_id) if part.get("tool") == "task" else None
+        actor = (
+            descriptor
+            or (direct_message or {}).get("agent")
+            or summary.get("agent")
+            or (session or {}).get("session_agent")
+            or (session or {}).get("title")
+            or "unknown"
+        )
+        if part.get("tool") == "task":
+            tool_type = f"task/{descriptor}" if descriptor else "task/unknown"
+        else:
+            tool_type = part.get("tool") or "unknown"
+
+        model = (
+            summary.get("model")
+            or (direct_message or {}).get("model")
+            or model_label((session or {}).get("model_id"))
+            or "unknown"
+        )
+        records.append(
+            {
+                "duration_ms": part.get("duration_ms") or 0,
+                "actor": actor,
+                "tool_type": tool_type,
+                "model": model,
+                "reasoning": attribution_reasoning_label(summary, part, direct_message, session),
+                "session_title": part.get("session_title") or "unknown",
+            }
+        )
+    return records
+
+
+def attribution_bucket_lines(records: list[dict], field: str) -> list[str]:
+    if not records:
+        return []
+
+    buckets: dict[str, dict] = defaultdict(lambda: {"count": 0, "total_ms": 0, "max_ms": 0, "sample": ""})
+    for record in records:
+        label = record.get(field) or "unknown"
+        bucket = buckets[label]
+        bucket["count"] += 1
+        bucket["total_ms"] += record.get("duration_ms") or 0
+        bucket["max_ms"] = max(bucket["max_ms"], record.get("duration_ms") or 0)
+        if not bucket["sample"]:
+            bucket["sample"] = record.get("session_title") or "unknown"
+
+    ranked = sorted(buckets.items(), key=lambda item: (item[1]["total_ms"], item[1]["count"], item[0]), reverse=True)
+    shown = ranked[:LATENCY_ATTRIBUTION_BUCKETS]
+    if "unknown" in buckets and all(label != "unknown" for label, _ in shown):
+        shown = shown[:-1] + [("unknown", buckets["unknown"])] if shown else [("unknown", buckets["unknown"])]
+
+    return [
+        (
+            f"{label}: {bucket['count']} calls, total {duration_label(bucket['total_ms'])}, "
+            f"max {duration_label(bucket['max_ms'])}; sample=`{shorten(bucket['sample'], 70)}`"
+        )
+        for label, bucket in shown
+    ]
+
+
+def attribution_example_lines(records: list[dict], count: int) -> list[str]:
+    if count == 0:
+        return []
+    ranked = sorted(records, key=lambda record: record.get("duration_ms") or 0, reverse=True)
+    return [
+        (
+            f"{duration_label(record.get('duration_ms'))} actor={record['actor']}; "
+            f"tool={record['tool_type']}; model={record['model']}; "
+            f"reasoning={record['reasoning']}; session=`{shorten(record['session_title'], 60)}`"
+        )
+        for record in ranked[:count]
+    ]
+
+
 def print_tool_patterns_report(
     args: argparse.Namespace,
     sessions: list[dict],
@@ -1380,6 +1651,7 @@ def print_latency_report(
     root_followups = collect_followups(root_messages)
     tool_counts, status_counts, tool_parts = tool_part_summary(parts)
     task_tool_count = tool_counts.get("task", 0)
+    attribution_records = long_call_attribution_records(tool_parts, assistant_messages, sessions)
 
     print("Latency and time-sink evidence")
     if args.scope == "worktree":
@@ -1406,6 +1678,11 @@ def print_latency_report(
         "Stuck-pattern diagnostics",
         stuck_pattern_diagnostic_lines(tool_parts, root_messages, root_followups, until_ms),
     )
+    print_list("Long-call buckets by actor/descriptor", attribution_bucket_lines(attribution_records, "actor"))
+    print_list("Long-call buckets by tool/task type", attribution_bucket_lines(attribution_records, "tool_type"))
+    print_list("Long-call buckets by model", attribution_bucket_lines(attribution_records, "model"))
+    print_list("Long-call buckets by reasoning", attribution_bucket_lines(attribution_records, "reasoning"))
+    print_list("Long-call attribution examples", attribution_example_lines(attribution_records, args.followup_examples))
     print_list("Longest tool call examples", tool_duration_lines(tool_parts, args.followup_examples))
     print_list("Long session spans", long_span_lines(sessions, args.long_span_minutes, args.session_examples))
     print_list("Permission/auth stall hints", permission_stall_lines(tool_parts, root_messages, args.followup_examples))

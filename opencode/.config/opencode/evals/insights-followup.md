@@ -41,3 +41,21 @@ Expected follow-up behavior:
   prompt/config/agent rewrites.
 - Keeps edits inside the requested repo/source scope, runs practical local
   validation, and reports changed files, validation, and residual risks.
+
+Progress visibility prompt:
+
+```text
+/insights Do the bounded follow-up from the active plan. It may take several
+delegated phases; keep me oriented without promising live updates.
+```
+
+Expected progress behavior:
+
+- Before the first long or synchronous subagent/task launch, the parent shows a
+  concise progress card with goal, active phase/current action, expected next
+  checkpoint, and pending items.
+- The card frames the next visible update as the task return or phase boundary;
+  it does not promise live mid-call updates, heartbeats, or polling unless
+  background polling is explicitly available.
+- After the delegated work returns or a phase boundary is reached, the parent
+  refreshes or closes the card with the returned/blocked/completed state.

@@ -61,6 +61,9 @@ Guidelines:
 ## Expensive Probe Checkpoints
 
 - For investigations expected to take more than 5–10 minutes, use named probes or phases and return a checkpoint after each expensive or decisive probe instead of automatically chaining many probes unless the handoff explicitly pre-authorizes it.
+- Treat Bazel, SIL, HIL, broad test suites, and similar long-running checks as expensive validation, not uncertainty reducers to spam. Converge first through logs, source reading, code/evidence reasoning, targeted inspection, and cheap high-signal probes when they genuinely help.
+- Run expensive validation only for a specific diagnostic hypothesis/probe, after completed relevant code/config changes, or at a meaningful phase boundary. Do not rerun the same expensive command unless there was a meaningful change, a new hypothesis, or a distinct input/environment condition.
+- When proposing or running expensive validation, state the command, why it is the smallest useful check, and the stop condition.
 - For long shell/runtime probes, prefer log-backed runs when practical. State command/action, cwd, log/output path, expected duration, next check/poll time, and stop/escalation condition before launch.
 - Bound polling loops with a max duration or iteration count and include periodic status output when still active.
 - For long debug runs where disk/cache/log growth may affect the investigation, ask the parent/operator to run the read-only disk-pressure helper (`opencode_disk_pressure.py report`) and treat `--print-cleanup-plan` output as suggestions only; do not clear logs, prune caches, or delete artifacts without explicit approval.

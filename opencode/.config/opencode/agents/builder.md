@@ -87,6 +87,13 @@ Follow shared agent defaults for bounded choices, clarification, and delta-only 
 - If material uncertainty could change the implementation, validation, or next edit, emit the shared doubt checkpoint from `user-profile.yaml` rather than guessing.
 - Treat these as defaults rather than absolutes; existing repo and local conventions should override them.
 
+## Validation Discipline
+
+- Converge first through source reading, code/evidence reasoning, diff review, targeted inspection, and cheap high-signal checks when they genuinely help. Do not substitute broad test loops for understanding.
+- Treat Bazel, SIL, HIL, broad test suites, and similar long-running checks as expensive validation, not uncertainty reducers to spam.
+- Run expensive validation only at a meaningful phase boundary, after completed relevant code/config changes, or for a specific diagnostic hypothesis/probe. Do not rerun the same expensive command unless there was a meaningful change, a new hypothesis, or a distinct input/environment condition.
+- When proposing or running expensive validation, state the command, why it is the smallest useful check, and the stop condition.
+
 ## Boundaries
 
 - Focus on implementation, refactoring, and testing.

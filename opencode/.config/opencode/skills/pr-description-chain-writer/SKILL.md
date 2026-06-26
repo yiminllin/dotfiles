@@ -39,7 +39,20 @@ python3 "$HOME/.config/opencode/scripts/opencode_pr_stack_packet.py" draft --fro
 
 The local mode is read-only, does not require `gh`, uses branch placeholders in the PR Tree until PR numbers exist, and warns when drafts are based only on committed branch diffs because the worktree is dirty.
 
-### 2. Generate draft bodies
+### 2. Lock explicit overrides before drafting, regenerating, or posting
+
+Before running the generator, regenerating text, or posting bodies, capture the user's locked overrides from the request, active plan/artifact, and current conversation. Reuse explicit overrides without asking again; ask only when a required posting decision is missing or conflicts with evidence.
+
+Lock these items when present:
+
+- chain-level `Reason for Change` wording and context links; keep this wording identical across the chain, with PR-specific details only in `Description of Change`
+- requested title tags and title conventions, including `[DNL]`, `[FSW-#####]`, `[Phoenix]`, and explicit capitalization
+- `Criticality of Change` and `Release Notes` checklist checked states for each PR
+- diagram/table preference and any requested description style
+- per-PR emphasis, such as which mechanism, files, reviewer concern, or risk each PR should highlight
+- verification evidence, including exact commands, Baraza/S3/GHA links, result labels, and explicit not-run reasons
+
+### 3. Generate draft bodies
 
 Use the generator script from the loaded skill directory. Set `SKILL_DIR` to that directory when needed; for the stowed global skill this is usually `$HOME/.config/opencode/skills/pr-description-chain-writer`.
 
@@ -69,7 +82,7 @@ Important options:
 - `--detailed`: disable compact mode and keep more of the nested breakdown.
 - `--max-sections <n>` and `--max-sub-bullets <n>`: tune compact output length.
 
-### 3. Review generated content before posting
+### 4. Review generated content before posting
 
 - Read `references/style-notes.md` and keep template order/shape consistent.
 - Do a title preflight before writing or posting:
@@ -95,7 +108,7 @@ Important options:
 - For `Manual Test`, keep it concise: name the Phoenix scenario or workflow, add environment or mode only when it matters, summarize the result briefly, and include links when useful.
 - A verification bullet may be followed by a fenced `bash` command block when the exact command is useful; include command details only when they are real verification evidence.
 
-### 4. Apply generated body to each PR (optional)
+### 5. Apply generated body to each PR (optional)
 
 ```bash
 gh pr edit 48825 --repo ZiplineTeam/FlightSystems --body-file /tmp/pr-chain-bodies/pr_48825.md

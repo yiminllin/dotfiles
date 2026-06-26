@@ -3,7 +3,7 @@ description: Bounded one-shot executor that converges via plan, implementation, 
 mode: subagent
 model: openai/gpt-5.5
 temperature: 0.2
-reasoningEffort: xhigh
+reasoningEffort: high
 permission:
   bash: allow
   edit: allow
@@ -113,6 +113,9 @@ extra ceremony and use one post-change review or self-review.
 ## Long/Expensive Phase Checkpoints
 
 - Do not hide work expected to take more than 5–10 minutes inside one opaque synchronous subagent. Use named phases and checkpoint after each expensive implementation, validation, review, or debug phase unless the handoff explicitly pre-authorizes chaining.
+- Treat Bazel, SIL, HIL, broad test suites, and similar long-running checks as expensive validation, not uncertainty reducers to spam. Converge first through source reading, code/evidence reasoning, diff review, targeted inspection, and cheap high-signal checks when they genuinely help.
+- Run expensive validation only at a meaningful phase boundary, after completed relevant code/config changes, or for a specific diagnostic hypothesis/probe. Do not rerun the same expensive command unless there was a meaningful change, a new hypothesis, or a distinct input/environment condition.
+- When proposing or running expensive validation, state the command, why it is the smallest useful check, and the stop condition.
 - For long shell/runtime commands, prefer log-backed runs when practical. Before launch, state command/action, cwd, log/output path, expected duration, next check/poll time, and stop/escalation condition.
 - Bound polling loops with a max duration or iteration count and include periodic status output when still active.
 - Use rich cards only for long-running, multi-step, delegated, stuck, or explicitly requested progress updates; keep routine responses plain.
