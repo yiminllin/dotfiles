@@ -235,6 +235,7 @@ return {
 		"DiffviewToggleFiles",
 		"DiffviewRefresh",
 		"DiffviewPrOpen",
+		"DiffviewReviewGuide",
 		"DiffviewReviewImportGithubComments",
 		"DiffviewReviewPostGithubComments",
 	},

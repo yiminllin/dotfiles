@@ -25,8 +25,18 @@ vim.keymap.set("n", "<C-S-right>", "<c-w>5>")
 vim.keymap.set("n", "<C-S-up>", "<C-W>+")
 vim.keymap.set("n", "<C-S-down>", "<C-W>-")
 
--- Use Alt+<jk> to go through loclist if exists, or quickfix list
+-- Use Alt+<jk> to go through Diffview review comments, loclist if exists, or quickfix list
+local function nav_diffview_comments_quickfix(direction)
+	local ok, review = pcall(require, "utils.diffview_review")
+	local qf_direction = direction == "next" and 1 or -1
+	return ok and review.navigate_comments_quickfix and review.navigate_comments_quickfix(qf_direction)
+end
+
 local function nav_loc_or_qf_list(direction)
+	if nav_diffview_comments_quickfix(direction) then
+		return
+	end
+
 	local loclist = vim.fn.getloclist(0, { size = 0 })
 	if loclist.size > 0 then
 		pcall(vim.cmd, direction == "next" and "lnext" or "lprev")

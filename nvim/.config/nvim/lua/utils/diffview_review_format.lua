@@ -144,6 +144,59 @@ function M.is_file_level_comment(comment)
 		)
 end
 
+local function is_posted_comment(comment)
+	local sync_status = tostring(comment and comment.sync_status or "")
+	return sync_status == "posted"
+		or sync_status == "exported"
+		or sync_status == "exported-to-github"
+		or (comment and comment.github_posted_at ~= nil)
+		or (comment and comment.github_posted_pr ~= nil)
+		or (comment and comment.github_comment_id ~= nil)
+		or (comment and comment.github_review_id ~= nil)
+end
+
+function M.comment_status_text(comment)
+	local labels = {}
+	local sync_status = tostring(comment and comment.sync_status or "")
+	if is_stale_github_anchor(comment) then
+		table.insert(labels, "stale original anchor")
+	elseif comment and (comment.outdated == true or comment.stale == true) then
+		table.insert(labels, "outdated")
+	end
+
+	if sync_status == "edited-locally" then
+		table.insert(labels, "edited locally")
+	elseif sync_status == "github-unknown-resolution" then
+		table.insert(labels, "unknown resolution")
+	elseif M.is_imported_github_comment(comment) and sync_status == "imported" then
+		table.insert(labels, "imported")
+	elseif is_posted_comment(comment) then
+		table.insert(labels, "posted")
+	elseif sync_status ~= "" then
+		table.insert(labels, sync_status)
+	end
+
+	return table.concat(labels, "; ")
+end
+
+function M.comment_source_label(comment)
+	if M.is_imported_github_comment(comment) then
+		local author = comment.author and tostring(comment.author) ~= "" and (" @" .. comment.author) or ""
+		if comment.sync_status == "edited-locally" then
+			return M.GITHUB_MARKER .. " Local edit" .. author
+		end
+		return M.GITHUB_MARKER .. " GitHub" .. author
+	end
+	if M.is_guide_comment(comment) then
+		if comment.kind == "guide_note" then
+			return M.GUIDE_MARKER .. " Guide"
+		end
+		local severity = M.severity_label(comment.severity)
+		return M.severity_emoji(severity) .. " Guide " .. severity
+	end
+	return "Local decision"
+end
+
 function M.severity_label(value)
 	local severity = type(value) == "string" and vim.trim(value) or ""
 	local key = severity:lower()
@@ -195,24 +248,12 @@ end
 
 local function boxed_comment_header(comment, start_line, end_line)
 	local label = M.line_range_label(start_line, end_line)
-	if M.is_imported_github_comment(comment) then
-		local author = comment.author and (" @" .. comment.author) or ""
-		return " " .. M.GITHUB_MARKER .. author .. " • " .. (M.is_file_level_comment(comment) and "File-level" or label) .. " "
+	local anchor = M.is_file_level_comment(comment) and "File-level" or label
+	local status = M.comment_status_text(comment)
+	if status ~= "" then
+		status = " [" .. status .. "]"
 	end
-	if M.is_guide_comment(comment) then
-		if comment.kind == "guide_note" then
-			return " " .. M.GUIDE_MARKER .. " "
-		end
-		if M.is_file_level_comment(comment) then
-			local severity = M.severity_label(comment.severity)
-			return " " .. M.severity_emoji(severity) .. " • File-level "
-		end
-
-		local severity = M.severity_label(comment.severity)
-		return " " .. M.severity_emoji(severity) .. " • " .. label .. " "
-	end
-
-	return " Review comment • " .. label .. " "
+	return " " .. M.comment_source_label(comment) .. " • " .. anchor .. status .. " "
 end
 
 local function boxed_comment_body(comment)
