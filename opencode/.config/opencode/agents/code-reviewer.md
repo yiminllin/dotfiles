@@ -1,9 +1,9 @@
 ---
 description: Review code and prioritize findings by severity and risk
 mode: subagent
-model: openai/gpt-5.5
+model: openai/gpt-5.5-pro
 temperature: 0.1
-reasoningEffort: xhigh
+reasoningEffort: high
 permission:
   read: allow
   grep: allow

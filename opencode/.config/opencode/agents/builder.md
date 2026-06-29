@@ -3,7 +3,7 @@ description: Implement, refactor, and test code using best programming practices
 mode: subagent
 model: openai/gpt-5.5
 temperature: 0.4
-reasoningEffort: high
+reasoningEffort: medium
 permission:
   bash: allow
   edit: allow

@@ -2,7 +2,7 @@
 description: Updates PLUGINS.md for dotfiles plugin changes
 model: openai/gpt-5.5
 temperature: 0.2
-reasoningEffort: medium
+reasoningEffort: low
 permission:
   bash: allow
   edit: allow
