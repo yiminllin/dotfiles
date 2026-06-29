@@ -21,6 +21,8 @@ coding_style:
     guidance:
       - Do not optimize only for minimum diff.
       - Aim for the cleanest maintainable design that fits the task scope and PR boundary.
+      - Prefer the smallest correct working diff; reuse existing code, local patterns, stdlib/native capabilities, and already-installed dependencies before adding helpers or dependencies.
+      - For bug fixes, inspect relevant callers and flow, then prefer root-cause or shared-path fixes over symptom patches.
       - Do not expand into unrelated architecture cleanup unless explicitly requested.
       - Balance safety, reviewability, local conventions, churn, and user urgency.
   feature_scope:
@@ -28,6 +30,7 @@ coding_style:
     guidance:
       - Do not add new flags, modes, commands, helper scripts, skills, fallback behaviors, report fields, APIs, or extra user-facing surfaces unless explicitly requested or required for correctness.
       - Prefer the smallest user-facing surface that satisfies the request.
+      - Skip unnecessary or speculative work; do not implement just-in-case capability.
       - Clean long-term design means simple, local, maintainable, and functionally correct within scope; not expanded capabilities.
       - If a reusable helper, skill, or tool seems useful, propose it separately unless the current task explicitly asks for it or needs it for correctness.
   tests:
@@ -44,6 +47,7 @@ coding_style:
     guidance:
       - Avoid speculative validation, fallback paths, compatibility branches, custom errors, and defensive checks.
       - Add guardrails only when they protect a real boundary, existing invariant, or observed failure mode.
+      - Never simplify away trust-boundary validation, security, data-loss handling, accessibility, explicitly requested behavior, or necessary validation.
       - Do not remove existing guardrails unless explicitly in scope or redundant with preserved safety/invariant coverage.
       - Prefer documenting assumptions over encoding every hypothetical edge case.
   readability:
@@ -53,7 +57,7 @@ coding_style:
       - Inline simple logic when that improves locality.
       - Order touched code top-down where practical: public or high-level flow first, helpers later, tests last.
       - Trim redundant logs, comments, imports, constants, state, stale names, and dead code introduced by this change or directly modified while implementing it before handoff.
-      - Treat behavior-preserving removal of code, tests, or guardrails introduced by this change as valid progress toward convergence.
+      - Prefer deletion over addition when behavior is preserved; treat behavior-preserving removal as valid progress toward convergence.
   documentation:
     default: diagram_when_prose_insufficient
     guidance:
