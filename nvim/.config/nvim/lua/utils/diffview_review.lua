@@ -1372,23 +1372,36 @@ local function sort_thread_entries(entries)
 	end)
 end
 
-local function comment_threads_for_file(state, file, line_count)
+local function comment_threads_for_file(state, file, line_count, side)
+	side = tostring(side or ""):upper()
+	if side ~= "LEFT" and side ~= "RIGHT" then
+		side = nil
+	end
+
 	local threads = {}
 	local threads_by_key = {}
 	for _, entry in ipairs(sorted_file_comments(state, file, line_count)) do
-		local key = comment_thread_key(entry)
-		local thread = threads_by_key[key]
-		if not thread then
-			thread = {
-				end_line = entry.end_line,
-				entries = {},
-				file_level = review_format.is_file_level_comment(entry.comment),
-				start_line = entry.start_line,
-			}
-			threads_by_key[key] = thread
-			table.insert(threads, thread)
+		local file_level = review_format.is_file_level_comment(entry.comment)
+		local comment_side = tostring(entry.comment.side or ""):upper()
+		if comment_side ~= "LEFT" and comment_side ~= "RIGHT" then
+			comment_side = "RIGHT"
 		end
-		table.insert(thread.entries, entry)
+
+		if not side or file_level or comment_side == side then
+			local key = comment_thread_key(entry)
+			local thread = threads_by_key[key]
+			if not thread then
+				thread = {
+					end_line = entry.end_line,
+					entries = {},
+					file_level = file_level,
+					start_line = entry.start_line,
+				}
+				threads_by_key[key] = thread
+				table.insert(threads, thread)
+			end
+			table.insert(thread.entries, entry)
+		end
 	end
 
 	for _, thread in ipairs(threads) do
@@ -1721,16 +1734,21 @@ local function blank_comment_virt_lines(row_count)
 	return lines
 end
 
+local function review_virtual_rows_extmark(display_line, virt_lines)
+	return display_line <= 1 and 0 or display_line - 1, {
+		virt_lines = virt_lines,
+		virt_lines_above = display_line > 1,
+		priority = 30,
+	}
+end
+
 local function render_comment_spacers(bufnr, spacer_rows_by_line, line_count)
 	for display_line, row_count in pairs(spacer_rows_by_line or {}) do
 		display_line = math.min(math.max(tonumber(display_line) or 1, 1), line_count)
 		row_count = tonumber(row_count) or 0
 		if row_count > 0 then
-			vim.api.nvim_buf_set_extmark(bufnr, NS, display_line - 1, 0, {
-				virt_lines = blank_comment_virt_lines(row_count),
-				virt_lines_above = true,
-				priority = 30,
-			})
+			local lnum, opts = review_virtual_rows_extmark(display_line, blank_comment_virt_lines(row_count))
+			vim.api.nvim_buf_set_extmark(bufnr, NS, lnum, 0, opts)
 		end
 	end
 end
@@ -1776,7 +1794,7 @@ local function merge_spacer_rows(...)
 	return merged
 end
 
-local function comment_spacer_rows_for_file(bufnr, file, state, mode, winid)
+local function comment_spacer_rows_for_file(bufnr, file, state, mode, winid, side)
 	bufnr = bufnr == 0 and vim.api.nvim_get_current_buf() or bufnr
 	if not file or not vim.api.nvim_buf_is_valid(bufnr) then
 		return {}
@@ -1789,7 +1807,7 @@ local function comment_spacer_rows_for_file(bufnr, file, state, mode, winid)
 
 	mode = comment_render_mode(mode)
 	local spacer_rows = {}
-	for _, thread in ipairs(comment_threads_for_file(state, file, line_count)) do
+	for _, thread in ipairs(comment_threads_for_file(state, file, line_count, side)) do
 		if render_thread_in_mode(thread, mode) then
 			local display_line = thread.file_level and file_level_display_line(bufnr, winid, line_count)
 				or thread.start_line
@@ -1799,7 +1817,7 @@ local function comment_spacer_rows_for_file(bufnr, file, state, mode, winid)
 	return spacer_rows
 end
 
-local function refresh_buffer(bufnr, file, state, mode, winid, spacer_rows_by_line)
+local function refresh_buffer(bufnr, file, state, mode, winid, spacer_rows_by_line, side)
 	bufnr = bufnr == 0 and vim.api.nvim_get_current_buf() or bufnr
 	if not file or not vim.api.nvim_buf_is_valid(bufnr) then
 		return
@@ -1821,7 +1839,7 @@ local function refresh_buffer(bufnr, file, state, mode, winid, spacer_rows_by_li
 
 	local comment_boxes = {}
 	local spacer_rows = {}
-	for _, thread in ipairs(comment_threads_for_file(state, file, line_count)) do
+	for _, thread in ipairs(comment_threads_for_file(state, file, line_count, side)) do
 		if render_thread_in_mode(thread, mode) then
 			for _, entry in ipairs(thread.entries) do
 				local hls = review_format.comment_highlights(entry.comment)
@@ -1857,11 +1875,8 @@ local function refresh_buffer(bufnr, file, state, mode, winid, spacer_rows_by_li
 	local display_lines = vim.tbl_keys(comment_boxes)
 	table.sort(display_lines)
 	for _, display_line in ipairs(display_lines) do
-		vim.api.nvim_buf_set_extmark(bufnr, NS, display_line - 1, 0, {
-			virt_lines = comment_boxes[display_line],
-			virt_lines_above = true,
-			priority = 30,
-		})
+		local lnum, opts = review_virtual_rows_extmark(display_line, comment_boxes[display_line])
+		vim.api.nvim_buf_set_extmark(bufnr, NS, lnum, 0, opts)
 	end
 
 	return spacer_rows
@@ -2177,7 +2192,14 @@ function M.refresh_visible()
 		else
 			local file = file_for_buffer(bufnr, ctx, view)
 			if file then
-				table.insert(visible, { bufnr = bufnr, file = file, winid = winid })
+				local entry_file = entry_file_for_buffer(view and view.cur_entry, bufnr)
+				local side = entry_file and (entry_file.symbol == "a" and "LEFT" or "RIGHT") or nil
+				table.insert(visible, {
+					bufnr = bufnr,
+					file = file,
+					side = side,
+					winid = winid,
+				})
 			end
 		end
 	end
@@ -2190,7 +2212,16 @@ function M.refresh_visible()
 		end
 	end
 
-	local normal_comment_item = visible_item_by_bufnr(visible, review_comment_bufnr(visible, view))
+	local left_comment_item = nil
+	local right_comment_item = nil
+	for _, item in ipairs(visible) do
+		if item.side == "LEFT" then
+			left_comment_item = left_comment_item or item
+		elseif item.side == "RIGHT" then
+			right_comment_item = right_comment_item or item
+		end
+	end
+	local normal_comment_item = right_comment_item or visible_item_by_bufnr(visible, review_comment_bufnr(visible, view))
 	local file_level_item, file_level_file = review_file_level_comment_item(visible, view)
 	if not file_level_item then
 		file_level_item = normal_comment_item
@@ -2199,59 +2230,85 @@ function M.refresh_visible()
 
 	local spacer_rows_by_line = {}
 	local rendered_buffers = {}
-	if normal_comment_item and file_level_item and normal_comment_item.bufnr ~= file_level_item.bufnr then
-		local normal_spacers = comment_spacer_rows_for_file(
-			normal_comment_item.bufnr,
-			normal_comment_item.file,
-			state,
-			"exclude_file_level",
-			normal_comment_item.winid
-		)
-		local file_level_spacers = comment_spacer_rows_for_file(
-			file_level_item.bufnr,
-			file_level_file,
-			state,
-			"file_level_only",
-			file_level_item.winid
-		)
+	local render_targets = {}
+	local render_target_by_bufnr = {}
 
-		refresh_buffer(
-			normal_comment_item.bufnr,
-			normal_comment_item.file,
+	local function add_render_target(item, file, mode, side)
+		if not item then
+			return
+		end
+		local target = render_target_by_bufnr[item.bufnr]
+		if not target then
+			target = {
+				file = file or item.file,
+				item = item,
+				mode = mode,
+				side = side,
+			}
+			render_target_by_bufnr[item.bufnr] = target
+			table.insert(render_targets, target)
+			return
+		end
+
+		target.file = file or target.file
+		if target.mode ~= mode then
+			target.mode = "all"
+		end
+		if side and target.side and target.side ~= side then
+			target.side = nil
+			target.all_sides = true
+		elseif side and not target.all_sides then
+			target.side = side
+		end
+	end
+
+	add_render_target(left_comment_item, nil, "exclude_file_level", "LEFT")
+	local normal_comment_side = normal_comment_item and tostring(normal_comment_item.side or ""):upper() or ""
+	if normal_comment_side ~= "LEFT" and normal_comment_side ~= "RIGHT" then
+		normal_comment_side = "RIGHT"
+	end
+	add_render_target(
+		normal_comment_item,
+		nil,
+		"exclude_file_level",
+		normal_comment_side
+	)
+	add_render_target(
+		file_level_item,
+		file_level_file,
+		"file_level_only",
+		file_level_item and file_level_item.side
+	)
+
+	for _, target in ipairs(render_targets) do
+		target.spacers = comment_spacer_rows_for_file(
+			target.item.bufnr,
+			target.file,
 			state,
-			"exclude_file_level",
-			normal_comment_item.winid,
-			file_level_spacers
+			target.mode,
+			target.item.winid,
+			target.side
 		)
+	end
+
+	for _, target in ipairs(render_targets) do
+		local other_spacers = {}
+		for _, other in ipairs(render_targets) do
+			if other ~= target then
+				other_spacers = merge_spacer_rows(other_spacers, other.spacers)
+			end
+		end
 		refresh_buffer(
-			file_level_item.bufnr,
-			file_level_file,
+			target.item.bufnr,
+			target.file,
 			state,
-			"file_level_only",
-			file_level_item.winid,
-			normal_spacers
+			target.mode,
+			target.item.winid,
+			other_spacers,
+			target.side
 		)
-		rendered_buffers[normal_comment_item.bufnr] = true
-		rendered_buffers[file_level_item.bufnr] = true
-		spacer_rows_by_line = merge_spacer_rows(normal_spacers, file_level_spacers)
-	elseif normal_comment_item then
-		spacer_rows_by_line = refresh_buffer(
-			normal_comment_item.bufnr,
-			normal_comment_item.file,
-			state,
-			"all",
-			normal_comment_item.winid
-		) or {}
-		rendered_buffers[normal_comment_item.bufnr] = true
-	elseif file_level_item then
-		spacer_rows_by_line = refresh_buffer(
-			file_level_item.bufnr,
-			file_level_file,
-			state,
-			"file_level_only",
-			file_level_item.winid
-		) or {}
-		rendered_buffers[file_level_item.bufnr] = true
+		rendered_buffers[target.item.bufnr] = true
+		spacer_rows_by_line = merge_spacer_rows(spacer_rows_by_line, target.spacers)
 	end
 
 	for _, item in ipairs(visible) do
@@ -2276,7 +2333,15 @@ function M.refresh_current()
 	end
 
 	local state = load_state_with_guide(ctx)
-	refresh_buffer(0, ctx.file, state, true, vim.api.nvim_get_current_win())
+	refresh_buffer(
+		0,
+		ctx.file,
+		state,
+		true,
+		vim.api.nvim_get_current_win(),
+		nil,
+		side_from_current_buffer(ctx.view)
+	)
 	refresh_winbar(0, ctx.file, state)
 end
 
