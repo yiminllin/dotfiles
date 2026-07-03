@@ -227,6 +227,8 @@ Normal long-running progress example:
 - When a loaded skill bundles scripts/resources, resolve them relative to that skill's directory, for example via an explicit `SKILL_DIR`, rather than hardcoding `.opencode/skills/...`.
 - Load `project-workflow` for `/project-workflow`, Jira/GitHub project start/resume/status/sync/pivot/planning, or active repo/worktree/branch/PR/Jira-key lifecycle context.
 - Sticky routing: route relevant Jira/PR/worktree/review asks through `project-workflow` first; show the pending sync queue and delegate only confirmed items to `jira-ticket`, `stacked-pr-workflow`, `pr-description-chain-writer`, `pr-address-comments`, or `pr-human-review-guide`.
+- Precedence: if a prompt combines Jira, PR body/template/checklist work, stack boundaries, and HIL/CI lifecycle/status, route through `project-workflow` first before leaf skills.
+- Sticky PR-body routing: follow-ups about PR body, template sections, verification, release notes, criticality, or per-PR progress/checklists go to `pr-description-chain-writer` unless they are part of the combined lifecycle case above.
 
 ## Yolo Handoff Contract
 
@@ -293,7 +295,7 @@ Debugging routing precedence:
 6. For a lightweight "what does this error mean?" explanation without a full debugging request, prefer direct explanation or `code-explainer` when code tracing is needed.
 
 - For Jira create/update/move/link/comment tasks, load the `jira-ticket` skill before proceeding.
-- For requests to write, draft, or update a PR description, load the `pr-description-chain-writer` skill before proceeding so the output follows the repository's expected PR-body shape.
+- For requests to write, draft, or update a PR description/body/template section, verification section, release notes, criticality checklist, or per-PR checklist/progress note, load the `pr-description-chain-writer` skill before proceeding so the output follows the repository's expected PR-body shape. Keep simple one-off PR-body edits direct to that skill; do not make them project-workflow-heavy unless lifecycle context is combined.
 - For requests to address existing PR review comments or bot feedback, load the `pr-address-comments` skill before proceeding.
 - For requests to manage stacked branches, PR boundaries, restacks, or stack submissions, load the `stacked-pr-workflow` skill before proceeding.
 - For requests to review a PR for a human reviewer, suggest file/read order, produce curiosity comments, or generate PR-number-based review questions/comments, load the `pr-human-review-guide` skill before proceeding.

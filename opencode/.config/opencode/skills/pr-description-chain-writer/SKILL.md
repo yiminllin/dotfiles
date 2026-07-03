@@ -1,6 +1,6 @@
 ---
 name: pr-description-chain-writer
-description: Generate public, reviewer-friendly PR descriptions for chained/stacked GitHub PRs in FlightSystems by reading each PR's commits/files and reusing a style reference PR body. Use when asked to draft PR descriptions for a PR chain, draft local git-spice stack PR bodies before PRs exist, replicate a previous chain's format, or bulk-generate chain-aware PR bodies from PR numbers.
+description: Generate or update public, reviewer-friendly PR descriptions/bodies/templates for chained/stacked GitHub PRs in FlightSystems by reading each PR's commits/files and reusing a style reference PR body. Use when asked to draft PR descriptions for a PR chain, draft local git-spice stack PR bodies before PRs exist, replicate the same style as a previous chain, update PR body sections such as Verification, Criticality of Change, Release Notes, or per-PR checklist/progress items, or bulk-generate chain-aware PR bodies from PR numbers.
 ---
 
 # Pr Description Chain Writer
@@ -8,6 +8,8 @@ description: Generate public, reviewer-friendly PR descriptions for chained/stac
 ## Overview
 
 Generate each public GitHub PR body for an ordered PR chain or a local git-spice stack whose PRs may not exist yet. The body is authored as the user's reviewer-facing PR description, not a private inspection guide. Reuse section structure and tone from a style reference PR while honoring global `coding_style.pr_descriptions` from `user-profile.yaml`: stacked PRs should keep `Reason for Change` identical across the chain, place PR-specific details in `Description of Change`, use diagrams/tables/before-after comparisons when they improve clarity, keep the shape flexible rather than forced, prefer exact verification commands/links over vague CI claims, and include `PR Tree` by default for multi-PR stacks.
+
+Use this skill for public PR body follow-ups that say body, description, template, same style, update a PR section, verification section, criticality, release notes, or per-PR checklist/progress. Do not use it for generic PR review, review-comment triage, or private Diffview/human-review guides.
 
 ## Mode and Shared PR context packet
 
@@ -85,6 +87,7 @@ Important options:
 ### 4. Review generated content before posting
 
 - Read `references/style-notes.md` and keep template order/shape consistent.
+- For section-update requests, update only the requested body/template section when possible while preserving surrounding PR body wording, checklist shape, and style-reference tone.
 - Do a title preflight before writing or posting:
   - Preserve any capitalization the user explicitly requested.
   - When drafting from commits, preserve commit title capitalization/style unless the user asks for a rewrite.

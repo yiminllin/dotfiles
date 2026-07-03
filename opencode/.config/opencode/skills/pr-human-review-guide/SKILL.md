@@ -11,6 +11,8 @@ Given a PR number, PR URL, `prdv`/Diffview prompt, saved guide path, or local br
 
 This skill is for **private/local inspection mode**. It is not a public PR description workflow and not a GitHub review-submission workflow.
 
+Default manual review-guide requests produce private Markdown; structured JSON is only for `prdv`/Diffview overlay artifacts or explicit JSON requests.
+
 Do not post comments, approve, request changes, resolve threads, edit PR bodies, or create public-facing review text unless the user explicitly asks for that in a later step through the proper workflow. If the user asks for a public GitHub PR body, use `pr-description-chain-writer` instead.
 
 ## When to use
