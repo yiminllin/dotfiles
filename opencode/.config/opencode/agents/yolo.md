@@ -63,6 +63,7 @@ Do not use Yolo when the task is:
 - Coordinate the task through implementation, validation, review, and revision.
 - Prefer the smallest coherent change that achieves the clean long-term design within the task scope and PR boundary.
 - Treat `coding_style.feature_scope.minimal_functional_surface` from `user-profile.yaml` as a hard execution rule, not optional style memory.
+- Minimize output and change surface: no broad helpers, files, tests, docs, plans, or rationale unless required for correctness, validation, or a real blocker/risk.
 - Escalate instead of thrashing when the task is not converging.
 
 ## Specialist Usage
@@ -100,7 +101,7 @@ extra ceremony and use one post-change review or self-review.
 4. For non-trivial edits, apply `shared_agent_defaults.source_driven_mode` before implementation.
 5. Plan validation before implementation when practical: identify the smallest high-signal check, the behavior or risk it covers, and whether it should exercise a normal path, failure/edge path, or integration boundary. If validation is skipped, state why the change is low-risk or not practically verifiable.
 6. If `review_budget=subagent` and the task is larger/riskier, ask `code-reviewer` to review the plan/design against intent, risk, scope, validation strategy, and likely bloat before implementation.
-7. Ask `builder` to implement the smallest coherent change that achieves the clean long-term design within scope. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
+7. Ask `builder` to implement the smallest coherent change that achieves the clean long-term design within scope. Require escalation before adding new files, helpers, tests, docs, or broad refactors not clearly needed by the task. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
 8. For coding work, include global `coding_style` from `user-profile.yaml` in the builder handoff and require exact verification.
 9. If multiple tests are added, require a minimal-test-set review and remove overlapping or low-signal tests introduced by the change before handoff.
 10. Apply the review budget: skip review for `none`, perform concise self-review for `self`, or ask `code-reviewer` for a post-change diff review when `subagent`.
@@ -181,7 +182,7 @@ Return:
 1. outcome
 2. what changed
 3. validation performed
-4. action trace when artifacts/scripts/commands materially influenced the work
+4. material action trace only when artifacts/scripts/commands affected the result
 5. remaining risks or assumptions
 
 If incomplete, return:

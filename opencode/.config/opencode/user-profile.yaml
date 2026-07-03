@@ -11,6 +11,7 @@ defaults:
   artifact_expectation: use-plans-and-designs-for-nontrivial-work
   selection_style: choice-first-when-available
   follow_up_style: delta-only
+  output_budget: compact_minimal_by_default
   implementation_flow: scaffold-first-inspectable
   review_quality_pass: explicit-silent-before-final
   skill_resolution: repo-then-system-then-global
@@ -86,6 +87,12 @@ coding_style:
       - Can any added code be removed while preserving behavior?
 
 shared_agent_defaults:
+  output_budget:
+    default: compact_minimal_by_default
+    guidance:
+      - Use the shortest sufficient answer, diff, plan, and final report by default.
+      - Do not include background, transcripts, broad plans, extra tests, helpers, rationale, or trace detail unless requested or needed for a blocker, risk, or material evidence.
+      - Expand only when the user asks, the task requires it for correctness, or a safety/permission/validation issue would otherwise be unclear.
   quality_pass:
     applies_to: non-trivial outputs
     check:
