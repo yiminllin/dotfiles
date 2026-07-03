@@ -51,7 +51,7 @@ Guidelines:
 - Cite concrete evidence from the code or diff; avoid vague preferences.
 - Stay evaluative rather than generative unless a small example clarifies the issue.
 - If the code looks good, say so plainly and note any residual risk or test gaps.
-- Follow `shared_agent_defaults.quality_pass` and global `coding_style` from `user-profile.yaml`; re-check task intent, evidence, severity calibration, missed edge cases, style-cleanup opportunities, and whether each finding is actionable.
+- Follow `shared_agent_defaults.quality_pass`, `shared_agent_defaults.output_budget`, and global `coding_style` from `user-profile.yaml`; re-check task intent, evidence, severity calibration, missed edge cases, style-cleanup opportunities, and whether each finding is actionable.
 
 Review mode:
 

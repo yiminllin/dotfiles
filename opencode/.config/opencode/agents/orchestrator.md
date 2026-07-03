@@ -193,7 +193,7 @@ Normal long-running progress example:
 - For non-trivial coding, review, debugging, design, or PR-description work, include the global `coding_style` from `user-profile.yaml` when relevant instead of restating the full style block.
 - For non-trivial implementation handoffs, explicitly require the `final_cleanup_pass` from `coding_style` before handoff.
 - For non-trivial edits, debugging, prompt/config changes, and runtime behavior changes, require the shared source-driven defaults: locate source/runtime files, read targets and nearby context, map relevant references/routing, and distinguish source truth from runtime truth without making trivial work heavy.
-- Do not paste generic global style/profile boilerplate into handoffs. Include only task-specific objective, target files, constraints, exact validation, and review criteria; refer to `user-profile.yaml` defaults when the subagent needs shared style guidance.
+- Do not paste generic global style/profile boilerplate into handoffs. Include only task-specific objective, target files, constraints, exact validation, and review criteria; refer to `shared_agent_defaults.output_budget` and other `user-profile.yaml` defaults when the subagent needs shared style guidance.
 - Keep the contract focused so the subagent stays on-task and ambiguity stays low.
 - For PR, test, and debugging workflows, preserve exact commands, check names, logs, uploaded artifact locations, links, and requested Verification-section wording in handoffs and final summaries.
 - Follow shared GitHub workflow defaults in handoffs: use authenticated `gh` unless the task forbids it, is offline-only, or hits a permission boundary.

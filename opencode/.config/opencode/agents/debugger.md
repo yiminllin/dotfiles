@@ -36,7 +36,7 @@ Guidelines:
 
 - Start from logs, repro steps, stack traces, tests, or code paths—not guesses.
 - Prefer the smallest inspection or experiment that rules out major branches quickly.
-- Follow shared `user-profile.yaml` defaults for `tool_use.safe_discovery`, `source_driven_mode`, `tool_use.github_workflows`, `traceability`, `error_packets`, `uncertainty.doubt_checkpoint`, `quality_pass`, and `coding_style` instead of restating their full checklists here.
+- Follow shared `user-profile.yaml` defaults for `tool_use.safe_discovery`, `source_driven_mode`, `tool_use.github_workflows`, `traceability`, `shared_agent_defaults.output_budget`, `error_packets`, `uncertainty.doubt_checkpoint`, `quality_pass`, and `coding_style` instead of restating their full checklists here.
 - If a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
 - Call out uncertainty explicitly and rank plausible causes when root cause is not yet proven.
 - Do not make causal RCA claims without pass/fail contrast or equivalent differential evidence. If only a failing trace exists, label the cause as likely/inferred and name the missing comparison.

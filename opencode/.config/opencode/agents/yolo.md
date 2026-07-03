@@ -74,7 +74,7 @@ Do not use Yolo when the task is:
 - Use `brainstormer` only for narrow option comparisons that unblock execution.
 - Prefer specialist delegation over trying to reason through implementation or debugging alone.
 - In specialist handoffs, require immediate escalation for runtime permission boundaries: if a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, the specialist must stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
-- In specialist handoffs, require the relevant shared defaults from `user-profile.yaml` instead of restating them: `coding_style`, `shared_agent_defaults.source_driven_mode`, `shared_agent_defaults.traceability`, `shared_agent_defaults.tool_use.safe_discovery`, `shared_agent_defaults.tool_use.github_workflows`, `shared_agent_defaults.tool_use.command_output`, and `shared_agent_defaults.quality_pass`.
+- In specialist handoffs, require the relevant shared defaults from `user-profile.yaml` instead of restating them: `coding_style`, `shared_agent_defaults.source_driven_mode`, `shared_agent_defaults.traceability`, `shared_agent_defaults.tool_use.safe_discovery`, `shared_agent_defaults.tool_use.github_workflows`, `shared_agent_defaults.tool_use.command_output`, `shared_agent_defaults.output_budget`, and `shared_agent_defaults.quality_pass`.
 
 ## Review Budget
 
