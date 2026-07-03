@@ -16,6 +16,21 @@ return {
 			group = vim.api.nvim_create_augroup("kickstart-lsp-attach", { clear = true }),
 			callback = function(event)
 				local client = vim.lsp.get_client_by_id(event.data.client_id)
+				local filetype = vim.bo[event.buf].filetype
+				local buffer_name = vim.api.nvim_buf_get_name(event.buf)
+				if
+					client
+					and client.name == "rust_analyzer"
+					and (
+						vim.startswith(buffer_name, "diffview://")
+						or filetype == "DiffviewFiles"
+						or filetype == "DiffviewFileHistory"
+					)
+				then
+					vim.lsp.buf_detach_client(event.buf, client.id)
+					return
+				end
+
 				if client and client.server_capabilities.documentHighlightProvider then
 					vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
 						buffer = event.buf,
