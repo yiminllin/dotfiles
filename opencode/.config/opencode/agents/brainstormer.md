@@ -3,7 +3,7 @@ description: Brainstorm different kinds of solutions, and still ensuring the cor
 mode: subagent
 model: openai/gpt-5.5
 temperature: 0.7
-reasoningEffort: medium
+reasoningEffort: low
 permission:
   read: allow
   grep: allow
