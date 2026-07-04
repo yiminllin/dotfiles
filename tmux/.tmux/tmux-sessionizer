@@ -10,11 +10,9 @@ fi
 workspace=$1
 workspace_name=$(basename "$workspace" | tr . _)
 
-code_window=" code"
-git_window=" git"
-run_window="󰑐 run"
 shell_window=" shell"
 agent_window="󰚩 agent"
+code_window=" code"
 
 create_window() {
     local name=$1
@@ -28,15 +26,11 @@ create_window() {
 }
 
 if ! tmux has-session -t="$workspace_name" 2>/dev/null; then
-    tmux new-session -ds "$workspace_name" -n "$code_window" -c "$workspace"
-    tmux send-keys -t "$workspace_name:$code_window" 'nvim' C-m
-
-    create_window "$git_window" 'lazygit'
-    create_window "$run_window"
-    create_window "$shell_window"
+    tmux new-session -ds "$workspace_name" -n "$shell_window" -c "$workspace"
     create_window "$agent_window" 'opencode'
+    create_window "$code_window"
 
-    tmux select-window -t "$workspace_name:$code_window"
+    tmux select-window -t "$workspace_name:$agent_window"
 fi
 
 if [[ -n ${TMUX:-} ]]; then
