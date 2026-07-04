@@ -101,6 +101,7 @@ local function pr_guide_context(root, pr, diffview_rev_arg, base_oid, head_oid)
 		context_kind = "pr",
 		diffview_rev_arg = diffview_rev_arg,
 		head_oid = head_oid,
+		markdown_path = ("%s/notes/projects/%s/pr-reviews/%s/guide.md"):format(vim.env.HOME or vim.fn.expand("~"), repo_key, pr_number),
 		owner = owner,
 		path = ("%s/notes/projects/%s/pr-reviews/%s/guide.json"):format(vim.env.HOME or vim.fn.expand("~"), repo_key, pr_number),
 		pr_body = pr.body,

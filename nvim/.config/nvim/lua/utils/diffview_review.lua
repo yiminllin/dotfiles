@@ -249,6 +249,29 @@ local function active_guide_path(ctx)
 	return active_guide_context.path
 end
 
+local function active_guide_markdown_path(ctx)
+	local guide_path = active_guide_path(ctx)
+	if not guide_path then
+		return nil
+	end
+	return active_guide_context.markdown_path or join_path(vim.fn.fnamemodify(guide_path, ":p:h"), "guide.md")
+end
+
+local function read_nonempty_file(path)
+	if not path or vim.fn.filereadable(path) ~= 1 then
+		return nil
+	end
+
+	local read_ok, lines = pcall(vim.fn.readfile, path)
+	if not read_ok then
+		return nil
+	end
+	if vim.trim(table.concat(lines, "\n")) == "" then
+		return nil
+	end
+	return lines
+end
+
 local function review_state_path(ctx)
 	local guide_path = active_guide_path(ctx)
 	if guide_path then
@@ -2070,6 +2093,7 @@ function M.set_active_guide_context(context)
 		context_kind = context.context_kind,
 		diffview_rev_arg = context.diffview_rev_arg,
 		head_oid = context.head_oid or context.pr_head_oid,
+		markdown_path = context.markdown_path,
 		owner = context.owner,
 		path = context.path,
 		pr_body = context.pr_body,
@@ -3941,6 +3965,36 @@ local function add_guide_status(rows, state, guide, width)
 	end
 	table.insert(rows, header)
 
+	if guide then
+		local source = guide.source_path and vim.fn.fnamemodify(guide.source_path, ":~") or "unknown"
+		local source_prefix = "  Source: "
+		local source_width = width - review_format.display_width(source_prefix)
+		if review_format.display_width(source) > source_width then
+			source = vim.fn.pathshorten(source)
+		end
+		local source_row = status_row()
+		add_status_text(source_row, source_prefix, "DiffviewReviewStatusMuted")
+		add_status_text(
+			source_row,
+			truncate_display(source, source_width),
+			"DiffviewReviewStatusGuideInfo"
+		)
+		table.insert(rows, source_row)
+
+		local guide_counts = ("  Guide: schema %s · summary %s · change_map %d · high %d · validate %d · strategy %d · files %d"):format(
+			guide.schema_version or "?",
+			guide.summary and guide.summary ~= "" and "yes" or "no",
+			#(guide.change_map or {}),
+			#(guide.high_risk or {}),
+			#(guide.validation_focus or {}),
+			#(guide.review_strategy or {}),
+			#(guide.files or {})
+		)
+		local counts_row = status_row()
+		add_status_text(counts_row, truncate_display(guide_counts, width), "DiffviewReviewStatusMuted")
+		table.insert(rows, counts_row)
+	end
+
 	if guide and #(guide.change_map or {}) > 0 then
 		local title = status_row()
 		add_status_text(title, "  Change map:", "DiffviewReviewStatusMuted")
@@ -3983,6 +4037,7 @@ local function add_guide_status(rows, state, guide, width)
 	for _, section in ipairs({
 		{ hl = "DiffviewReviewStatusGuideHigh", items = guide and guide.high_risk or {}, label = "High" },
 		{ hl = "DiffviewReviewStatusGuideMedium", items = guide and guide.validation_focus or {}, label = "Validate" },
+		{ hl = "DiffviewReviewStatusGuideInfo", items = guide and guide.review_strategy or {}, label = "Strategy" },
 	}) do
 		for _, item in ipairs(section.items) do
 			if bullet_count >= 3 then
@@ -4143,6 +4198,44 @@ end
 function M.show_status()
 	local ctx = current_file_context()
 	if not require_active_diffview(ctx, "showing review status") or not require_repo_context(ctx, "showing review status") then
+		return
+	end
+	local markdown_lines = read_nonempty_file(active_guide_markdown_path(ctx))
+	if markdown_lines then
+		local width = math.max(48, math.floor(vim.o.columns * 0.62))
+		width = math.min(width, math.max(48, vim.o.columns - 4))
+		local height = math.max(10, math.floor(vim.o.lines * 0.82))
+		height = math.min(height, math.max(10, #markdown_lines))
+		local bufnr = vim.api.nvim_create_buf(false, true)
+		vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, markdown_lines)
+		vim.bo[bufnr].bufhidden = "wipe"
+		vim.bo[bufnr].filetype = "markdown"
+		vim.bo[bufnr].modifiable = false
+
+		local winid = vim.api.nvim_open_win(bufnr, true, {
+			border = "rounded",
+			col = math.max(math.floor((vim.o.columns - width) / 2), 0),
+			height = height,
+			relative = "editor",
+			row = math.max(math.floor((vim.o.lines - height) / 2), 0),
+			style = "minimal",
+			title = " Diffview Review Guide ",
+			title_pos = "center",
+			width = width,
+		})
+		vim.wo[winid].wrap = true
+
+		local function close_popup()
+			if vim.api.nvim_win_is_valid(winid) then
+				pcall(vim.api.nvim_win_close, winid, true)
+			end
+			if vim.api.nvim_buf_is_valid(bufnr) then
+				pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+			end
+		end
+
+		vim.keymap.set("n", "q", close_popup, { buffer = bufnr, nowait = true, silent = true })
+		vim.keymap.set("n", "<Esc>", close_popup, { buffer = bufnr, nowait = true, silent = true })
 		return
 	end
 
