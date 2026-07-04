@@ -92,6 +92,103 @@ function __review_guide_status_line --argument-names guide_md_path guide_json_pa
     printf 'Markdown: %s; JSON: %s%s' "$markdown_status" "$json_status" "$freshness_status"
 end
 
+function __review_guide_status --argument-names guide_md_path guide_json_path refresh_guide
+    set -l guide_json_status missing
+    if test -f "$guide_json_path"
+        if command python3 -m json.tool "$guide_json_path" >/dev/null 2>/dev/null
+            set guide_json_status valid
+        else
+            set guide_json_status invalid
+        end
+    end
+
+    set -l guide_md_status missing
+    if test -s "$guide_md_path"
+        set guide_md_status valid
+    else if test -f "$guide_md_path"
+        set guide_md_status empty
+    end
+
+    set -l guides_need_generation 1
+    if test $refresh_guide -eq 0 -a "$guide_json_status" = valid -a "$guide_md_status" = valid
+        set guides_need_generation 0
+    end
+
+    printf '%s\n%s\n%s\n' "$guide_md_status" "$guide_json_status" "$guides_need_generation"
+end
+
+function __review_run_interactive_guide_flow --argument-names repo_root opencode_title assistant_bootstrap_path guide_dir guide_md_path guide_json_path guides_need_generation assistant_bootstrap
+    set -g __review_interactive_pane_id
+
+    if set -q TMUX; and test -n "$TMUX"; and command -q tmux; and command -q opencode
+        command mkdir -p "$guide_dir"
+        printf '%s\n' "$assistant_bootstrap" > "$assistant_bootstrap_path"
+
+        set -l guide_generation_started_at
+        if test $guides_need_generation -eq 1
+            set guide_generation_started_at (command python3 -c 'import time; print(time.time())')
+        end
+
+        set -l pane_id (__review_open_opencode_pane "$repo_root" "$opencode_title" "$assistant_bootstrap_path")
+        if test $status -eq 0 -a -n "$pane_id"
+            set -g __review_interactive_pane_id "$pane_id"
+            echo "review: passed OpenCode startup prompt: $assistant_bootstrap_path"
+            if test $guides_need_generation -eq 1
+                echo "review: waiting for interactive OpenCode guide generation..."
+                if not __review_wait_for_guides "$guide_md_path" "$guide_json_path" "$guide_generation_started_at"
+                    return 1
+                end
+                echo "review: guides are ready: $guide_md_path and $guide_json_path"
+            else
+                echo "review: reusing existing guides: $guide_md_path and $guide_json_path"
+            end
+        end
+    else if test $guides_need_generation -eq 0
+        echo "review: reusing existing guides: $guide_md_path and $guide_json_path"
+    end
+
+    return 0
+end
+
+function __review_generate_guides_noninteractive --argument-names repo_root refresh_guide mode_label guide_md_status guide_json_status guide_md_path guide_json_path guide_md_tmp guide_json_tmp markdown_title json_title markdown_prompt json_prompt
+    if not command -q opencode
+        echo "review: opencode is required to generate or refresh the guide" >&2
+        return 127
+    end
+
+    command mkdir -p (dirname "$guide_md_path")
+
+    if test $refresh_guide -eq 1
+        echo "review: refreshing OpenCode $mode_label guides..."
+    else
+        echo "review: regenerating OpenCode $mode_label guides (Markdown: $guide_md_status, JSON: $guide_json_status)..."
+    end
+    echo "review: Markdown guide target: $guide_md_path"
+    echo "review: JSON guide target: $guide_json_path"
+
+    if not command env -u FORCE_COLOR NO_COLOR=1 opencode run --agent orchestrator --title "$markdown_title" --dir "$repo_root" "$markdown_prompt" > "$guide_md_tmp"
+        set -l opencode_status $status
+        echo "review: OpenCode Markdown guide generation failed with status $opencode_status" >&2
+        return $opencode_status
+    else if not test -s "$guide_md_tmp"
+        echo "review: OpenCode Markdown guide output was empty" >&2
+        return 1
+    else if not command env -u FORCE_COLOR NO_COLOR=1 opencode run --agent orchestrator --title "$json_title" --dir "$repo_root" "$json_prompt" > "$guide_json_tmp"
+        set -l opencode_status $status
+        echo "review: OpenCode JSON guide generation failed with status $opencode_status" >&2
+        return $opencode_status
+    else if not command python3 -m json.tool "$guide_json_tmp" >/dev/null
+        set -l json_status $status
+        echo "review: OpenCode JSON guide output was not valid JSON" >&2
+        return $json_status
+    else
+        command mv "$guide_md_tmp" "$guide_md_path"
+        command mv "$guide_json_tmp" "$guide_json_path"
+        echo "review: Markdown guide saved: $guide_md_path"
+        echo "review: JSON guide saved: $guide_json_path"
+    end
+end
+
 function __review_wait_for_guides --argument-names guide_md_path guide_json_path min_mtime
     set -l timeout_seconds 900
     set -l progress_seconds 5
@@ -211,40 +308,21 @@ for key in ("number", "title", "url", "baseRefName", "headRefName"):
         set -l guide_md_tmp "$guide_dir/guide.md.tmp"
         set -l guide_json_tmp "$guide_dir/guide.json.tmp"
 
-        set -l guide_json_status missing
-        if test -f "$guide_json_path"
-            if command python3 -m json.tool "$guide_json_path" >/dev/null 2>/dev/null
-                set guide_json_status valid
-            else
-                set guide_json_status invalid
-            end
-        end
-        set -l guide_md_status missing
-        if test -s "$guide_md_path"
-            set guide_md_status valid
-        else if test -f "$guide_md_path"
-            set guide_md_status empty
-        end
-
-        set -l guides_need_generation 1
-        if test $refresh_guide -eq 0 -a "$guide_json_status" = valid -a "$guide_md_status" = valid
-            set guides_need_generation 0
-        end
+        set -l guide_status (__review_guide_status "$guide_md_path" "$guide_json_path" $refresh_guide)
+        set -l guide_md_status $guide_status[1]
+        set -l guide_json_status $guide_status[2]
+        set -l guides_need_generation $guide_status[3]
 
         set -l opencode_title "review-$pr_number"
-        set -l interactive_pane_id
         set -l assistant_bootstrap_path "$guide_dir/assistant-bootstrap.md"
         set -l diffview_state_path "$guide_dir/diffview-review.json"
 
-        if set -q TMUX; and test -n "$TMUX"; and command -q tmux; and command -q opencode
-            command mkdir -p "$guide_dir"
+        set -l generation_instruction "Existing guides are valid and --refresh-guide was not passed. Do not regenerate guide.md or guide.json. Read the paths and context below, then remain in review assistant mode."
+        if test $guides_need_generation -eq 1
+            set generation_instruction "Generate or refresh both artifacts now. Write raw Markdown to the exact guide.md path and valid raw JSON to the exact guide.json path. Report READY when both artifacts are written and valid."
+        end
 
-            set -l generation_instruction "Existing guides are valid and --refresh-guide was not passed. Do not regenerate guide.md or guide.json. Read the paths and context below, then remain in review assistant mode."
-            if test $guides_need_generation -eq 1
-                set generation_instruction "Generate or refresh both artifacts now. Write raw Markdown to the exact guide.md path and valid raw JSON to the exact guide.json path. Report READY when both artifacts are written and valid."
-            end
-
-            set -l assistant_bootstrap "# Review assistant bootstrap for PR #$pr_number
+        set -l assistant_bootstrap "# Review assistant bootstrap for PR #$pr_number
 
 You are the persistent local review assistant for this Diffview session. Use the pr-human-review-guide skill and contract.
 
@@ -290,36 +368,12 @@ Completion and follow-up mode:
 - Read guide.md, guide.json, and diffview-review.json when present.
 - Help answer/address local review comments, TODOs, and guide refinements without posting to GitHub unless a future user explicitly requests a public mutation through the proper workflow."
 
-            printf '%s\n' "$assistant_bootstrap" > "$assistant_bootstrap_path"
-            set -l guide_generation_started_at
-            if test $guides_need_generation -eq 1
-                set guide_generation_started_at (command python3 -c 'import time; print(time.time())')
-            end
-            set interactive_pane_id (__review_open_opencode_pane "$repo_root" "$opencode_title" "$assistant_bootstrap_path")
-            if test $status -eq 0 -a -n "$interactive_pane_id"
-                echo "review: passed OpenCode startup prompt: $assistant_bootstrap_path"
-                if test $guides_need_generation -eq 1
-                    echo "review: waiting for interactive OpenCode guide generation..."
-                    if not __review_wait_for_guides "$guide_md_path" "$guide_json_path" "$guide_generation_started_at"
-                        return 1
-                    end
-                    echo "review: guides are ready: $guide_md_path and $guide_json_path"
-                else
-                    echo "review: reusing existing guides: $guide_md_path and $guide_json_path"
-                end
-            end
-        else if test $guides_need_generation -eq 0
-            echo "review: reusing existing guides: $guide_md_path and $guide_json_path"
+        __review_run_interactive_guide_flow "$repo_root" "$opencode_title" "$assistant_bootstrap_path" "$guide_dir" "$guide_md_path" "$guide_json_path" $guides_need_generation "$assistant_bootstrap"
+        if test $status -ne 0
+            return 1
         end
 
-        if test $guides_need_generation -eq 1 -a -z "$interactive_pane_id"
-            if not command -q opencode
-                echo "review: opencode is required to generate or refresh the guide" >&2
-                return 127
-            end
-
-            command mkdir -p "$guide_dir"
-
+        if test $guides_need_generation -eq 1 -a -z "$__review_interactive_pane_id"
             set -l markdown_prompt "Prepare a concise manual human review guide for GitHub PR #$pr_number.
 Use the pr-human-review-guide skill contract in default raw Markdown manual-output mode.
 
@@ -382,33 +436,10 @@ Instructions:
 - Use [] for empty arrays and omit optional suggestion fields only when they are not known.
 - Keep the output concise and actionable."
 
-            if test $refresh_guide -eq 1
-                echo "review: refreshing OpenCode PR guides..."
-            else
-                echo "review: regenerating OpenCode PR guides (Markdown: $guide_md_status, JSON: $guide_json_status)..."
-            end
-            echo "review: Markdown guide target: $guide_md_path"
-            echo "review: JSON guide target: $guide_json_path"
-            if not command env -u FORCE_COLOR NO_COLOR=1 opencode run --agent orchestrator --title "PR #$pr_number Markdown review guide" --dir "$repo_root" "$markdown_prompt" > "$guide_md_tmp"
-                set -l opencode_status $status
-                echo "review: OpenCode Markdown guide generation failed with status $opencode_status" >&2
-                return $opencode_status
-            else if not test -s "$guide_md_tmp"
-                echo "review: OpenCode Markdown guide output was empty" >&2
-                return 1
-            else if not command env -u FORCE_COLOR NO_COLOR=1 opencode run --agent orchestrator --title "PR #$pr_number Diffview JSON review guide" --dir "$repo_root" "$json_prompt" > "$guide_json_tmp"
-                set -l opencode_status $status
-                echo "review: OpenCode JSON guide generation failed with status $opencode_status" >&2
-                return $opencode_status
-            else if not command python3 -m json.tool "$guide_json_tmp" >/dev/null
-                set -l json_status $status
-                echo "review: OpenCode JSON guide output was not valid JSON" >&2
-                return $json_status
-            else
-                command mv "$guide_md_tmp" "$guide_md_path"
-                command mv "$guide_json_tmp" "$guide_json_path"
-                echo "review: Markdown guide saved: $guide_md_path"
-                echo "review: JSON guide saved: $guide_json_path"
+            __review_generate_guides_noninteractive "$repo_root" $refresh_guide PR "$guide_md_status" "$guide_json_status" "$guide_md_path" "$guide_json_path" "$guide_md_tmp" "$guide_json_tmp" "PR #$pr_number Markdown review guide" "PR #$pr_number Diffview JSON review guide" "$markdown_prompt" "$json_prompt"
+            set -l generate_status $status
+            if test $generate_status -ne 0
+                return $generate_status
             end
         end
 
@@ -476,31 +507,75 @@ Instructions:
     set -l guide_md_tmp "$guide_dir/guide.md.tmp"
     set -l guide_json_tmp "$guide_dir/guide.json.tmp"
 
-    set -l guide_json_status missing
-    if test -f "$guide_json_path"
-        if command python3 -m json.tool "$guide_json_path" >/dev/null 2>/dev/null
-            set guide_json_status valid
-        else
-            set guide_json_status invalid
-        end
+    set -l guide_status (__review_guide_status "$guide_md_path" "$guide_json_path" $refresh_guide)
+    set -l guide_md_status $guide_status[1]
+    set -l guide_json_status $guide_status[2]
+    set -l guides_need_generation $guide_status[3]
+
+    set -l opencode_title "review-$safe_branch"
+    set -l assistant_bootstrap_path "$guide_dir/assistant-bootstrap.md"
+    set -l diffview_state_path "$guide_dir/diffview-review.json"
+
+    set -l generation_instruction "Existing guides are valid and --refresh-guide was not passed. Do not regenerate guide.md or guide.json. Read the paths and context below, then remain in review assistant mode."
+    if test $guides_need_generation -eq 1
+        set generation_instruction "Generate or refresh both artifacts now. Write raw Markdown to the exact guide.md path and valid raw JSON to the exact guide.json path. Report READY when both artifacts are written and valid."
     end
-    set -l guide_md_status missing
-    if test -s "$guide_md_path"
-        set guide_md_status valid
-    else if test -f "$guide_md_path"
-        set guide_md_status empty
+
+    set -l assistant_bootstrap "# Review assistant bootstrap for branch $branch_label
+
+You are the persistent local review assistant for this Diffview session. Use the pr-human-review-guide skill and contract in local branch/range review mode.
+
+Branch metadata:
+- Branch label: $branch_label
+- Base ref: $base_ref
+- Head ref: HEAD
+- Diff range: $base_ref...HEAD
+- Repository root: $repo_root
+
+Artifact paths:
+- Markdown guide.md: $guide_md_path
+- Structured guide.json: $guide_json_path
+- Diffview local state: $diffview_state_path
+- Bootstrap file: $assistant_bootstrap_path
+
+Existing artifact status:
+- Markdown guide status: $guide_md_status
+- JSON guide status: $guide_json_status
+- Refresh requested: $refresh_guide
+
+Initial task:
+- $generation_instruction
+- Do read-only local context gathering only.
+- Do not edit repository files; only write the guide artifacts above when generation or refresh is needed.
+- Do not use gh, GitHub APIs, webfetch, or network access.
+- Do not post comments, approve, request changes, resolve threads, or mutate any external state.
+- Stay within the repository root above for local file discovery; do not broad-search /, /home, /home/vscode, or sibling worktrees unless explicitly asked.
+- Prefer bounded local inspection: git diff --stat $base_ref...HEAD, git diff $base_ref...HEAD, git status, git log --oneline $base_ref...HEAD, and local file reads.
+- Treat this as local branch/range self-review before a PR exists, using local git diff context only.
+- If blocked by missing local refs or incomplete local context, capture the blocker in the artifacts instead of continuing broad discovery.
+
+Artifact contract when generation or refresh is needed:
+- guide.md must be raw Markdown only: no preface, no save-status/meta prose, and no wrapping fenced code block.
+- guide.json must be raw valid JSON only: no preface, no Markdown, no save-status prose, and no wrapping fenced code block.
+- Read pr-human-review-guide references/output-templates.md if you need the exact schema or examples.
+- Use this JSON shape: {\"schema_version\":1,\"branch\":{\"label\":\"...\",\"base\":\"...\",\"head\":\"HEAD\"},\"summary\":\"...\",\"change_map\":[\"optional concise ASCII/plain-text relationship map line\"],\"high_risk\":[\"...\"],\"validation_focus\":[\"...\"],\"review_strategy\":[\"optional review step\"],\"files\":[{\"path\":\"path/from/diff\",\"depth\":\"read carefully\",\"notes\":[\"file-level guide note\"],\"suggestions\":[{\"severity\":\"Medium\",\"line\":10,\"end_line\":12,\"body\":\"suggested local comment/question\",\"why\":\"why it matters\"}]}]}.
+- Fill branch from the branch metadata above.
+- Include one files entry for every changed Diffview file so <leader>gdg can navigate the full changed-file set.
+- Order files as the recommended human/Diffview review order, not alphabetically unless that is genuinely best.
+- Use exact Diffview file paths from the branch diff. Use null for approximate line anchors rather than inventing exact line numbers.
+
+Completion and follow-up mode:
+- When generation or refresh is needed, report READY after guide.md is non-empty and guide.json is valid JSON. The shell completion gate is the artifact files, not your message.
+- Stay alive after READY as review assistant $opencode_title.
+- Read guide.md, guide.json, and diffview-review.json when present.
+- Help answer/address local review comments, TODOs, and guide refinements without posting to GitHub or mutating external state unless a future user explicitly requests a different workflow."
+
+    __review_run_interactive_guide_flow "$repo_root" "$opencode_title" "$assistant_bootstrap_path" "$guide_dir" "$guide_md_path" "$guide_json_path" $guides_need_generation "$assistant_bootstrap"
+    if test $status -ne 0
+        return 1
     end
 
-    if test $refresh_guide -eq 0 -a "$guide_json_status" = valid -a "$guide_md_status" = valid
-        echo "review: reusing existing guides: $guide_md_path and $guide_json_path"
-    else
-        if not command -q opencode
-            echo "review: opencode is required to generate or refresh the guide" >&2
-            return 127
-        end
-
-        command mkdir -p "$guide_dir"
-
+    if test $guides_need_generation -eq 1 -a -z "$__review_interactive_pane_id"
         set -l markdown_prompt "Prepare a concise manual human review guide for the current branch before a PR exists.
 Use the pr-human-review-guide skill contract in default raw Markdown manual-output mode.
 
@@ -565,33 +640,10 @@ Instructions:
 - Use [] for empty arrays and omit optional suggestion fields only when they are not known.
 - Keep the output concise and actionable."
 
-        if test $refresh_guide -eq 1
-            echo "review: refreshing OpenCode branch guides..."
-        else
-            echo "review: regenerating OpenCode branch guides (Markdown: $guide_md_status, JSON: $guide_json_status)..."
-        end
-        echo "review: Markdown guide target: $guide_md_path"
-        echo "review: JSON guide target: $guide_json_path"
-        if not command env -u FORCE_COLOR NO_COLOR=1 opencode run --agent orchestrator --title "Branch $branch_label Markdown review guide" --dir "$repo_root" "$markdown_prompt" > "$guide_md_tmp"
-            set -l opencode_status $status
-            echo "review: OpenCode Markdown guide generation failed with status $opencode_status" >&2
-            return $opencode_status
-        else if not test -s "$guide_md_tmp"
-            echo "review: OpenCode Markdown guide output was empty" >&2
-            return 1
-        else if not command env -u FORCE_COLOR NO_COLOR=1 opencode run --agent orchestrator --title "Branch $branch_label Diffview JSON review guide" --dir "$repo_root" "$json_prompt" > "$guide_json_tmp"
-            set -l opencode_status $status
-            echo "review: OpenCode JSON guide generation failed with status $opencode_status" >&2
-            return $opencode_status
-        else if not command python3 -m json.tool "$guide_json_tmp" >/dev/null
-            set -l json_status $status
-            echo "review: OpenCode JSON guide output was not valid JSON" >&2
-            return $json_status
-        else
-            command mv "$guide_md_tmp" "$guide_md_path"
-            command mv "$guide_json_tmp" "$guide_json_path"
-            echo "review: Markdown guide saved: $guide_md_path"
-            echo "review: JSON guide saved: $guide_json_path"
+        __review_generate_guides_noninteractive "$repo_root" $refresh_guide branch "$guide_md_status" "$guide_json_status" "$guide_md_path" "$guide_json_path" "$guide_md_tmp" "$guide_json_tmp" "Branch $branch_label Markdown review guide" "Branch $branch_label Diffview JSON review guide" "$markdown_prompt" "$json_prompt"
+        set -l generate_status $status
+        if test $generate_status -ne 0
+            return $generate_status
         end
     end
 
