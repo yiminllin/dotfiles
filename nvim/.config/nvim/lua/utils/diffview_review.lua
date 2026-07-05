@@ -1285,9 +1285,8 @@ local function import_github_comments_into_state(state, raw_comments, files)
 	return changed, stats
 end
 
-local function is_hidden_github_comment(comment)
-	return review_format.is_imported_github_comment(comment)
-		and (comment.resolved == true or comment.sync_status == "github-resolved-hidden")
+local function is_hidden_comment(comment)
+	return comment.resolved == true or comment.sync_status == "github-resolved-hidden"
 end
 
 local function load_state_with_guide(ctx)
@@ -1325,7 +1324,7 @@ local function sorted_file_comments(state, file, line_count)
 	for index, comment in ipairs(state.comments or {}) do
 		if
 			normalize_file(comment.file) == file
-			and not is_hidden_github_comment(comment)
+			and not is_hidden_comment(comment)
 			and not is_file_level_guide_context(comment)
 		then
 			local start_line, end_line = clamp_comment_range(comment, line_count)
@@ -1477,7 +1476,7 @@ local function find_comment(state, file, line, opts)
 	local manual_only = opts and opts.manual_only
 	local file_level_line = opts and tonumber(opts.file_level_line)
 	line = tonumber(line)
-	for index, comment in ipairs(state.comments) do
+	for index, comment in ipairs(state.comments or {}) do
 		local is_guide = review_format.is_guide_comment(comment)
 		local is_github = review_format.is_imported_github_comment(comment)
 		local matches_file_level = review_format.is_file_level_comment(comment)
@@ -1489,6 +1488,7 @@ local function find_comment(state, file, line, opts)
 		end
 		if
 			comment.file == file
+			and not is_hidden_comment(comment)
 			and (matches_file_level or (start_line and start_line <= line and line <= end_line))
 			and (not manual_only or (not is_guide and not is_github))
 		then
@@ -2550,6 +2550,45 @@ function M.delete_comment(opts)
 	end
 end
 
+function M.resolve_comment(opts)
+	local ctx = current_file_context()
+	if not require_active_diffview(ctx, "resolving a review comment") then
+		return
+	end
+	if not require_repo_context(ctx, "resolving a review comment") then
+		return
+	end
+	if not ctx.file then
+		notify("Open a Diffview file before resolving a review comment", vim.log.levels.WARN)
+		return
+	end
+
+	local line = line_from_opts(opts)
+	local state = load_state_with_guide(ctx)
+	local _, index = find_comment(state, ctx.file, line, { manual_only = true })
+	if not index then
+		local line_count = vim.api.nvim_buf_line_count(0)
+		_, index = find_comment(state, ctx.file, line, {
+			file_level_line = file_level_display_line(0, vim.api.nvim_get_current_win(), line_count),
+		})
+	end
+	if not index then
+		notify(("No review comment at %s:%d"):format(ctx.file, line), vim.log.levels.WARN)
+		return
+	end
+
+	local comment = state.comments[index]
+	comment.resolved = true
+	if review_format.is_imported_github_comment(comment) then
+		comment.sync_status = "github-resolved-hidden"
+	end
+	comment.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+	if save_state(ctx, state) then
+		notify(("Resolved review comment at %s:%d"):format(ctx.file, line))
+		M.refresh_visible()
+	end
+end
+
 function M.toggle_file_viewed()
 	local ctx = current_file_context()
 	if not require_active_diffview(ctx, "toggling reviewed state") then
@@ -2853,7 +2892,7 @@ local function quickfix_winid()
 end
 
 local function clear_comments_quickfix_keymaps(bufnr)
-	for _, lhs in ipairs({ "<CR>", "o", "d", "dd", "r", "q", "<M-j>", "<M-k>" }) do
+	for _, lhs in ipairs({ "<CR>", "o", "d", "dd", "R", "r", "q", "<M-j>", "<M-k>" }) do
 		pcall(vim.keymap.del, "n", lhs, { buffer = bufnr })
 	end
 	vim.b[bufnr].diffview_review_comments_qf_keymaps = nil
@@ -2887,7 +2926,7 @@ local function set_quickfix_index(info, index)
 	return pcall(vim.fn.setqflist, {}, "r", { id = id, idx = index })
 end
 
-local delete_selected_quickfix_comment
+local quickfix_comment_actions = {}
 
 local function apply_comments_quickfix_keymaps(bufnr)
 	if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -2932,14 +2971,19 @@ local function apply_comments_quickfix_keymaps(bufnr)
 	end, { buffer = bufnr, desc = "Jump to Diffview review comment", nowait = true, silent = true })
 	vim.keymap.set("n", "d", function()
 		with_comments_quickfix(bufnr, "d", function()
-			delete_selected_quickfix_comment()
+			quickfix_comment_actions.delete()
 		end)
 	end, { buffer = bufnr, desc = "Delete Diffview review comment", silent = true })
 	vim.keymap.set("n", "dd", function()
 		with_comments_quickfix(bufnr, "dd", function()
-			delete_selected_quickfix_comment()
+			quickfix_comment_actions.delete()
 		end)
 	end, { buffer = bufnr, desc = "Delete Diffview review comment", nowait = true, silent = true })
+	vim.keymap.set("n", "R", function()
+		with_comments_quickfix(bufnr, "R", function()
+			quickfix_comment_actions.resolve()
+		end)
+	end, { buffer = bufnr, desc = "Resolve/hide Diffview review comment", nowait = true, silent = true })
 	vim.keymap.set("n", "r", function()
 		with_comments_quickfix(bufnr, "r", function()
 			M.show_comments_quickfix({ cursor = qf_cursor_index(comments_quickfix_info() or { items = {} }) })
@@ -3010,7 +3054,7 @@ function M.show_comments_quickfix(opts)
 	open_comments_quickfix(ctx, state, opts and opts.cursor)
 end
 
-delete_selected_quickfix_comment = function()
+quickfix_comment_actions.delete = function()
 	local info = comments_quickfix_info()
 	if not info then
 		return false
@@ -3038,6 +3082,46 @@ delete_selected_quickfix_comment = function()
 	remove_comment_at_index(state, state_index)
 	if save_state(ctx, state) then
 		notify(("Deleted review comment at %s:%d"):format(target.path, target.line or 1))
+		M.refresh_visible()
+		open_comments_quickfix(ctx, load_state_with_guide(ctx), index)
+		return true
+	end
+	return false
+end
+
+quickfix_comment_actions.resolve = function()
+	local info = comments_quickfix_info()
+	if not info then
+		return false
+	end
+
+	local index = qf_cursor_index(info)
+	local target = quickfix_target_at(info, index)
+	if not target then
+		return false
+	end
+
+	local ctx = active_quickfix_context(target, "resolving a review comment")
+	if not ctx then
+		return false
+	end
+
+	local state = load_state_with_guide(ctx)
+	local _, state_index = find_quickfix_comment(state, target)
+	if not state_index then
+		notify("Selected Diffview review comment is no longer available", vim.log.levels.WARN)
+		open_comments_quickfix(ctx, state, index)
+		return false
+	end
+
+	local comment = state.comments[state_index]
+	comment.resolved = true
+	if review_format.is_imported_github_comment(comment) then
+		comment.sync_status = "github-resolved-hidden"
+	end
+	comment.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+	if save_state(ctx, state) then
+		notify(("Resolved review comment at %s:%d"):format(target.path, target.line or 1))
 		M.refresh_visible()
 		open_comments_quickfix(ctx, load_state_with_guide(ctx), index)
 		return true
@@ -4418,7 +4502,7 @@ end
 
 function M.diffview_keymaps()
 	-- Diffview local-review keymap contract:
-	-- <leader>gda/gdd edit local comments, <leader>gdv toggles reviewed,
+	-- <leader>gda/gdd/<leader>gdr add/delete/resolve comments, <leader>gdv toggles reviewed,
 	-- <leader>gdg opens file guide context,
 	-- <leader>gds opens the review comment quickfix, <leader>gdS opens the review dashboard,
 	-- <leader>gdp posts after confirmation,
@@ -4429,6 +4513,7 @@ function M.diffview_keymaps()
 			{ "n", "<leader>gda", M.add_comment, { desc = "[G]it [D]iffview [A]dd Review Comment" } },
 			{ "x", "<leader>gda", M.add_comment_visual, { desc = "[G]it [D]iffview [A]dd Review Comment" } },
 			{ "n", "<leader>gdd", M.delete_comment, { desc = "[G]it [D]iffview [D]elete Review Comment" } },
+			{ "n", "<leader>gdr", M.resolve_comment, { desc = "[G]it [D]iffview [R]esolve/Hide Review Comment" } },
 			{ "n", "<leader>gdg", M.show_guide_popup, { desc = "[G]it [D]iffview [G]uide" } },
 			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File Reviewed" } },
 			{ "n", "<leader>gds", M.show_comments_quickfix, { desc = "[G]it [D]iffview Review Comment Quickfix" } },
@@ -4500,6 +4585,11 @@ function M.setup()
 		range = true,
 		force = true,
 		desc = "Delete a local Diffview review comment at the current line",
+	})
+	vim.api.nvim_create_user_command("DiffviewReviewResolveComment", M.resolve_comment, {
+		range = true,
+		force = true,
+		desc = "Resolve or hide a Diffview review comment at the current line",
 	})
 	vim.api.nvim_create_user_command("DiffviewReviewToggleViewed", M.toggle_file_viewed, {
 		force = true,
