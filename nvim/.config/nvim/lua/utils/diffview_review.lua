@@ -1603,6 +1603,27 @@ local function order_review_entries_by_guide(entries, guide)
 	return ordered
 end
 
+local function first_guide_ordered_entry(entries, guide)
+	if not (guide and type(guide.files) == "table") then
+		return nil
+	end
+
+	local entries_by_path = {}
+	for _, item in ipairs(entries) do
+		if item.path and not entries_by_path[item.path] then
+			entries_by_path[item.path] = item
+		end
+	end
+
+	for _, file in ipairs(guide.files) do
+		local path = type(file) == "table" and normalize_file(file.path) or nil
+		local item = path and entries_by_path[path] or nil
+		if item then
+			return item
+		end
+	end
+end
+
 local apply_buffer_keymaps
 
 local function comments_for_file(state, file)
@@ -2103,6 +2124,7 @@ function M.set_active_guide_context(context)
 		repo_name = context.repo_name,
 		repo = context.repo,
 		repo_key = context.repo_key,
+		initial_guide_jump_done = false,
 	} or nil
 	guide_cache = nil
 end
@@ -2344,6 +2366,37 @@ function M.refresh_visible()
 			refresh_buffer(item.bufnr, item.file, state, "spacers", item.winid, spacers)
 		end
 		refresh_winbar(item.winid, item.file, state)
+	end
+end
+
+function M.jump_to_initial_guide_file()
+	local context = active_guide_context
+	if not context or context.initial_guide_jump_done then
+		return
+	end
+
+	local view = current_view()
+	local ctx = repo_context(view)
+	if not (view and ctx) then
+		return
+	end
+	if context.repo and ctx.root and normalize_dir(context.repo) ~= ctx.root then
+		return
+	end
+	if not active_pr_context_matches_view(context, ctx) then
+		return
+	end
+
+	local state, guide = load_state_with_guide(ctx)
+	local entries = review_entries(view, state)
+	if #entries == 0 then
+		return
+	end
+
+	local item = first_guide_ordered_entry(entries, guide)
+	context.initial_guide_jump_done = true
+	if item and normalize_file(view.cur_entry and view.cur_entry.path) ~= item.path then
+		jump_to_entry(view, item)
 	end
 end
 
@@ -3072,7 +3125,7 @@ function M.next_unviewed_file(direction)
 		return
 	end
 
-	local start_index = last_index or current_index or 0
+	local start_index = current_index or last_index or 0
 	local target = direction == -1 and unreviewed[#unreviewed] or unreviewed[1]
 	for _, candidate in ipairs(unreviewed) do
 		if direction == 1 and candidate.index > start_index then
@@ -4240,7 +4293,7 @@ function M.show_status()
 	end
 
 	local state, guide = load_state_with_guide(ctx)
-	local entries = review_entries(ctx.view, state)
+	local entries = order_review_entries_by_guide(review_entries(ctx.view, state), guide)
 	local width = math.max(48, math.floor(vim.o.columns * 0.58))
 	width = math.min(width, math.max(48, vim.o.columns - 4))
 	local content_width = math.max(40, width - 2)
@@ -4418,6 +4471,7 @@ function M.setup()
 				M.apply_highlights()
 				M.refresh_visible()
 				if event.match == "DiffviewViewPostLayout" then
+					M.jump_to_initial_guide_file()
 					M.auto_import_github_comments()
 				end
 				for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
