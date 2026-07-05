@@ -366,7 +366,10 @@ Completion and follow-up mode:
 - When generation or refresh is needed, report READY after guide.md is non-empty and guide.json is valid JSON. The shell completion gate is the artifact files, not your message.
 - Stay alive after READY as review assistant $opencode_title.
 - Read guide.md, guide.json, and diffview-review.json when present.
-- Help answer/address local review comments, TODOs, and guide refinements without posting to GitHub unless a future user explicitly requests a public mutation through the proper workflow."
+- Help answer/address local review comments, TODOs, and guide refinements without posting to GitHub unless a future user explicitly requests a public mutation through the proper workflow.
+- For local replies, append to the matching parent comment's optional replies array in diffview-review.json only. Use {\"author\":\"opencode\",\"body\":\"...\",\"created_at\":\"<UTC ISO timestamp>\"}; include updated_at only when editing an existing local reply.
+- Match parent comments by stable fields in this order: github_id, guide_id, then file + line/end_line or file_level + normalized body preview. Preserve all existing comments and fields. Ask the user if more than one parent matches.
+- Never treat replies as separate anchors/comments, and never mutate GitHub or other external state while adding local replies."
 
         __review_run_interactive_guide_flow "$repo_root" "$opencode_title" "$assistant_bootstrap_path" "$guide_dir" "$guide_md_path" "$guide_json_path" $guides_need_generation "$assistant_bootstrap"
         if test $status -ne 0
@@ -426,6 +429,7 @@ Instructions:
 - If the existing JSON guide status is valid, read the existing JSON guide first and treat it as prior context, not truth. Refresh it against the current PR state: preserve still-relevant observations, remove stale ones, and add new findings/questions.
 - If the existing JSON guide status is missing or invalid, generate a fresh guide from the current PR state.
 - Produce a structured JSON artifact for a human doing local review in Diffview, compatible with the saved guide artifact refresh contract.
+- This guide JSON artifact does not carry local review replies; local replies belong only in diffview-review.json under comment.replies.
 - Return raw JSON only: no preface, no save-status/meta prose, no Markdown, and no wrapping fenced code block.
 - Use this schema exactly: {\"schema_version\":1,\"pr\":{\"number\":123,\"title\":\"...\",\"url\":\"...\",\"base\":\"...\",\"head\":\"...\"},\"summary\":\"...\",\"change_map\":[\"optional concise ASCII/plain-text relationship map line\"],\"high_risk\":[\"...\"],\"validation_focus\":[\"...\"],\"review_strategy\":[\"optional review step\"],\"files\":[{\"path\":\"path/from/diff\",\"depth\":\"read carefully\",\"notes\":[\"file-level guide note\"],\"suggestions\":[{\"severity\":\"Medium\",\"line\":10,\"end_line\":12,\"body\":\"suggested local comment/question\",\"why\":\"why it matters\"}]}]}.
 - Fill `pr` from the PR metadata above. `change_map` is optional; include it only when a concise relationship figure, dataflow, or ownership map helps orient the reviewer. Use short ASCII/plain-text strings only, with no Mermaid/images, ideally no more than 8-12 lines. `review_strategy` is optional and may be a string or array; `depth`, `end_line`, and `why` are optional.
@@ -568,7 +572,10 @@ Completion and follow-up mode:
 - When generation or refresh is needed, report READY after guide.md is non-empty and guide.json is valid JSON. The shell completion gate is the artifact files, not your message.
 - Stay alive after READY as review assistant $opencode_title.
 - Read guide.md, guide.json, and diffview-review.json when present.
-- Help answer/address local review comments, TODOs, and guide refinements without posting to GitHub or mutating external state unless a future user explicitly requests a different workflow."
+- Help answer/address local review comments, TODOs, and guide refinements without posting to GitHub or mutating external state unless a future user explicitly requests a different workflow.
+- For local replies, append to the matching parent comment's optional replies array in diffview-review.json only. Use {\"author\":\"opencode\",\"body\":\"...\",\"created_at\":\"<UTC ISO timestamp>\"}; include updated_at only when editing an existing local reply.
+- Match parent comments by stable fields in this order: github_id, guide_id, then file + line/end_line or file_level + normalized body preview. Preserve all existing comments and fields. Ask the user if more than one parent matches.
+- Never treat replies as separate anchors/comments, and never mutate GitHub or other external state while adding local replies."
 
     __review_run_interactive_guide_flow "$repo_root" "$opencode_title" "$assistant_bootstrap_path" "$guide_dir" "$guide_md_path" "$guide_json_path" $guides_need_generation "$assistant_bootstrap"
     if test $status -ne 0
@@ -630,6 +637,7 @@ Instructions:
 - If the existing JSON guide status is valid, read the existing JSON guide first and treat it as prior context, not truth. Refresh it against the current branch diff: preserve still-relevant observations, remove stale ones, and add new findings/questions.
 - If the existing JSON guide status is missing or invalid, generate a fresh guide from the current branch diff.
 - Produce a structured JSON artifact for a human doing local review in Diffview, compatible with the saved guide artifact refresh contract.
+- This guide JSON artifact does not carry local review replies; local replies belong only in diffview-review.json under comment.replies.
 - Return raw JSON only: no preface, no save-status/meta prose, no Markdown, and no wrapping fenced code block.
 - Use this schema exactly: {\"schema_version\":1,\"branch\":{\"label\":\"...\",\"base\":\"...\",\"head\":\"HEAD\"},\"summary\":\"...\",\"change_map\":[\"optional concise ASCII/plain-text relationship map line\"],\"high_risk\":[\"...\"],\"validation_focus\":[\"...\"],\"review_strategy\":[\"optional review step\"],\"files\":[{\"path\":\"path/from/diff\",\"depth\":\"read carefully\",\"notes\":[\"file-level guide note\"],\"suggestions\":[{\"severity\":\"Medium\",\"line\":10,\"end_line\":12,\"body\":\"suggested local comment/question\",\"why\":\"why it matters\"}]}]}.
 - Fill `branch` from the branch metadata above. `change_map` is optional; include it only when a concise relationship figure, dataflow, or ownership map helps orient the reviewer. Use short ASCII/plain-text strings only, with no Mermaid/images, ideally no more than 8-12 lines. `review_strategy` is optional and may be a string or array; `depth`, `end_line`, and `why` are optional.

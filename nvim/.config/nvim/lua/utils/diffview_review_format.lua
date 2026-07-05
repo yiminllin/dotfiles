@@ -276,6 +276,29 @@ local function boxed_comment_body(comment)
 	return body
 end
 
+local function reply_label(reply)
+	local author = type(reply.author) == "string" and vim.trim(reply.author) or ""
+	local created_at = type(reply.created_at) == "string" and vim.trim(reply.created_at) or ""
+	local label = author ~= "" and ("Reply @" .. author) or "Reply"
+	if created_at ~= "" then
+		label = label .. " • " .. created_at
+	end
+	return label .. ":"
+end
+
+local function boxed_comment_body_with_replies(comment)
+	local body = boxed_comment_body(comment)
+	local replies = type(comment) == "table" and type(comment.replies) == "table" and comment.replies or {}
+	for _, reply in ipairs(replies) do
+		local reply_body = type(reply) == "table" and tostring(reply.body or "") or ""
+		if reply_body ~= "" then
+			local prefix = body ~= "" and "\n\n" or ""
+			body = body .. prefix .. reply_label(reply) .. "\n" .. reply_body
+		end
+	end
+	return body
+end
+
 local function wrap_comment_body(value, width)
 	local lines = {}
 	for _, body_line in ipairs(vim.split(tostring(value or ""), "\n", { plain = true })) do
@@ -292,7 +315,7 @@ function M.boxed_comment_lines(comment, start_line, end_line)
 	top = top .. string.rep("─", math.max(M.COMMENT_BOX_WIDTH - M.display_width(top) - 1, 0)) .. "╮"
 
 	local lines = { { { top, hls.border } } }
-	for _, body_line in ipairs(wrap_comment_body(boxed_comment_body(comment), body_width)) do
+	for _, body_line in ipairs(wrap_comment_body(boxed_comment_body_with_replies(comment), body_width)) do
 		table.insert(lines, {
 			{ "│ ", hls.border },
 			{ M.pad_right(body_line, body_width), hls.virt },

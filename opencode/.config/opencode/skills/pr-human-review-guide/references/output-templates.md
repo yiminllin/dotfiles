@@ -113,6 +113,30 @@ Order `files` as the recommended human/Diffview review order. Future Diffview `<
 
 Use exact Diffview file paths. `change_map` is optional; include it only when a concise relationship figure, dataflow, or ownership map helps orient the reviewer. It must be an array of short ASCII/plain-text strings only, with no Mermaid/images, ideally no more than 8-12 lines. `review_strategy` is optional and may be a string or array. `depth`, `end_line`, and `why` are optional. Do not invent exact line numbers; use `null` for approximate anchors. Prefer a short high-signal set of file notes and suggestions over exhaustive coverage.
 
+Guide JSON artifacts do not carry local review replies. Local Diffview overlay/state replies belong only in `diffview-review.json` under the matching parent comment:
+
+```json
+{
+  "comments": [
+    {
+      "file": "path/from/diff",
+      "line": 10,
+      "body": "parent comment",
+      "replies": [
+        {
+          "author": "opencode",
+          "body": "concise local reply",
+          "created_at": "2026-07-05T00:00:00Z",
+          "updated_at": "2026-07-05T00:00:00Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+`replies` is optional and backward-compatible; omit `updated_at` unless editing an existing local reply. Match parent comments by stable fields (`github_id`, `guide_id`, then file/line/body preview), preserve existing comments and fields, ask if ambiguous, and do not mutate GitHub/external state.
+
 ## Good default tone examples
 
 Use concise, evidence-backed, reviewer-friendly wording:
