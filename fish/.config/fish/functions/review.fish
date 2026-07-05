@@ -650,13 +650,14 @@ Instructions:
     set -l guide_lua (__review_lua_single_quoted_string "$guide_json_path")
     set -l guide_md_lua (__review_lua_single_quoted_string "$guide_md_path")
     set -l repo_lua (__review_lua_single_quoted_string "$repo_root")
-    set -l diff_arg (__review_vim_arg "$base_ref...HEAD")
+    set -l diff_arg (__review_vim_arg "$base_ref")
     set -l diffview_command "DiffviewOpen $diff_arg"
+    set -l initial_jump_command "lua vim.defer_fn(function() require('utils.diffview_review').jump_to_initial_guide_file() end, 500)"
     if string match -qr '/Systems[^/]*(/|$)' -- (pwd)
         set diffview_command "$diffview_command -- . :!.opencode/skills :!notes"
     else if string match -qr '/Systems[^/]*(/|$)' -- "$repo_root"
         set diffview_command "$diffview_command -- . :!.opencode/skills :!notes"
     end
 
-    command nvim "+lua require('utils.diffview_review').set_active_guide_context({ path = $guide_lua, markdown_path = $guide_md_lua, repo = $repo_lua })" "+$diffview_command"
+    command nvim "+lua require('utils.diffview_review').set_active_guide_context({ path = $guide_lua, markdown_path = $guide_md_lua, repo = $repo_lua })" "+$diffview_command" "+$initial_jump_command"
 end
