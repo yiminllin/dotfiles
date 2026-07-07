@@ -686,14 +686,6 @@ local function guide_suggestion_id(file, suggestion)
 	)
 end
 
-local function is_file_level_guide_context(comment)
-	return review_format.is_guide_comment(comment)
-		and (
-			comment.kind == "guide_note"
-			or (comment.kind == "guide_suggestion" and (comment.file_level == true or comment.line == nil))
-		)
-end
-
 local function comment_index_by_guide_id(state)
 	local index_by_id = {}
 	for index, comment in ipairs(state.comments or {}) do
@@ -755,25 +747,25 @@ local function import_guide_comments(state, guide)
 			local line = suggestion.line
 			local end_line = suggestion.end_line or line
 			local guide_id = guide_suggestion_id(file, suggestion)
+			active_guide_ids[guide_id] = true
+			local comment = {
+				body = suggestion.body,
+				file = file.path,
+				file_level = file_level,
+				guide_id = guide_id,
+				guide_path = guide.source_path,
+				guide_pr_number = guide_pr_number,
+				kind = "guide_suggestion",
+				repo_key = guide.repo_key,
+				severity = suggestion.severity or "Medium",
+				source = "guide",
+				why = suggestion.why,
+			}
 			if not file_level then
-				active_guide_ids[guide_id] = true
-				local comment = {
-					body = suggestion.body,
-					file = file.path,
-					file_level = false,
-					guide_id = guide_id,
-					guide_path = guide.source_path,
-					guide_pr_number = guide_pr_number,
-					kind = "guide_suggestion",
-					repo_key = guide.repo_key,
-					severity = suggestion.severity or "Medium",
-					source = "guide",
-					why = suggestion.why,
-				}
 				comment.line = line
 				comment.end_line = end_line
-				changed = apply_imported_guide_comment(state, index_by_id, comment) or changed
 			end
+			changed = apply_imported_guide_comment(state, index_by_id, comment) or changed
 		end
 	end
 
@@ -783,7 +775,7 @@ local function import_guide_comments(state, guide)
 			if
 				review_format.is_guide_comment(comment)
 				and comment.guide_path == guide.source_path
-				and (is_file_level_guide_context(comment) or not active_guide_ids[comment.guide_id])
+				and not active_guide_ids[comment.guide_id]
 			then
 				table.remove(state.comments, index)
 				changed = true
@@ -1325,7 +1317,6 @@ local function sorted_file_comments(state, file, line_count)
 		if
 			normalize_file(comment.file) == file
 			and not is_hidden_comment(comment)
-			and not is_file_level_guide_context(comment)
 		then
 			local start_line, end_line = clamp_comment_range(comment, line_count)
 			if start_line then
