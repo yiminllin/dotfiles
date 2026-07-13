@@ -223,6 +223,7 @@ CONFIGS=(
     kitty
     nvim
     opencode
+    pi
     task
     tmux
     tmux-powerline

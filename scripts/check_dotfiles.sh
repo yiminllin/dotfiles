@@ -80,7 +80,7 @@ check_stow_dry_run() {
   command -v stow >/dev/null 2>&1 || return 77
   local target
   target="$(mktemp -d)"
-  stow --no --target "$target" bash bat fish flightsystems git kitty nvim opencode task tmux tmux-powerline tmuxinator visidata >/dev/null
+  stow --no --target "$target" bash bat fish flightsystems git kitty nvim opencode pi task tmux tmux-powerline tmuxinator visidata >/dev/null
   local status=$?
   rm -rf "$target"
   return "$status"
