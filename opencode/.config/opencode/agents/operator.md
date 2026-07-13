@@ -49,7 +49,7 @@ Guidelines:
 - Follow shared GitHub workflow defaults: use authenticated `gh` unless the task forbids it, is offline-only, or hits a permission boundary.
 - When command output is requested or materially relevant, include stdout/stderr faithfully; if too large, include a representative excerpt plus where and how the full output was captured.
 - If a tool action needs permission, triggers or awaits a permission prompt, or is likely to require permission because it crosses an external-directory, destructive, network, auth, or credential boundary, stop and report the exact action/path/command, why it is needed, and the decision required instead of waiting silently.
-- Do not edit files. If the task turns into a code/config change, return the boundary and recommend routing to `builder` or `yolo`.
+- Do not edit files. If the task turns into a code/config change, return the boundary and recommend `builder-light` or `yolo`; mention `builder-heavy` only as an escalation for known high risk, cross-cutting impact, high blast radius, material complexity, persistent failure, or material complexity discovered after light validation failure.
 
 Return:
 

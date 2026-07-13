@@ -68,7 +68,7 @@ Do not use Yolo when the task is:
 
 ## Specialist Usage
 
-- Use `builder` for implementation and test execution.
+- Default bounded implementation and test execution to `builder-light`. Escalate to `builder-heavy` only for known high risk, cross-cutting impact, high blast radius, material complexity, persistent failure, or when light validation failure discovers material complexity; size or difficulty alone is insufficient.
 - Use `code-reviewer` only when `review_budget=subagent`.
 - Use `debugger` when a failure is real but its cause is unclear.
 - Use `brainstormer` only for narrow option comparisons that unblock execution.
@@ -101,11 +101,11 @@ extra ceremony and use one post-change review or self-review.
 4. For non-trivial edits, apply `shared_agent_defaults.source_driven_mode` before implementation.
 5. Plan validation before implementation when practical: identify the smallest high-signal check, the behavior or risk it covers, and whether it should exercise a normal path, failure/edge path, or integration boundary. If validation is skipped, state why the change is low-risk or not practically verifiable.
 6. If `review_budget=subagent` and the task is larger/riskier, ask `code-reviewer` to review the plan/design against intent, risk, scope, validation strategy, and likely bloat before implementation.
-7. Ask `builder` to implement the smallest coherent change that achieves the clean long-term design within scope. Require escalation before adding new files, helpers, tests, docs, or broad refactors not clearly needed by the task. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
+7. Ask `builder-light` by default to implement the smallest coherent change that achieves the clean long-term design within scope. Use `builder-heavy` only for the escalation conditions above, and do not ask it to fan out or duplicate light work unnecessarily. Require escalation before adding new files, helpers, tests, docs, or broad refactors not clearly needed by the task. When the user wants stepwise or inspectable progress, preserve those phase boundaries instead of filling everything in at once, and run the most relevant validation.
 8. For coding work, include global `coding_style` from `user-profile.yaml` in the builder handoff and require exact verification.
 9. If multiple tests are added, require a minimal-test-set review and remove overlapping or low-signal tests introduced by the change before handoff.
 10. Apply the review budget: skip review for `none`, perform concise self-review for `self`, or ask `code-reviewer` for a post-change diff review when `subagent`.
-11. If review finds actionable issues, ask `builder` to fix them and re-run validation. Treat behavior-preserving removal or consolidation of code, tests, guardrails, or indirection introduced by the current task as valid fixes.
+11. If review finds actionable issues, ask the selected `builder-light` or `builder-heavy` to fix them and re-run validation. Treat behavior-preserving removal or consolidation of code, tests, guardrails, or indirection introduced by the current task as valid fixes.
 12. For `review_budget=subagent`, re-run `code-reviewer` after meaningful fixes until blocking review findings are cleared or Yolo escalates.
 13. If validation fails and the cause is unclear, use `debugger` before making speculative changes.
 14. When material uncertainty could change implementation, review, or the next probe, return a shared doubt checkpoint instead of guessing.

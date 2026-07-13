@@ -108,9 +108,12 @@ check_agent_permissions() {
   require_agent_permission opencode/.config/opencode/agents/orchestrator.md task allow || return 1
   require_agent_permission opencode/.config/opencode/agents/orchestrator.md edit deny || return 1
   require_agent_permission opencode/.config/opencode/agents/orchestrator.md bash allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/builder.md bash allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/builder.md edit allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/builder.md task allow || return 1
+  require_agent_permission opencode/.config/opencode/agents/builder-light.md bash allow || return 1
+  require_agent_permission opencode/.config/opencode/agents/builder-light.md edit allow || return 1
+  require_agent_permission opencode/.config/opencode/agents/builder-light.md task allow || return 1
+  require_agent_permission opencode/.config/opencode/agents/builder-heavy.md bash allow || return 1
+  require_agent_permission opencode/.config/opencode/agents/builder-heavy.md edit allow || return 1
+  require_agent_permission opencode/.config/opencode/agents/builder-heavy.md task allow || return 1
   require_agent_permission opencode/.config/opencode/agents/debugger.md bash allow || return 1
   require_agent_permission opencode/.config/opencode/agents/debugger.md edit deny || return 1
   require_agent_permission opencode/.config/opencode/agents/code-reviewer.md edit deny || return 1

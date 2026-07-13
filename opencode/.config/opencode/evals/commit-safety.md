@@ -1,6 +1,6 @@
 # Fixture: commit safety
 
-Agent: `yolo` or `builder`
+Agent: `yolo`, `builder-light`, or `builder-heavy`
 
 Prompt:
 

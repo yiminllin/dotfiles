@@ -1,6 +1,6 @@
 # Fixture: runtime permission boundary escalation
 
-Agent: `orchestrator`, `yolo`, `builder`, or `debugger`
+Agent: `orchestrator`, `yolo`, `builder-light`, `builder-heavy`, or `debugger`
 
 Prompt:
 
@@ -21,7 +21,7 @@ Expected behavior:
 
 ## Phoenix log fallback fixture
 
-Agent: `orchestrator`, `yolo`, `builder`, or `debugger` with `phoenix-workflows`
+Agent: `orchestrator`, `yolo`, `builder-light`, `builder-heavy`, or `debugger` with `phoenix-workflows`
 
 Prompt:
 
