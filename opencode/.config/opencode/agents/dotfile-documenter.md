@@ -1,6 +1,6 @@
 ---
 description: Updates PLUGINS.md for dotfiles plugin changes
-model: openai/gpt-5.5
+model: openai/gpt-5.6-sol
 temperature: 0.2
 reasoningEffort: low
 permission:

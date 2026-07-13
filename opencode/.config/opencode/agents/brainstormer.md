@@ -1,9 +1,9 @@
 ---
 description: Brainstorm different kinds of solutions, and still ensuring the correctness
 mode: subagent
-model: openai/gpt-5.5
+model: openai/gpt-5.6-terra
 temperature: 0.7
-reasoningEffort: low
+reasoningEffort: medium
 permission:
   read: allow
   grep: allow

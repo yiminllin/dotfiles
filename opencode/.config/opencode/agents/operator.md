@@ -1,7 +1,7 @@
 ---
 description: Perform tiny local shell and runtime operations without code edits
 mode: subagent
-model: openai/gpt-5.5
+model: openai/gpt-5.6-sol
 temperature: 0.1
 reasoningEffort: low
 permission:

@@ -1,7 +1,7 @@
 ---
 description: Explain concepts and code clearly with insights and established knowledge
 mode: subagent
-model: openai/gpt-5.5
+model: openai/gpt-5.6-sol
 temperature: 0.2
 reasoningEffort: low
 permission:

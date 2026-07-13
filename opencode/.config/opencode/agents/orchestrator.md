@@ -1,8 +1,8 @@
 ---
 description: Orchestrator of specialized subagents and lightweight direct responses
-model: openai/gpt-5.5
+model: openai/gpt-5.6-sol
 temperature: 0.1
-reasoningEffort: medium
+reasoningEffort: low
 permission:
   read: allow
   grep: allow
