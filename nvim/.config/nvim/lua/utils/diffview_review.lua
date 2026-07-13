@@ -3953,38 +3953,6 @@ local function wrap_status_body(value, width)
 	return lines
 end
 
-local function fetch_pr_description(pr)
-	if vim.fn.executable("gh") ~= 1 then
-		return nil, "gh CLI is unavailable"
-	end
-
-	local output = vim.fn.systemlist({
-		"gh",
-		"pr",
-		"view",
-		pr.pull_number,
-		"-R",
-		pr.owner .. "/" .. pr.repo,
-		"--json",
-		"body,title,url",
-	})
-	if vim.v.shell_error ~= 0 then
-		local details = vim.trim(table.concat(output or {}, "\n"))
-		return nil, details ~= "" and details or "gh PR description lookup failed"
-	end
-
-	local ok, decoded = pcall(vim.fn.json_decode, table.concat(output or {}, "\n"))
-	if not ok or type(decoded) ~= "table" then
-		return nil, "gh PR description lookup returned invalid JSON"
-	end
-	if active_guide_context then
-		active_guide_context.pr_body = decoded.body
-		active_guide_context.pr_title = decoded.title
-		active_guide_context.pr_url = decoded.url
-	end
-	return decoded
-end
-
 local function add_pr_description_status(rows, ctx, width)
 	local context = active_guide_context
 	if not context or not context.pr_number then
@@ -4008,17 +3976,6 @@ local function add_pr_description_status(rows, ctx, width)
 	end
 
 	local description = pr
-	if description.title == nil or description.body == nil or description.url == nil then
-		local fetched, fetch_error = fetch_pr_description(pr)
-		if fetched then
-			description = vim.tbl_extend("force", description, fetched)
-		else
-			add_status_text(title, (" #%s · description unavailable: %s"):format(pr.pull_number, fetch_error), "DiffviewReviewStatusMuted")
-			table.insert(rows, title)
-			table.insert(rows, status_row())
-			return
-		end
-	end
 
 	local heading = description.title and description.title ~= "" and description.title or "Untitled PR"
 	add_status_text(title, (" #%s · "):format(pr.pull_number), "DiffviewReviewStatusMuted")
@@ -4039,7 +3996,7 @@ local function add_pr_description_status(rows, ctx, width)
 		table.insert(rows, row)
 	else
 		local header = status_row()
-		add_status_text(header, "  Description:", "DiffviewReviewStatusMuted")
+		add_status_text(header, "  PR Description:", "DiffviewReviewStatusMuted")
 		table.insert(rows, header)
 
 		local body_indent = "  "
@@ -4367,6 +4324,14 @@ function M.show_status()
 		return
 	end
 
+	M.show_review_dashboard()
+end
+
+function M.show_review_dashboard()
+	local ctx = current_file_context()
+	if not require_active_diffview(ctx, "showing review dashboard") or not require_repo_context(ctx, "showing review dashboard") then
+		return
+	end
 	local state, guide = load_state_with_guide(ctx)
 	local entries = order_review_entries_by_guide(review_entries(ctx.view, state), guide)
 	local width = math.max(48, math.floor(vim.o.columns * 0.58))
@@ -4392,7 +4357,6 @@ function M.show_status()
 	end
 
 	add_review_summary(rows, counts)
-	add_pr_description_status(rows, ctx, content_width)
 	add_guide_status(rows, state, guide, content_width)
 
 	for _, item in ipairs(entries) do
@@ -4409,6 +4373,7 @@ function M.show_status()
 		add_status_text(row, "No files in current Diffview", "DiffviewReviewStatusMuted")
 		table.insert(rows, row)
 	end
+	add_pr_description_status(rows, ctx, content_width)
 
 	local height = math.max(10, math.floor(vim.o.lines * 0.82))
 	height = math.min(height, math.max(10, #rows))
@@ -4495,7 +4460,8 @@ function M.diffview_keymaps()
 	-- Diffview local-review keymap contract:
 	-- <leader>gda/gdd/<leader>gdr add/delete/resolve comments, <leader>gdv toggles reviewed,
 	-- <leader>gdg opens file guide context,
-	-- <leader>gds opens the review comment quickfix, <leader>gdS opens the review dashboard,
+	-- <leader>gds opens the review comment quickfix, <leader>gdS opens the detailed guide/status,
+	-- <leader>gdU opens the reviewed/unreviewed dashboard,
 	-- <leader>gdp posts after confirmation,
 	-- <leader>gd[/] jump comments,
 	-- and <Tab>/<S-Tab> move only through unreviewed files.
@@ -4508,7 +4474,8 @@ function M.diffview_keymaps()
 			{ "n", "<leader>gdg", M.show_guide_popup, { desc = "[G]it [D]iffview [G]uide" } },
 			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File Reviewed" } },
 			{ "n", "<leader>gds", M.show_comments_quickfix, { desc = "[G]it [D]iffview Review Comment Quickfix" } },
-			{ "n", "<leader>gdS", M.show_status, { desc = "[G]it [D]iffview Review Status" } },
+			{ "n", "<leader>gdS", M.show_status, { desc = "[G]it [D]iffview Detailed Review Status" } },
+			{ "n", "<leader>gdU", M.show_review_dashboard, { desc = "[G]it [D]iffview Viewed/[U]nviewed Dashboard" } },
 			{ "n", "<leader>gdp", M.post_github_comments, { desc = "[G]it [D]iffview [P]ost GitHub Comments" } },
 			{ "n", "<leader>gd]", function() M.next_review_comment(1) end, { desc = "Next Diffview review comment" } },
 			{ "n", "<leader>gd[", function() M.next_review_comment(-1) end, { desc = "Previous Diffview review comment" } },
@@ -4519,7 +4486,8 @@ function M.diffview_keymaps()
 			{ "n", "<leader>gdg", M.show_guide_popup, { desc = "[G]it [D]iffview [G]uide" } },
 			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File Reviewed" } },
 			{ "n", "<leader>gds", M.show_comments_quickfix, { desc = "[G]it [D]iffview Review Comment Quickfix" } },
-			{ "n", "<leader>gdS", M.show_status, { desc = "[G]it [D]iffview Review Status" } },
+			{ "n", "<leader>gdS", M.show_status, { desc = "[G]it [D]iffview Detailed Review Status" } },
+			{ "n", "<leader>gdU", M.show_review_dashboard, { desc = "[G]it [D]iffview Viewed/[U]nviewed Dashboard" } },
 			{ "n", "<leader>gdp", M.post_github_comments, { desc = "[G]it [D]iffview [P]ost GitHub Comments" } },
 			{ "n", "<leader>gd]", function() M.next_review_comment(1) end, { desc = "Next Diffview review comment" } },
 			{ "n", "<leader>gd[", function() M.next_review_comment(-1) end, { desc = "Previous Diffview review comment" } },
@@ -4588,7 +4556,11 @@ function M.setup()
 	})
 	vim.api.nvim_create_user_command("DiffviewReviewStatus", M.show_status, {
 		force = true,
-		desc = "Show local Diffview review status",
+		desc = "Show the detailed Diffview review guide, falling back to the review dashboard",
+	})
+	vim.api.nvim_create_user_command("DiffviewReviewDashboard", M.show_review_dashboard, {
+		force = true,
+		desc = "Show the Diffview viewed/unviewed review dashboard",
 	})
 	vim.api.nvim_create_user_command("DiffviewReviewCommentsQf", M.show_comments_quickfix, {
 		force = true,
