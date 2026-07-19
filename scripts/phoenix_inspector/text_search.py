@@ -13,7 +13,7 @@ DEFAULT_CONTEXT = 0
 DEFAULT_MAX_BYTES_PER_FILE = 5 * 1024 * 1024
 TEXT_PREVIEW_CHARS = 500
 SEARCHABLE_TEXT_TYPES = {"phoenix_log", "journal", "test_log", "test_record", "validator_output", "alarm_output", "other"}
-NON_SEARCHABLE_TYPES = {"zml", "zml_zst", "archive", "hil_packet_json"}
+NON_SEARCHABLE_TYPES = {"zml", "zml_zst", "archive"}
 VALIDATOR_QUERY = r"FAIL|FAIL_VALIDATORS|FAIL_TEST|validator|Error Code|Traceback|Exception|unexpected-alarms"
 JOURNAL_QUERY = r"error|failed|fault|watchdog|alarm|service|restart|Traceback|Exception|C2_STATUS|process_status"
 
@@ -35,7 +35,7 @@ def text_search_report(args, preset: str, query: str, default_artifact_types: li
   inventory = build_inventory(resolved)
   blockers = [*resolved.blockers, *inventory.blockers]
 
-  if resolved.resolved_type in {"gha_url", "s3_root", "hil_packet_json", "unsupported_flight_id", "unknown"}:
+  if resolved.resolved_type in {"gha_url", "s3_root", "unsupported_flight_id", "unsupported_packet_json", "unsupported_archive", "unknown"}:
     blockers.append(local_artifacts_blocker(args.source, resolved.resolved_type))
     return blocked_search_report(preset, args.source, query, resolved, inventory, blockers)
 

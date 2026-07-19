@@ -179,27 +179,6 @@ class CheckResult:
     return compact(self)
 
 
-@dataclass(frozen=True)
-class BatchTaxonomyRow:
-  gha_url: str | None = None
-  s3_root: str | None = None
-  baraza: str | None = None
-  test: str | None = None
-  subtest: str | None = None
-  conclusion: str | None = None
-  failure_reason: str = "inconclusive"
-  confidence: str = "low"
-  blockers: list[str] = field(default_factory=list)
-  evidence_status: str | None = None
-  evidence_path: str | None = None
-  evidence_summary: str | None = None
-  report_path: str | None = None
-  next_command: str | None = None
-
-  def to_dict(self) -> JsonDict:
-    return compact(self)
-
-
 @dataclass
 class EvidenceReport:
   title: str

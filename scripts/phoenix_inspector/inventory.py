@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
 from .models import ArtifactInventory, ArtifactRecord, Blocker, ProvenanceRef, ResolvedSource
-from .sources import safe_archive_members
 
 
 GENERATED_MARKERS = ("phoenix_inspector", "inspector-report", "evidence-report")
@@ -22,11 +20,7 @@ def build_inventory(source: ResolvedSource) -> ArtifactInventory:
     return inventory_directory(source)
   if source.resolved_type in {"zml_file", "local_text_file"}:
     return inventory_file(source)
-  if source.resolved_type == "hil_packet_json":
-    return inventory_packet_json(source)
-  if source.resolved_type == "archive":
-    return inventory_archive(source)
-  if source.resolved_type in {"gha_url", "s3_root", "unsupported_flight_id", "unknown"}:
+  if source.resolved_type in {"gha_url", "s3_root", "unsupported_flight_id", "unsupported_packet_json", "unsupported_archive", "unknown"}:
     return ArtifactInventory(source=source, blockers=blockers)
   return ArtifactInventory(source=source, blockers=blockers)
 
@@ -113,46 +107,6 @@ def inventory_file(source: ResolvedSource) -> ArtifactInventory:
   return inventory_from_artifacts(source, artifacts, [], blockers)
 
 
-def inventory_packet_json(source: ResolvedSource) -> ArtifactInventory:
-  path = Path(source.root)
-  artifacts = [artifact_record(path, "hil_packet_json")] if path.is_file() else []
-  blockers = []
-  packet: dict = {}
-  try:
-    packet = json.loads(path.read_text(encoding="utf-8"))
-  except (OSError, json.JSONDecodeError) as exc:
-    blockers.append(Blocker("packet_parse_failed", "error", "decode_failure", f"Packet JSON could not be parsed: {exc}", str(path), "Provide a valid HIL evidence packet or test_record.json."))
-  inventory = inventory_from_artifacts(source, artifacts, [], blockers)
-  if packet:
-    inventory = ArtifactInventory(
-      source=inventory.source,
-      artifacts=inventory.artifacts,
-      required_present=inventory.required_present,
-      required_missing=inventory.required_missing,
-      optional_present=inventory.optional_present,
-      optional_missing=inventory.optional_missing,
-      key_artifacts=embedded_key_artifacts(packet),
-      zml_files=inventory.zml_files,
-      logs=inventory.logs,
-      test_record=summarize_test_record(packet),
-      baraza_context=embedded_baraza(packet),
-      generated_outputs=inventory.generated_outputs,
-      blockers=inventory.blockers,
-    )
-  return inventory
-
-
-def inventory_archive(source: ResolvedSource) -> ArtifactInventory:
-  path = Path(source.root)
-  blockers = []
-  artifacts = [artifact_record(path, "archive")] if path.is_file() else []
-  members, archive_blockers = safe_archive_members(path)
-  blockers.extend(archive_blockers)
-  for member in members:
-    artifacts.append(ArtifactRecord(path=f"{path}!/{member}", artifact_type=classify_name(member), provenance=[ProvenanceRef("file", str(path), "archive_member", selector=member)]))
-  return inventory_from_artifacts(source, artifacts, [], blockers)
-
-
 def inventory_from_artifacts(source: ResolvedSource, artifacts: list[ArtifactRecord], generated: list[dict], blockers: list[Blocker]) -> ArtifactInventory:
   zml_files = [zml_metadata(record) for record in artifacts if record.artifact_type in {"zml", "zml_zst"}]
   logs = [record.to_dict() for record in artifacts if record.artifact_type in {"phoenix_log", "journal", "test_log", "validator_output", "alarm_output"}]
@@ -221,38 +175,6 @@ def group_key_artifacts(artifacts: list[ArtifactRecord]) -> dict[str, list[dict]
 
 def zml_metadata(record: ArtifactRecord) -> dict:
   return {"path": record.path, "compression": "zst" if record.artifact_type == "zml_zst" else "none", "size": record.size}
-
-
-def summarize_test_record(packet: dict) -> dict:
-  test_info = packet.get("test_info") if isinstance(packet.get("test_info"), dict) else {}
-  records = packet.get("test_records") if isinstance(packet.get("test_records"), list) else []
-  if test_info:
-    return {"source": "embedded", "test_info": test_info}
-  if records:
-    first = records[0] if isinstance(records[0], dict) else {}
-    return {"source": "embedded", "count": len(records), "first": first}
-  return {}
-
-
-def embedded_key_artifacts(packet: dict) -> dict:
-  key_artifacts: dict[str, list[dict]] = {}
-  for job in packet.get("jobs") or []:
-    s3 = job.get("s3") if isinstance(job, dict) else None
-    for inventory in (s3 or {}).get("inventories") or []:
-      for hint in inventory.get("key_artifact_hints") or []:
-        key_artifacts.setdefault(hint.get("category") or "artifact", []).append(hint)
-  for uri in (packet.get("s3") or {}).get("test_record_uris") or []:
-    key_artifacts.setdefault("test_record", []).append({"uri": uri, "source": "embedded"})
-  return key_artifacts
-
-
-def embedded_baraza(packet: dict) -> dict:
-  for job in packet.get("jobs") or []:
-    s3 = job.get("s3") if isinstance(job, dict) else None
-    baraza = (s3 or {}).get("baraza")
-    if baraza:
-      return {"source": "embedded", **baraza}
-  return {}
 
 
 def safe_name(value: str) -> str:

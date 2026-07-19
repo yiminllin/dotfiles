@@ -38,8 +38,8 @@ workflow is missing a low-level backend detail.
 ## Helper boundary
 
 - Helper name: `hil_evidence_cli.py`.
-- Source path: `opencode/.config/opencode/scripts/hil_evidence_cli.py`.
-- Runtime path when installed: `$HOME/.config/opencode/scripts/hil_evidence_cli.py`.
+- Source path: `scripts/hil_evidence_cli.py`.
+- Runtime path: `$HOME/dotfiles/scripts/hil_evidence_cli.py`.
 - Relevant legacy subcommands: `summarize`, `recent`, `sync-check`.
 
 Keep use read-only unless the user explicitly asks to debug the helper source

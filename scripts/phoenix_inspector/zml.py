@@ -7,8 +7,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from zml_audit.extract import parse_samples
-from zml_audit.models import TimeWindow, TopicSpec
+from zml_audit.extract import parse_samples, parse_timestamp
+from zml_audit.models import TimeWindow, TopicSpec, numeric_value
 from zml_audit.presets import PRESETS as LEGACY_PRESETS
 from zml_audit.presets import expand_specs
 from zml_audit.topics import fuzzy_topic_matches
@@ -20,7 +20,7 @@ from .sources import resolve_source
 
 
 BACKEND_CHOICES = ("auto", "zml-conv", "zml-cli", "local-text")
-CLI = 'python3 "$HOME/.config/opencode/scripts/phoenix_inspector.py"'
+CLI = 'python3 "$HOME/dotfiles/scripts/phoenix_inspector.py"'
 REFUSED_ZML_DIRS = {Path("/"), Path("/Systems"), Path.home(), Path("/home"), Path("/tmp")}
 MAX_ZML_DISCOVERY_DEPTH = 12
 MAX_ZML_DISCOVERY_DIRS = 1000
@@ -90,10 +90,12 @@ def fields_report(args: Any) -> EvidenceReport:
 
 def extract_report(args: Any) -> EvidenceReport:
   args.systems_root = resolve_systems_root(args.systems_root)
-  resolved = resolve_source(args.source, "extract", {"topic": args.topic, "field": args.field, "backend": args.backend, "systems_root": args.systems_root})
+  all_fields = getattr(args, "all_fields", False)
+  fields = [] if all_fields else (args.field or [])
+  resolved = resolve_source(args.source, "extract", {"topic": args.topic, "field": fields, "all_fields": all_fields, "backend": args.backend, "systems_root": args.systems_root})
   if blocker := guard_zml_source(args.source):
     return zml_packet_report("ZML Extract", blocked_zml_packet("audit", args.source, blocker), [resolved], args.format)
-  specs = specs_from_args([args.topic], args.field or [], None)
+  specs = specs_from_args([args.topic], fields, None)
   window = window_from_args(args)
   if args.backend == "local-text" or should_use_local_text(args.source, args.backend, args.systems_root, "extract"):
     packet = local_text_audit_packet(args.source, specs, window, include_samples=True)
@@ -105,11 +107,24 @@ def extract_report(args: Any) -> EvidenceReport:
     output_paths.append(args.csv)
   report = zml_packet_report("ZML Extract", packet, [resolved], args.format)
   report.output_paths.extend(output_paths)
-  if args.plot or args.plot_dir:
-    blocker = Blocker("plot_backend_unavailable", "warning", "backend_failure", "Static plot generation is not backed by an available dependency in this environment; CSV extraction is preserved.", args.plot or args.plot_dir, "Use the CSV output for plotting or add a reviewed optional plot backend.")
-    report.blockers.append(blocker)
-    report.status = "partial" if report.status == "ok" else report.status
-  report.next_commands.append(f"{CLI} compare --fail FAIL --pass PASS --topic {args.topic} --field {','.join(args.field or [])}")
+  if fields:
+    report.next_commands.append(f"{CLI} compare --fail FAIL --pass PASS --topic {args.topic} --field {','.join(fields)}")
+  if args.csv:
+    report.next_commands.append(f"{CLI} summary {args.csv} --metric transitions --metric minmax --metric delta")
+  return report
+
+
+def summary_report(args: Any) -> EvidenceReport:
+  metrics = list(dict.fromkeys(args.metric or []))
+  field_filter = set(args.field or [])
+  rows, blockers = read_summary_csv(args.csv, field_filter)
+  summary_rows = summarize_csv_rows(rows, metrics)
+  status = "blocked" if blockers else "ok"
+  report = EvidenceReport(title="ZML CSV Summary", status=status, blockers=blockers, confidence="medium" if status == "ok" else "blocked", extra={"summary_metrics": {"csv": args.csv, "metrics": metrics, "fields": sorted(field_filter), "rows": summary_rows}})
+  report.summary = f"Summarized `{args.csv}` with {len(summary_rows)} metric row(s) across {len(group_summary_rows(rows))} path/topic/field group(s)."
+  report.evidence_table.append({"finding": "CSV summary metrics", "source_ref": args.csv, "supports": "Computes selected metrics from Phoenix Inspector extract CSV rows grouped by path/topic/field.", "does_not_prove": "Does not prove causality or validate arbitrary CSV schemas beyond the extracted CSV shape."})
+  report.proves.append("The selected CSV rows were grouped and summarized without launching Phoenix workflows.")
+  report.does_not_prove.append("Summary metrics do not prove root cause without corroborating logs, code, or pass/fail comparison.")
   return report
 
 
@@ -118,11 +133,9 @@ def compare_report(args: Any) -> EvidenceReport:
   topic_values = [args.topic] if args.topic else []
   field_values = args.field or []
   specs = specs_from_args(topic_values, field_values, args.preset)
-  if not specs and args.spec:
-    specs = specs_from_spec(args.spec)
   if not specs:
     sources = [resolve_source(args.fail, "compare", {"side": "fail"}), resolve_source(args.pass_source, "compare", {"side": "pass"})]
-    blocker = Blocker("compare_has_no_signal_selection", "warning", "validation_gap", "Compare needs executable topic/field, preset, or spec operations.", needed_action="Use --topic with --field, --preset, or a --spec containing compare/extract operations.")
+    blocker = Blocker("compare_has_no_signal_selection", "warning", "validation_gap", "Compare needs an executable topic/field or preset selection.", needed_action="Use --topic with --field, or use --preset for a known topic/field bundle.")
     return EvidenceReport(title="Pass/Fail ZML Compare", status="blocked", sources=sources, blockers=[blocker], summary="Compare is blocked because no executable signal selection was declared.", confidence="blocked", does_not_prove=["An empty compare request does not prove absence or presence of the fault."])
   window = window_from_args(args)
   for path in (args.fail, args.pass_source):
@@ -142,7 +155,6 @@ def compare_report(args: Any) -> EvidenceReport:
   report.confidence = "medium" if packet.get("status") == "ok" else "blocked"
   report.does_not_prove.append("A signal delta is not causal proof without source, timebase, and log corroboration.")
   report.next_commands.append(f"{CLI} fields <source> --fuzzy FIELD_OR_SIGNAL_NAME")
-  report.next_commands.append(f"{CLI} spec init --name my-question --from-last-run")
   return report
 
 
@@ -440,6 +452,70 @@ def write_csv_from_packet(packet: dict, path: str) -> None:
     writer.writerows(rows)
 
 
+def read_summary_csv(path: str, field_filter: set[str]) -> tuple[list[dict], list[Blocker]]:
+  try:
+    with Path(path).open(newline="", encoding="utf-8") as handle:
+      reader = csv.DictReader(handle)
+      fieldnames = set(reader.fieldnames or [])
+      required = {"timestamp", "field", "value"}
+      missing = sorted(required - fieldnames)
+      if missing:
+        blocker = Blocker("summary_csv_shape_unsupported", "warning", "validation_gap", f"Summary requires a Phoenix Inspector extract CSV shape; missing columns: {', '.join(missing)}.", path, "Provide a CSV with path,topic,timestamp,field,value columns, or at least timestamp,field,value for simple best-effort summaries.")
+        return [], [blocker]
+      rows = []
+      for index, row in enumerate(reader):
+        field = row.get("field") or ""
+        if field_filter and field not in field_filter:
+          continue
+        rows.append({"index": index, "path": row.get("path") or "", "topic": row.get("topic") or "", "timestamp": row.get("timestamp") or "", "field": field, "value": row.get("value") or ""})
+      return rows, []
+  except OSError as exc:
+    blocker = Blocker("summary_csv_unreadable", "warning", "missing_artifact", f"Could not read summary CSV: {exc}", path, "Provide an existing readable CSV written by extract --csv.")
+    return [], [blocker]
+
+
+def summarize_csv_rows(rows: list[dict], metrics: list[str]) -> list[dict]:
+  summary_rows = []
+  for (path, topic, field), group in sorted(group_summary_rows(rows).items()):
+    ordered = sorted(group, key=summary_row_sort_key)
+    values = [row.get("value") for row in ordered]
+    base = {"path": path, "topic": topic, "field": field, "sample_count": len(ordered), "first_timestamp": ordered[0].get("timestamp"), "last_timestamp": ordered[-1].get("timestamp"), "first_value": values[0], "last_value": values[-1]}
+    if "transitions" in metrics:
+      summary_rows.append({**base, "metric": "transitions", "transition_count": transition_count(values)})
+    numeric_values = [number for number in (numeric_value(value) for value in values) if number is not None]
+    if "minmax" in metrics and numeric_values:
+      summary_rows.append({**base, "metric": "minmax", "numeric_count": len(numeric_values), "min": min(numeric_values), "max": max(numeric_values)})
+    first_number = numeric_value(values[0])
+    last_number = numeric_value(values[-1])
+    if "delta" in metrics and first_number is not None and last_number is not None:
+      summary_rows.append({**base, "metric": "delta", "delta": last_number - first_number})
+  return summary_rows
+
+
+def group_summary_rows(rows: list[dict]) -> dict[tuple[str, str, str], list[dict]]:
+  groups: dict[tuple[str, str, str], list[dict]] = {}
+  for row in rows:
+    groups.setdefault((row.get("path") or "", row.get("topic") or "", row.get("field") or ""), []).append(row)
+  return groups
+
+
+def summary_row_sort_key(row: dict) -> tuple[bool, float, int]:
+  timestamp = parse_timestamp(row.get("timestamp"))
+  return (timestamp is None, timestamp or 0.0, int(row.get("index") or 0))
+
+
+def transition_count(values: list[object]) -> int:
+  if not values:
+    return 0
+  count = 0
+  previous = values[0]
+  for value in values[1:]:
+    if value != previous:
+      count += 1
+    previous = value
+  return count
+
+
 def write_compare_csv(packet: dict, path: str) -> None:
   rows = []
   comparison = packet.get("comparison") or {}
@@ -453,31 +529,6 @@ def write_compare_csv(packet: dict, path: str) -> None:
     writer = csv.DictWriter(handle, fieldnames=["section", "topic", "field", "metric", "fail_value", "pass_value", "delta"])
     writer.writeheader()
     writer.writerows(rows)
-
-
-def specs_from_spec(path: str) -> list[TopicSpec]:
-  from .specs import load_spec
-
-  spec = load_spec(path)
-  specs: list[TopicSpec] = []
-  for item in spec.get("compare") or []:
-    preset = item.get("preset")
-    if preset:
-      specs.extend(expand_specs([], [], preset))
-    if item.get("topic"):
-      specs.append(TopicSpec(item["topic"], tuple(zml_field_list(item))))
-  if specs:
-    return specs
-  return [TopicSpec(item.get("topic"), tuple(item.get("fields") or [])) for item in spec.get("extract") or [] if item.get("topic")]
-
-
-def zml_field_list(item: dict) -> list[str]:
-  raw = item.get("fields") if "fields" in item else item.get("field")
-  if raw is None:
-    return []
-  if isinstance(raw, str):
-    return [raw]
-  return list(raw)
 
 
 def canonical_blocker(item: dict) -> Blocker:

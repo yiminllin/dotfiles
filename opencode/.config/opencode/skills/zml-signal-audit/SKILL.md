@@ -38,8 +38,8 @@ operate the old `zml_signal_audit.py` helper directly because a canonical
 ## Helper boundary
 
 - Helper name: `zml_signal_audit.py`.
-- Source path: `opencode/.config/opencode/scripts/zml_signal_audit.py`.
-- Runtime path when installed: `$HOME/.config/opencode/scripts/zml_signal_audit.py`.
+- Source path: `scripts/zml_signal_audit.py`.
+- Runtime path: `$HOME/dotfiles/scripts/zml_signal_audit.py`.
 - Relevant legacy subcommands: `topics`, `fields`, `audit`, `compare`.
 
 Keep use read-only on bounded local `.zml`, `.zml.zst`, or log-root inputs

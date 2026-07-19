@@ -9,10 +9,10 @@ Use this skill for read-only Phoenix evidence work. Route launches, reruns, SIL/
 
 ## Helper strategy
 
-The deterministic helper remains canonical at `$HOME/.config/opencode/scripts/phoenix_inspector.py`; do not duplicate its Python package in Pi. This stable stowed runtime path avoids two diverging implementations while OpenCode and Pi coexist. If it is absent, report that exact missing path and stop—do not install, copy, fetch, or silently substitute another helper. Save generated artifacts under `/tmp/pi/<short-task>`.
+The deterministic helper is canonical at `$HOME/dotfiles/scripts/phoenix_inspector.py`. If it is absent, report that exact missing path and stop—do not install, copy, fetch, or silently substitute another helper. Save generated artifacts under `/tmp/pi/<short-task>`.
 
 ```bash
-PI="$HOME/.config/opencode/scripts/phoenix_inspector.py"
+PI="$HOME/dotfiles/scripts/phoenix_inspector.py"
 python3 "$PI" --help
 ```
 
@@ -46,4 +46,4 @@ Keep a Topic Ledger for nontrivial work: active question; exact run/scenario/job
 
 Final claims must state: evidence supports/proves; evidence does not prove; missing comparison; blocker or next probe. Do not infer causal RCA from inventory, summaries, or signal deltas alone.
 
-For detailed helper syntax, use `python3 "$PI" <command> -h`; do not load or copy the OpenCode README unless the user requests the operator guide.
+For detailed helper syntax, use `python3 "$PI" <command> -h`; do not load the operator README unless the user requests the guide.

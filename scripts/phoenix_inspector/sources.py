@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-import zipfile
 from pathlib import Path
 
 from .models import Blocker, ProvenanceRef, ResolvedSource, RunSource
@@ -10,6 +9,7 @@ from .models import Blocker, ProvenanceRef, ResolvedSource, RunSource
 
 GHA_RE = re.compile(r"^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/actions/runs/(?P<run_id>\d+)(?:/job/(?P<job_id>\d+))?")
 FLIGHT_ID_RE = re.compile(r"^(?:P2M|P2F)_[A-Za-z0-9]+$")
+ARCHIVE_SUFFIXES = (".zip", ".tar", ".tgz", ".tar.gz", ".tar.zst")
 
 
 def run_source(raw: str, intent: str, constraints: dict | None = None) -> RunSource:
@@ -33,18 +33,24 @@ def detect_source_type(raw: str) -> str:
   if path.exists():
     if path.is_dir():
       return "local_log_dir"
-    if path.suffix == ".json" and looks_like_packet(path):
-      return "hil_packet_json"
     if raw.endswith((".zml", ".zml.zst")):
       return "zml_file"
-    if raw.endswith((".zip", ".tar", ".tgz", ".tar.gz", ".tar.zst")):
-      return "archive"
-    if path.name == "test_record.json":
-      return "hil_packet_json"
+    if is_archive_path(raw):
+      return "unsupported_archive"
+    if path.name == "test_record.json" or (path.suffix == ".json" and looks_like_packet(path)):
+      return "unsupported_packet_json"
     return "local_text_file"
   if raw.endswith((".zml", ".zml.zst")):
     return "zml_file"
+  if is_archive_path(raw):
+    return "unsupported_archive"
+  if path.name == "test_record.json":
+    return "unsupported_packet_json"
   return "unknown"
+
+
+def is_archive_path(raw: str) -> bool:
+  return raw.endswith(ARCHIVE_SUFFIXES)
 
 
 def looks_like_packet(path: Path) -> bool:
@@ -71,40 +77,43 @@ def resolve_source(raw: str, intent: str, constraints: dict | None = None) -> Re
     metadata = {"bucket": bucket_prefix[0], "prefix": bucket_prefix[1] if len(bucket_prefix) > 1 else ""}
     blockers = []
     if not metadata["prefix"].strip("/"):
-      blockers.append(Blocker("s3_bucket_root_refused", "error", "safety_boundary", "Refusing to recursively inventory an S3 bucket root without an explicit prefix.", raw, "Provide a narrow s3://bucket/prefix/ source or a GHA/evidence packet that contains selected artifact roots."))
+      blockers.append(Blocker("s3_bucket_root_refused", "error", "safety_boundary", "Refusing to recursively inventory an S3 bucket root without an explicit prefix.", raw, "Provide a narrow s3://bucket/prefix/ source or a GHA run/job URL that can identify selected artifact roots."))
     return ResolvedSource(source, "s3_root", raw, remote_root=raw, metadata=metadata, blockers=blockers, provenance=provenance)
   if source.source_type == "unsupported_flight_id":
     blocker = Blocker(
       code="future_source_adapter",
       category="unsupported_source",
-      message="Flight IDs are not default v1 sources; provide a local bundle or packet JSON.",
+      message="Flight IDs are not default v1 sources; provide an explicit supported source.",
       source_ref=raw,
-      needed_action="Use an explicit local archive/directory or add a separately scoped Baraza/Snowflake source adapter.",
+      needed_action="Use a local Phoenix log/extracted bundle directory, local ZML/ZST file, GHA run/job URL, or non-root S3 prefix.",
     )
     return ResolvedSource(source, "unsupported_flight_id", raw, metadata={"flight_or_mission_id": raw}, blockers=[blocker], provenance=provenance)
   path = Path(raw).expanduser()
-  if source.source_type in {"local_log_dir", "local_text_file", "zml_file", "hil_packet_json", "archive"}:
+  if source.source_type == "unsupported_packet_json":
+    blocker = Blocker(
+      code="unsupported_packet_json_source",
+      category="unsupported_source",
+      message="Packet/test_record JSON files are no longer supported as standalone inventory sources.",
+      source_ref=raw,
+      needed_action="Provide the containing extracted Phoenix log/bundle directory, a local ZML/ZST file, GHA run/job URL, or non-root S3 prefix.",
+    )
+    return ResolvedSource(source, "unsupported_packet_json", raw, local_root=str(path), blockers=[blocker], provenance=provenance)
+  if source.source_type == "unsupported_archive":
+    blocker = Blocker(
+      code="unsupported_archive_source",
+      category="unsupported_source",
+      message="Archive files are no longer supported as standalone inventory sources.",
+      source_ref=raw,
+      needed_action="Extract the archive first and provide the resulting Phoenix log/bundle directory, or provide a local ZML/ZST file, GHA run/job URL, or non-root S3 prefix.",
+    )
+    return ResolvedSource(source, "unsupported_archive", raw, local_root=str(path), blockers=[blocker], provenance=provenance)
+  if source.source_type in {"local_log_dir", "local_text_file", "zml_file"}:
     return ResolvedSource(source, source.source_type, str(path), local_root=str(path), provenance=provenance)
   blocker = Blocker(
     code="unsupported_source",
     category="unsupported_source",
     message="Source is not a supported Phoenix inspector source.",
     source_ref=raw,
-    needed_action="Provide a GHA URL, s3:// prefix, local log directory, .zml/.zml.zst file, HIL packet JSON, or local bundle/archive.",
+    needed_action="Provide a GHA run/job URL, non-root s3:// prefix, local Phoenix log/extracted bundle directory, or local .zml/.zml.zst file.",
   )
   return ResolvedSource(source, "unknown", raw, blockers=[blocker], provenance=provenance)
-
-
-def safe_archive_members(path: Path, limit: int = 2000) -> tuple[list[str], list[Blocker]]:
-  if zipfile.is_zipfile(path):
-    with zipfile.ZipFile(path) as archive:
-      names = archive.namelist()[:limit]
-    return names, []
-  blocker = Blocker(
-    code="archive_listing_unavailable",
-    category="unsupported_source",
-    message="Archive listing currently supports .zip only without extraction.",
-    source_ref=str(path),
-    needed_action="Provide an extracted local directory, a .zip bundle, or add a reviewed safe archive extractor for this format.",
-  )
-  return [], [blocker]
