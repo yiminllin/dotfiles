@@ -39,8 +39,17 @@ if type -q fnm
     echo "Updated Node LTS"
 end
 
-# OpenCode
-curl -fsSL https://opencode.ai/install | bash >/dev/null 2>&1
-echo "Updated OpenCode"
+# Pi
+if not type -q npm
+    echo "npm is required to update Pi" >&2
+    exit 1
+end
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent >/dev/null 2>&1
+if test $status -eq 0
+    echo "Updated Pi"
+else
+    echo "Failed to update Pi" >&2
+    exit 1
+end
 
 echo "System update complete"

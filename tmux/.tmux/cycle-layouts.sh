@@ -19,7 +19,7 @@ while IFS="$separator" read -r pane_top pane_left pane_id board_flag; do
     target_top=$pane_top
     target_left=$pane_left
   fi
-done < <(tmux list-panes -F "#{pane_top}${separator}#{pane_left}${separator}#{pane_id}${separator}#{@opencode_agent_board}")
+done < <(tmux list-panes -F "#{pane_top}${separator}#{pane_left}${separator}#{pane_id}${separator}#{@pi_agent_board}")
 
 [[ -n "$target_pane" ]] || exit 0
 

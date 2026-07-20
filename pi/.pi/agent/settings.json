@@ -2,7 +2,7 @@
   "theme": "light",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.6-luna",
-  "defaultThinkingLevel": "low",
+  "defaultThinkingLevel": "medium",
   "enabledModels": [
     "openai-codex/gpt-5.6-sol",
     "openai-codex/gpt-5.6-luna"

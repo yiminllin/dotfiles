@@ -49,12 +49,12 @@ check_json() {
   local file
   if command -v python3 >/dev/null 2>&1; then
     for file in **/*.json; do
-      case "$file" in */node_modules/*|*/.git/*|*/.ruff_cache/*) continue ;; esac
+      case "$file" in */node_modules/*|*/.git/*|*/.ruff_cache/*|pi/.pi/agent/auth.json|pi/.pi/agent/sessions/*) continue ;; esac
       python3 -m json.tool "$file" >/dev/null || return 1
     done
   elif command -v jq >/dev/null 2>&1; then
     for file in **/*.json; do
-      case "$file" in */node_modules/*|*/.git/*|*/.ruff_cache/*) continue ;; esac
+      case "$file" in */node_modules/*|*/.git/*|*/.ruff_cache/*|pi/.pi/agent/auth.json|pi/.pi/agent/sessions/*) continue ;; esac
       jq empty "$file" >/dev/null || return 1
     done
   else
@@ -80,163 +80,133 @@ check_stow_dry_run() {
   command -v stow >/dev/null 2>&1 || return 77
   local target
   target="$(mktemp -d)"
-  stow --no --target "$target" bash bat fish flightsystems git kitty nvim opencode pi task tmux tmux-powerline tmuxinator visidata >/dev/null
+  stow --no --target "$target" bash bat fish flightsystems git kitty nvim pi task tmux tmux-powerline tmuxinator visidata >/dev/null
   local status=$?
   rm -rf "$target"
   return "$status"
 }
 
-check_agent_permissions() {
-  local deprecated
-  deprecated="$(grep -R -n '^tools:' opencode/.config/opencode/agents 2>/dev/null || true)"
-  if [ -n "$deprecated" ]; then
-    printf '%s\n' "$deprecated" >&2
-    return 1
-  fi
-
-  local agent
-  for agent in opencode/.config/opencode/agents/*.md; do
-    grep -q '^permission:' "$agent" || {
-      printf 'missing permission frontmatter: %s\n' "$agent" >&2
-      return 1
-    }
-  done
-
-  require_agent_permission opencode/.config/opencode/agents/yolo.md bash allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/yolo.md edit allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/yolo.md task allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/orchestrator.md task allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/orchestrator.md edit deny || return 1
-  require_agent_permission opencode/.config/opencode/agents/orchestrator.md bash allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/builder-light.md bash allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/builder-light.md edit allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/builder-light.md task allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/builder-heavy.md bash allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/builder-heavy.md edit allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/builder-heavy.md task allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/debugger.md bash allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/debugger.md edit deny || return 1
-  require_agent_permission opencode/.config/opencode/agents/code-reviewer.md edit deny || return 1
-  require_agent_permission opencode/.config/opencode/agents/teacher.md edit deny || return 1
-  require_agent_permission opencode/.config/opencode/agents/brainstormer.md edit deny || return 1
-  require_agent_permission opencode/.config/opencode/agents/dotfile-documenter.md edit allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/dotfile-documenter.md bash allow || return 1
-  require_agent_permission opencode/.config/opencode/agents/dotfile-documenter.md task deny || return 1
+check_pi_install_sources() {
+  grep -q '^npm install -g --ignore-scripts @earendil-works/pi-coding-agent$' install.sh || return 1
+  grep -q '^npm install -g --ignore-scripts @earendil-works/pi-coding-agent >/dev/null 2>&1$' scripts/system_update.fish || return 1
+  grep -q '^[[:space:]]*pi$' install.sh || return 1
 }
 
-require_agent_permission() {
-  local agent="$1"
-  local permission="$2"
-  local action="$3"
-
-  grep -q "^  $permission: $action$" "$agent" || {
-    printf 'expected %s to contain %s: %s\n' "$agent" "$permission" "$action" >&2
-    return 1
-  }
-}
-
-check_agent_fixtures() {
-  local fixture_dir="opencode/.config/opencode/evals"
-  local fixtures=(
-    permission-frontmatter.md
-    permission-boundary-escalation.md
-    yolo-autonomy.md
-    prompt-edit-approval.md
-    commit-safety.md
-    dotfile-documenter-plugins.md
-    insights-followup.md
-  )
-  local fixture
-  for fixture in "${fixtures[@]}"; do
-    [ -f "$fixture_dir/$fixture" ] || {
-      printf 'missing fixture: %s\n' "$fixture_dir/$fixture" >&2
-      return 1
-    }
-  done
-}
-
-check_skill_anatomy() {
-  shopt -s nullglob
-  local skills=(opencode/.config/opencode/skills/*/SKILL.md)
-  shopt -u nullglob
-
-  [ "${#skills[@]}" -gt 0 ] || return 77
-
-  local failures=0
-  local skill
-  for skill in "${skills[@]}"; do
-    skill_has_frontmatter_field "$skill" name || {
-      printf 'missing or empty skill frontmatter field: %s: name\n' "$skill" >&2
-      failures=$((failures + 1))
-    }
-    skill_has_frontmatter_field "$skill" description || {
-      printf 'missing or empty skill frontmatter field: %s: description\n' "$skill" >&2
-      failures=$((failures + 1))
-    }
-  done
-
-  [ "$failures" -eq 0 ]
-}
-
-skill_has_frontmatter_field() {
-  local file="$1"
-  local field="$2"
-  local line
-  local in_frontmatter=0
-
-  while IFS= read -r line || [ -n "$line" ]; do
-    if [ "$in_frontmatter" -eq 0 ]; then
-      [ "$line" = '---' ] || return 1
-      in_frontmatter=1
-      continue
-    fi
-
-    [ "$line" = '---' ] && return 1
-
-    [[ "$line" =~ ^[[:space:]]*${field}:[[:space:]]*[^[:space:]].* ]] && return 0
-  done <"$file"
-
-  return 1
-}
-
-check_opencode_smoke() {
-  command -v opencode >/dev/null 2>&1 || return 77
-  XDG_CONFIG_HOME="$REPO_ROOT/opencode/.config" opencode --pure debug config >/dev/null || return 1
-  XDG_CONFIG_HOME="$REPO_ROOT/opencode/.config" opencode --pure debug agent yolo >/dev/null || return 1
-  XDG_CONFIG_HOME="$REPO_ROOT/opencode/.config" opencode --pure debug agent code-reviewer >/dev/null || return 1
-}
-
-check_opencode_progress_ui() {
+check_pi_config() {
   command -v python3 >/dev/null 2>&1 || return 77
-  python3 opencode/.config/opencode/scripts/check_progress_ui.py
+  python3 - <<'PY'
+import json
+from pathlib import Path
+
+root = Path("pi/.pi/agent")
+for name in ("settings.json", "keybindings.json"):
+    value = json.loads((root / name).read_text())
+    if not isinstance(value, dict):
+        raise SystemExit(f"{root / name} must contain a JSON object")
+
+append_system = root / "APPEND_SYSTEM.md"
+if not append_system.is_file() or not append_system.read_text().strip():
+    raise SystemExit(f"missing or empty {append_system}")
+PY
 }
 
-check_opencode_helper_packets() {
+check_pi_resources() {
   command -v python3 >/dev/null 2>&1 || return 77
+  python3 - <<'PY'
+import re
+from pathlib import Path
 
-  local helpers=(
-    opencode/.config/opencode/scripts/opencode_worktree_cleanup_packet.py
-    opencode/.config/opencode/scripts/opencode_tmux_handoff.py
-    opencode/.config/opencode/scripts/opencode_runtime_packet.py
-    opencode/.config/opencode/scripts/opencode_repo_packet.py
-    opencode/.config/opencode/scripts/opencode_disk_pressure.py
+agent_root = Path("pi/.pi/agent")
+name_pattern = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+resource_pattern = re.compile(r"(?:\]\(|`)((?:references|scripts)/[^)`]+)")
+
+def frontmatter(path):
+    lines = path.read_text().splitlines()
+    if not lines or lines[0] != "---":
+        raise SystemExit(f"missing frontmatter: {path}")
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        raise SystemExit(f"unterminated frontmatter: {path}")
+    fields = {}
+    for line in lines[1:end]:
+        key, separator, value = line.partition(":")
+        if separator:
+            fields[key.strip()] = value.strip()
+    return fields
+
+skills = sorted((agent_root / "skills").rglob("SKILL.md"))
+if not skills:
+    raise SystemExit("no Pi skills discovered")
+
+names = set()
+for skill in skills:
+    fields = frontmatter(skill)
+    name = fields.get("name", "")
+    if not name_pattern.fullmatch(name) or name != skill.parent.name:
+        raise SystemExit(f"invalid skill name or directory mismatch: {skill}: {name!r}")
+    if not fields.get("description"):
+        raise SystemExit(f"missing skill description: {skill}")
+    if name in names:
+        raise SystemExit(f"duplicate skill name: {name}")
+    names.add(name)
+    for reference in resource_pattern.findall(skill.read_text()):
+        if not (skill.parent / reference).is_file():
+            raise SystemExit(f"missing skill resource: {skill.parent / reference}")
+
+prompts = sorted((agent_root / "prompts").rglob("*.md"))
+prompt_names = {prompt.stem for prompt in prompts}
+if "insights" not in prompt_names:
+    raise SystemExit("Pi prompt template 'insights' was not discovered")
+for prompt in prompts:
+    if not name_pattern.fullmatch(prompt.stem):
+        raise SystemExit(f"invalid prompt template name: {prompt}")
+    if not frontmatter(prompt).get("description"):
+        raise SystemExit(f"missing prompt template description: {prompt}")
+PY
+}
+
+check_pi_safeguards() {
+  git check-ignore -q pi/.pi/agent/auth.json || return 1
+  git check-ignore -q pi/.pi/agent/sessions/example.json || return 1
+  ! git ls-files --error-unmatch pi/.pi/agent/auth.json >/dev/null 2>&1 || return 1
+  grep -q '^\^\\\.pi/agent/auth\\\.json\$$' pi/.stow-local-ignore || return 1
+  grep -q '^\^\\\.pi/agent/sessions' pi/.stow-local-ignore || return 1
+}
+
+check_pi_source_references() {
+  [ -f scripts/phoenix_inspector.py ] || return 1
+  grep -q '\$HOME/dotfiles/scripts/phoenix_inspector.py' pi/.pi/agent/skills/phoenix-inspector/SKILL.md || return 1
+  grep -q '\$HOME/dotfiles/scripts/phoenix_inspector.py' pi/.pi/agent/skills/phoenix-workflows/SKILL.md || return 1
+
+  local board_files=(
+    tmux/.tmux/pi-agent-board
+    tmux/.tmux/pi-agent-board-ensure
+    tmux/.tmux/pi-agent-board-resize
+    tmux/.tmux/pi-agent-board-resurrect
+    tmux/.tmux/pi-agent-board-toggle
+    tmux/.tmux/pi-pane-focus-main
   )
-
-  python3 -m py_compile "${helpers[@]}" || return 1
-
-  local helper
-  for helper in "${helpers[@]}"; do
-    python3 "$helper" --help >/dev/null || return 1
+  local file
+  for file in "${board_files[@]}"; do
+    [ -f "$file" ] || return 1
   done
+  grep -q 'pi-agent-board-ensure' tmux/.tmux.conf || return 1
+  grep -q '@pi_agent_board' nvim/.config/nvim/lua/utils/pi.lua || return 1
+  grep -q '@pi_agent_name' fish/.config/fish/config.fish || return 1
+}
 
-  python3 opencode/.config/opencode/scripts/opencode_worktree_cleanup_packet.py packet --repo . --format markdown >/dev/null || return 1
-  python3 opencode/.config/opencode/scripts/opencode_tmux_handoff.py packet --path /tmp --format markdown --dry-run >/dev/null || return 1
-  python3 opencode/.config/opencode/scripts/opencode_tmux_handoff.py packet --path /tmp --format markdown --copy-tmux --dry-run >/dev/null || return 1
-  python3 opencode/.config/opencode/scripts/opencode_runtime_packet.py packet --repo . --format markdown --dry-run >/dev/null || return 1
-  python3 opencode/.config/opencode/scripts/opencode_repo_packet.py packet --repo . --format markdown --no-gh >/dev/null || return 1
-  python3 opencode/.config/opencode/scripts/opencode_disk_pressure.py report --repo . --format markdown --max-depth 1 --max-entries 500 >/dev/null || return 1
-  python3 opencode/.config/opencode/scripts/opencode_disk_pressure.py report --repo . --format json --max-depth 1 --max-entries 500 >/dev/null || return 1
-  python3 opencode/.config/opencode/scripts/opencode_disk_pressure.py report --repo . --format markdown --max-depth 1 --max-entries 500 --print-cleanup-plan >/dev/null || return 1
+check_pi_offline() {
+  command -v pi >/dev/null 2>&1 || return 77
+  local output
+  local status
+  pi --offline --version >/dev/null || return 1
+  output="$(pi --offline --list-models 2>&1)"
+  status=$?
+  [ "$status" -eq 0 ] || return 1
+  ! grep -Eqi 'warning|error|diagnostic' <<<"$output" || return 1
+  grep -Eq '^openai-codex[[:space:]]+gpt-5\.6-sol[[:space:]]' <<<"$output" || return 1
+  grep -Eq '^openai-codex[[:space:]]+gpt-5\.6-luna[[:space:]]' <<<"$output" || return 1
 }
 
 run_optional_check() {
@@ -257,12 +227,12 @@ run_optional_check "JSON syntax" check_json
 run_optional_check "Lua parse" check_lua_parse
 run_optional_check "Stylua formatting" check_stylua
 run_optional_check "Stow dry-run" check_stow_dry_run
-run_check "Agent permission frontmatter" check_agent_permissions
-run_check "Agent regression fixtures" check_agent_fixtures
-run_optional_check "Skill anatomy frontmatter" check_skill_anatomy
-run_optional_check "OpenCode progress UI regression" check_opencode_progress_ui
-run_optional_check "OpenCode helper packet smoke" check_opencode_helper_packets
-run_optional_check "OpenCode config smoke" check_opencode_smoke
+run_check "Pi install and update sources" check_pi_install_sources
+run_optional_check "Pi config and APPEND_SYSTEM" check_pi_config
+run_optional_check "Pi skills and prompt templates" check_pi_resources
+run_check "Pi auth and session safeguards" check_pi_safeguards
+run_check "Pi helper and Agent Board references" check_pi_source_references
+run_optional_check "Pi offline config discovery" check_pi_offline
 
 if [ "$failures" -gt 0 ]; then
   printf '\nDotfiles validation failed: %s check(s) failed.\n' "$failures" >&2

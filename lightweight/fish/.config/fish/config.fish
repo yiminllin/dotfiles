@@ -1,5 +1,5 @@
 if status is-interactive
-    # Lightweight fish: minimal abbrs, no tmux/task/opencode
+    # Lightweight fish: minimal abbrs, no tmux/task/agent integration
 end
 
 # So Go-installed tools, fzf, and (on Debian) tarball nvim are in PATH after minimal install

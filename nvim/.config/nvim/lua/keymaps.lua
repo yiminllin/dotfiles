@@ -92,22 +92,22 @@ vim.keymap.set("n", "<M-c>", cycle_layout, { desc = "Cycle Split Layout" })
 vim.keymap.set("n", "<M-|>", ":vsplit<CR>", { desc = "Vertical split" })
 vim.keymap.set("n", "<M-->", ":split<CR>", { desc = "Horizontal split" })
 
--- Opencode Related
-local opencode = require("utils.opencode")
+-- Pi Related
+local pi = require("utils.pi")
 vim.keymap.set({ "n", "x" }, "<M-u>", function()
-	opencode.scroll_pane("up")
+	pi.scroll_pane("up")
 end, { desc = "Right Tmux Scroll Up" })
 vim.keymap.set({ "n", "x" }, "<M-d>", function()
-	opencode.scroll_pane("down")
+	pi.scroll_pane("down")
 end, { desc = "Right Tmux Scroll Down" })
 
-vim.keymap.set({ "n", "x" }, "<leader>cp", opencode.create_window_or_prompt, { desc = "Open[C]ode [P]rompt" })
-vim.keymap.set({ "n", "x" }, "<leader>ca", opencode.add_current_location, { desc = "Open[C]ode [A]dd Context" })
+vim.keymap.set({ "n", "x" }, "<leader>cp", pi.create_window_or_prompt, { desc = "Pi [P]rompt" })
+vim.keymap.set({ "n", "x" }, "<leader>ca", pi.add_current_location, { desc = "Pi [A]dd Context" })
 vim.keymap.set(
 	{ "n", "x" },
 	"<leader>cb",
-	opencode.add_current_buffer_path_relative_to_cwd,
-	{ desc = "Open[C]ode Add [B]uffers" }
+	pi.add_current_buffer_path_relative_to_cwd,
+	{ desc = "Pi Add [B]uffer" }
 )
 
 -- Note related

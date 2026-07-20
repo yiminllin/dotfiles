@@ -6,7 +6,7 @@
 scripts/check_dotfiles.sh
 ```
 
-Optional tools such as Fish, Stylua, Stow, Lua, and OpenCode are used when
+Optional tools such as Fish, Stylua, Stow, Lua, and Pi are used when
 available and reported as skipped when missing.
 
 (Only if on ubuntu docker)
@@ -61,13 +61,26 @@ juliaup add <julia_version>
 julia -e 'using Pkg; Pkg.add("LanguageServer")'
 ```
 
-OpenCode: run
+## Pi agent workflow
 
 ```bash
-opencode auth login
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+stow pi
+pi
 ```
 
-OpenCode uses a fixed light Everforest theme from the dotfiles config, so tmux-launched panes do not depend on terminal light/dark detection.
+In Pi, run `/login` to authenticate. Configuration is sourced from
+`pi/.pi/agent/` and stowed to `~/.pi/agent/`; credentials and sessions remain
+private runtime files. Cycle the configured models with `Ctrl-P`/`Ctrl-Shift-P`
+or `Alt-]`/`Alt-[`. Run `/reload` after changing keybindings, skills, prompts,
+themes, extensions, or context files.
+
+Inside tmux, `<leader>cp` in Neovim opens or prompts the right-hand Pi pane.
+Fish `review` opens the Pi review flow, the tmux Agent Board tracks Pi panes,
+and `prefix + f` opens the sessionizer with a Pi agent window. The pre-push hook
+runs `/skill:dotfile-documenter` and blocks when `PLUGINS.md` must be committed
+or Pi cannot verify it. Check the installed configuration without provider or
+network access with `pi --offline --version`.
 
 Github-CLI, we need
 
@@ -129,7 +142,7 @@ fish ~/dotfiles/scripts/dotfiles_auto_update.fish
 
 ### Manual System Update
 
-Update OS packages, Cargo tools, UV tools, Node, and OpenCode:
+Update OS packages, Cargo tools, UV tools, Node, and Pi:
 
 ```bash
 fish ~/dotfiles/scripts/system_update.fish

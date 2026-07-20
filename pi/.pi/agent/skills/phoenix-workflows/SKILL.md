@@ -50,7 +50,7 @@ If multiple modes are requested, begin with the safest approved read-only local 
 - Confirm scenario labels from the matching `BUILD.bazel`; `ash/scenarios/hil/*.pbtxt` are not standalone runnable targets.
 - Local runs normally use `bazel test <label> --config=debug`; repeats require separate approval of the count.
 - Prefer `/Systems/.phoenix/logs/**` after runs. Do not inspect Bazel cache testlogs unless Phoenix logs are insufficient or explicitly requested; surface the exact cache path first.
-- Do not use the OpenCode progress/orchestrator or `opencode_longrun.py`. Pi owns foreground progress: state the exact command and checkpoint/timeout plan, execute only after approval, and report command status and artifact paths. Do not promise background monitoring.
+- Pi owns foreground progress: state the exact command and checkpoint/timeout plan, execute only after approval, and report command status and artifact paths. Do not promise background monitoring.
 - Fetches require exact SHA/ref, bounded destination, approved network/AWS access, and stop condition. Uploads require exact source, destination/prefix, expected link/artifact, and separate approval.
 - Prefer checked-in GitHub HIL workflow for shared HILs. Local claimed-HIL execution requires an explicit claimed-box/container decision and a resolved version set or an explicit decision to use deployed software. Never assume raw checked-in version sets provide a usable sim image.
 - Post-run inspection belongs to `phoenix-inspector`, using `$HOME/dotfiles/scripts/phoenix_inspector.py`; seed it with exact log root, run attempt, selected ZMLs, topic/signal hints, and time window.

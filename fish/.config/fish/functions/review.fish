@@ -17,35 +17,33 @@ function __review_shell_single_quoted_string --argument-names value
     printf "'%s'\n" "$value"
 end
 
-function __review_open_opencode_pane --argument-names repo_root title bootstrap_path
+function __review_open_pi_pane --argument-names repo_root title bootstrap_path
     if not set -q TMUX; or test -z "$TMUX"
-        echo "review: not inside tmux; skipping interactive OpenCode pane" >&2
+        echo "review: not inside tmux; skipping interactive Pi pane" >&2
         return 1
     end
     if not command -q tmux
-        echo "review: tmux not found; skipping interactive OpenCode pane" >&2
+        echo "review: tmux not found; skipping interactive Pi pane" >&2
         return 1
     end
-    if not command -q opencode
-        echo "review: opencode not found; skipping interactive OpenCode pane" >&2
+    if not command -q pi
+        echo "review: pi not found; skipping interactive Pi pane" >&2
         return 1
     end
 
-    set -l prompt "Please read and execute this review bootstrap, then stay in review assistant mode: $bootstrap_path"
-    set -l repo_root_arg (__review_shell_single_quoted_string "$repo_root")
+    set -l prompt "/skill:pr-human-review-guide Read and execute this review bootstrap, then stay in review assistant mode: $bootstrap_path"
     set -l prompt_arg (__review_shell_single_quoted_string "$prompt")
     set -l title_arg (__review_shell_single_quoted_string "$title")
-    set -l fish_command (__review_shell_single_quoted_string "exec opencode $repo_root_arg --agent orchestrator --prompt $prompt_arg")
-    set -l launch_command "tmux set-option -pt \"\$TMUX_PANE\" allow-passthrough off; tmux set-option -pt \"\$TMUX_PANE\" @opencode_agent_name $title_arg; tmux select-pane -t \"\$TMUX_PANE\" -T $title_arg; exec fish -l -c $fish_command"
+    set -l launch_command "tmux set-option -pt \"\$TMUX_PANE\" allow-passthrough off; tmux set-option -pt \"\$TMUX_PANE\" @pi_agent_name $title_arg; tmux select-pane -t \"\$TMUX_PANE\" -T $title_arg; exec pi --name $title_arg $prompt_arg"
     set -l pane_id (command tmux split-window -h -p 33 -d -P -F '#{pane_id}' -c "$repo_root" "$launch_command" 2>&1)
     if test $status -ne 0
-        echo "review: could not open interactive OpenCode pane: $pane_id" >&2
+        echo "review: could not open interactive Pi pane: $pane_id" >&2
         return 1
     end
 
-    command tmux set-option -pt "$pane_id" @opencode_agent_name "$title" >/dev/null 2>/dev/null
+    command tmux set-option -pt "$pane_id" @pi_agent_name "$title" >/dev/null 2>/dev/null
     command tmux select-pane -t "$pane_id" -T "$title" >/dev/null 2>/dev/null
-    echo "review: opened interactive OpenCode pane: $title" >&2
+    echo "review: opened interactive Pi pane: $title" >&2
     printf '%s\n' "$pane_id"
 end
 
@@ -117,10 +115,10 @@ function __review_guide_status --argument-names guide_md_path guide_json_path re
     printf '%s\n%s\n%s\n' "$guide_md_status" "$guide_json_status" "$guides_need_generation"
 end
 
-function __review_run_interactive_guide_flow --argument-names repo_root opencode_title assistant_bootstrap_path guide_dir guide_md_path guide_json_path guides_need_generation assistant_bootstrap
+function __review_run_interactive_guide_flow --argument-names repo_root pi_title assistant_bootstrap_path guide_dir guide_md_path guide_json_path guides_need_generation assistant_bootstrap
     set -g __review_interactive_pane_id
 
-    if set -q TMUX; and test -n "$TMUX"; and command -q tmux; and command -q opencode
+    if set -q TMUX; and test -n "$TMUX"; and command -q tmux; and command -q pi
         command mkdir -p "$guide_dir"
         printf '%s\n' "$assistant_bootstrap" > "$assistant_bootstrap_path"
 
@@ -129,12 +127,12 @@ function __review_run_interactive_guide_flow --argument-names repo_root opencode
             set guide_generation_started_at (command python3 -c 'import time; print(time.time())')
         end
 
-        set -l pane_id (__review_open_opencode_pane "$repo_root" "$opencode_title" "$assistant_bootstrap_path")
+        set -l pane_id (__review_open_pi_pane "$repo_root" "$pi_title" "$assistant_bootstrap_path")
         if test $status -eq 0 -a -n "$pane_id"
             set -g __review_interactive_pane_id "$pane_id"
-            echo "review: passed OpenCode startup prompt: $assistant_bootstrap_path"
+            echo "review: passed Pi startup prompt: $assistant_bootstrap_path"
             if test $guides_need_generation -eq 1
-                echo "review: waiting for interactive OpenCode guide generation..."
+                echo "review: waiting for interactive Pi guide generation..."
                 if not __review_wait_for_guides "$guide_md_path" "$guide_json_path" "$guide_generation_started_at"
                     return 1
                 end
@@ -150,47 +148,72 @@ function __review_run_interactive_guide_flow --argument-names repo_root opencode
     return 0
 end
 
-function __review_generate_guides_noninteractive --argument-names repo_root refresh_guide mode_label guide_md_status guide_json_status guide_md_path guide_json_path guide_md_tmp guide_json_tmp markdown_title json_title markdown_prompt json_prompt
-    if not command -q opencode
-        echo "review: opencode is required to generate or refresh the guide" >&2
+function __review_generate_guides_noninteractive --argument-names repo_root refresh_guide mode_label guide_md_status guide_json_status guide_md_path guide_json_path guide_md_tmp guide_json_tmp markdown_prompt json_prompt
+    if not command -q pi
+        echo "review: pi is required to generate or refresh the guide" >&2
         return 127
     end
 
     command mkdir -p (dirname "$guide_md_path")
 
     if test $refresh_guide -eq 1
-        echo "review: refreshing OpenCode $mode_label guides..."
+        echo "review: refreshing Pi $mode_label guides..."
     else
-        echo "review: regenerating OpenCode $mode_label guides (Markdown: $guide_md_status, JSON: $guide_json_status)..."
+        echo "review: regenerating Pi $mode_label guides (Markdown: $guide_md_status, JSON: $guide_json_status)..."
     end
     echo "review: Markdown guide target: $guide_md_path"
     echo "review: JSON guide target: $guide_json_path"
 
-    if not command env -u FORCE_COLOR NO_COLOR=1 opencode run --agent orchestrator --title "$markdown_title" --dir "$repo_root" "$markdown_prompt" > "$guide_md_tmp"
-        set -l opencode_status $status
-        echo "review: OpenCode Markdown guide generation failed with status $opencode_status" >&2
-        return $opencode_status
+    command rm -f "$guide_md_tmp" "$guide_json_tmp"
+    set -l original_pwd "$PWD"
+    builtin cd "$repo_root"
+    or return 1
+
+    command env -u FORCE_COLOR NO_COLOR=1 pi --print --no-session "$markdown_prompt" > "$guide_md_tmp"
+    set -l pi_status $status
+    if test $pi_status -ne 0
+        builtin cd "$original_pwd"
+        command rm -f "$guide_md_tmp" "$guide_json_tmp"
+        echo "review: Pi Markdown guide generation failed with status $pi_status" >&2
+        return $pi_status
     else if not test -s "$guide_md_tmp"
-        echo "review: OpenCode Markdown guide output was empty" >&2
+        builtin cd "$original_pwd"
+        command rm -f "$guide_md_tmp" "$guide_json_tmp"
+        echo "review: Pi Markdown guide output was empty" >&2
         return 1
-    else if not command env -u FORCE_COLOR NO_COLOR=1 opencode run --agent orchestrator --title "$json_title" --dir "$repo_root" "$json_prompt" > "$guide_json_tmp"
-        set -l opencode_status $status
-        echo "review: OpenCode JSON guide generation failed with status $opencode_status" >&2
-        return $opencode_status
-    else if not command python3 -m json.tool "$guide_json_tmp" >/dev/null
-        set -l json_status $status
-        echo "review: OpenCode JSON guide output was not valid JSON" >&2
-        return $json_status
-    else
-        command mv "$guide_md_tmp" "$guide_md_path"
-        command mv "$guide_json_tmp" "$guide_json_path"
-        echo "review: Markdown guide saved: $guide_md_path"
-        echo "review: JSON guide saved: $guide_json_path"
     end
+
+    command env -u FORCE_COLOR NO_COLOR=1 pi --print --no-session "$json_prompt" > "$guide_json_tmp"
+    set pi_status $status
+    if test $pi_status -ne 0
+        builtin cd "$original_pwd"
+        command rm -f "$guide_md_tmp" "$guide_json_tmp"
+        echo "review: Pi JSON guide generation failed with status $pi_status" >&2
+        return $pi_status
+    end
+
+    command python3 -m json.tool "$guide_json_tmp" >/dev/null
+    set -l json_status $status
+    if test $json_status -ne 0
+        builtin cd "$original_pwd"
+        command rm -f "$guide_md_tmp" "$guide_json_tmp"
+        echo "review: Pi JSON guide output was not valid JSON" >&2
+        return $json_status
+    end
+
+    builtin cd "$original_pwd"
+    command mv "$guide_md_tmp" "$guide_md_path"
+    or return $status
+    command mv "$guide_json_tmp" "$guide_json_path"
+    or return $status
+    echo "review: Markdown guide saved: $guide_md_path"
+    echo "review: JSON guide saved: $guide_json_path"
 end
 
-function __review_wait_for_guides --argument-names guide_md_path guide_json_path min_mtime
-    set -l timeout_seconds 900
+function __review_wait_for_guides --argument-names guide_md_path guide_json_path min_mtime timeout_seconds
+    if test -z "$timeout_seconds"
+        set timeout_seconds 900
+    end
     set -l progress_seconds 5
     set -l stable_seconds 1
     set -l start_time (command date +%s)
@@ -215,7 +238,7 @@ function __review_wait_for_guides --argument-names guide_md_path guide_json_path
             echo "review: Markdown guide: $guide_md_path" >&2
             echo "review: JSON guide: $guide_json_path" >&2
             echo "review: last status: "(__review_guide_status_line "$guide_md_path" "$guide_json_path" "$min_mtime") >&2
-            echo "review: the OpenCode pane may still be writing; fix/regenerate there, then rerun review --refresh-guide if needed" >&2
+            echo "review: the Pi pane may still be writing; fix/regenerate there, then rerun review --refresh-guide if needed" >&2
             return 1
         end
 
@@ -223,7 +246,7 @@ function __review_wait_for_guides --argument-names guide_md_path guide_json_path
     end
 end
 
-function review --description "Open a PR or local branch in Diffview with a reusable OpenCode guide"
+function review --description "Open a PR or local branch in Diffview with a reusable Pi guide"
     set -l refresh_guide 0
     set -l selector
 
@@ -313,7 +336,7 @@ for key in ("number", "title", "url", "baseRefName", "headRefName"):
         set -l guide_json_status $guide_status[2]
         set -l guides_need_generation $guide_status[3]
 
-        set -l opencode_title "review-$pr_number"
+        set -l pi_title "review-$pr_number"
         set -l assistant_bootstrap_path "$guide_dir/assistant-bootstrap.md"
         set -l diffview_state_path "$guide_dir/diffview-review.json"
 
@@ -324,7 +347,7 @@ for key in ("number", "title", "url", "baseRefName", "headRefName"):
 
         set -l assistant_bootstrap "# Review assistant bootstrap for PR #$pr_number
 
-You are the persistent local review assistant for this Diffview session. Use the pr-human-review-guide skill and contract.
+You are the persistent local review assistant for this Diffview session. The pr-human-review-guide skill was explicitly invoked for this task; follow its contract.
 
 PR metadata:
 - Number: $pr_number
@@ -350,8 +373,8 @@ Initial task:
 - Do read-only context gathering only.
 - Do not post comments, approve, request changes, resolve threads, edit PR bodies, or otherwise mutate GitHub state.
 - Stay within the repository root above for local file discovery; do not broad-search /, /home, /home/vscode, or sibling worktrees unless explicitly asked.
-- Prefer bounded read-only PR context from existing local git state and authenticated read-only gh commands such as gh pr view, gh pr diff, and gh pr checks when needed.
-- If blocked by missing permissions, auth, PR context, or incomplete local refs, capture the blocker in the artifacts instead of mutating external state.
+- Use only supplied PR metadata and bounded read-only local git evidence. Do not invoke gh, GitHub APIs, webfetch, network, or authentication.
+- If blocked by missing PR context or incomplete local refs, capture the blocker in the artifacts instead of broadening discovery.
 
 Artifact contract when generation or refresh is needed:
 - guide.md must be raw Markdown only: no preface, no save-status/meta prose, and no wrapping fenced code block.
@@ -364,21 +387,20 @@ Artifact contract when generation or refresh is needed:
 
 Completion and follow-up mode:
 - When generation or refresh is needed, report READY after guide.md is non-empty and guide.json is valid JSON. The shell completion gate is the artifact files, not your message.
-- Stay alive after READY as review assistant $opencode_title.
+- Stay alive after READY as review assistant $pi_title.
 - Read guide.md, guide.json, and diffview-review.json when present.
 - Help answer/address local review comments, TODOs, and guide refinements without posting to GitHub unless a future user explicitly requests a public mutation through the proper workflow.
-- For local replies, append to the matching parent comment's optional replies array in diffview-review.json only. Use {\"author\":\"opencode\",\"body\":\"...\",\"created_at\":\"<UTC ISO timestamp>\"}; include updated_at only when editing an existing local reply.
+- For local replies, append to the matching parent comment's optional replies array in diffview-review.json only. Use {\"author\":\"pi\",\"body\":\"...\",\"created_at\":\"<UTC ISO timestamp>\"}; include updated_at only when editing an existing local reply.
 - Match parent comments by stable fields in this order: github_id, guide_id, then file + line/end_line or file_level + normalized body preview. Preserve all existing comments and fields. Ask the user if more than one parent matches.
 - Never treat replies as separate anchors/comments, and never mutate GitHub or other external state while adding local replies."
 
-        __review_run_interactive_guide_flow "$repo_root" "$opencode_title" "$assistant_bootstrap_path" "$guide_dir" "$guide_md_path" "$guide_json_path" $guides_need_generation "$assistant_bootstrap"
+        __review_run_interactive_guide_flow "$repo_root" "$pi_title" "$assistant_bootstrap_path" "$guide_dir" "$guide_md_path" "$guide_json_path" $guides_need_generation "$assistant_bootstrap"
         if test $status -ne 0
             return 1
         end
 
         if test $guides_need_generation -eq 1 -a -z "$__review_interactive_pane_id"
-            set -l markdown_prompt "Prepare a concise manual human review guide for GitHub PR #$pr_number.
-Use the pr-human-review-guide skill contract in default raw Markdown manual-output mode.
+            set -l markdown_prompt "/skill:pr-human-review-guide Prepare a concise manual human review guide for GitHub PR #$pr_number in default raw Markdown manual-output mode.
 
 PR metadata:
 - Title: $pr_title
@@ -396,15 +418,14 @@ Instructions:
 - Do not post comments, approve, request changes, resolve threads, or mutate GitHub state.
 - Stay within the repository root above for local file discovery.
 - Do not broad-search `/`, `/home`, `/home/vscode`, or sibling worktrees unless explicitly asked.
-- Use bounded read-only inspection. When a review subagent needs PR context, prefer authenticated read-only `gh pr view`, `gh pr diff`, `gh pr checks`, or local git diff/status/log context over webfetch or broad filesystem discovery.
+- Use only supplied PR metadata and bounded read-only local git inspection. Do not invoke gh, GitHub APIs, webfetch, network, or authentication.
 - If the existing Markdown guide status is valid, read the existing Markdown guide first and treat it as prior context, not truth. Refresh it against the current PR state: preserve still-relevant observations, remove stale ones, and add new findings/questions.
 - If the existing Markdown guide status is missing or empty, generate a fresh guide from the current PR state.
 - Return raw Markdown only: no preface, no save-status/meta prose, and no wrapping fenced code block.
 - The first content must be the review guide itself.
 - Keep the guide concise, reviewer-friendly, and actionable."
 
-            set -l json_prompt "Prepare a concise local Diffview review guide for GitHub PR #$pr_number.
-Use the pr-human-review-guide skill contract in structured JSON artifact mode.
+            set -l json_prompt "/skill:pr-human-review-guide Prepare a concise local Diffview review guide for GitHub PR #$pr_number in structured JSON artifact mode.
 
 PR metadata:
 - Title: $pr_title
@@ -423,7 +444,7 @@ Instructions:
 - Do not post comments, approve, request changes, resolve threads, or mutate GitHub state.
 - Stay within the repository root above for local file discovery.
 - Do not broad-search `/`, `/home`, `/home/vscode`, or sibling worktrees unless explicitly asked.
-- Use bounded read-only inspection. When a review subagent needs PR context, prefer authenticated read-only `gh pr view`, `gh pr diff`, `gh pr checks`, or local git diff/status/log context over webfetch or broad filesystem discovery.
+- Use only supplied PR metadata and bounded read-only local git inspection. Do not invoke gh, GitHub APIs, webfetch, network, or authentication.
 - If blocked by missing permissions, missing PR context, or incomplete local refs, return valid raw JSON with the blocker captured in the summary or high-risk fields instead of continuing broad discovery.
 - Read pr-human-review-guide references/output-templates.md if you need the full JSON schema/example.
 - If the existing JSON guide status is valid, read the existing JSON guide first and treat it as prior context, not truth. Refresh it against the current PR state: preserve still-relevant observations, remove stale ones, and add new findings/questions.
@@ -440,7 +461,7 @@ Instructions:
 - Use [] for empty arrays and omit optional suggestion fields only when they are not known.
 - Keep the output concise and actionable."
 
-            __review_generate_guides_noninteractive "$repo_root" $refresh_guide PR "$guide_md_status" "$guide_json_status" "$guide_md_path" "$guide_json_path" "$guide_md_tmp" "$guide_json_tmp" "PR #$pr_number Markdown review guide" "PR #$pr_number Diffview JSON review guide" "$markdown_prompt" "$json_prompt"
+            __review_generate_guides_noninteractive "$repo_root" $refresh_guide PR "$guide_md_status" "$guide_json_status" "$guide_md_path" "$guide_json_path" "$guide_md_tmp" "$guide_json_tmp" "$markdown_prompt" "$json_prompt"
             set -l generate_status $status
             if test $generate_status -ne 0
                 return $generate_status
@@ -516,7 +537,7 @@ Instructions:
     set -l guide_json_status $guide_status[2]
     set -l guides_need_generation $guide_status[3]
 
-    set -l opencode_title "review-$safe_branch"
+    set -l pi_title "review-$safe_branch"
     set -l assistant_bootstrap_path "$guide_dir/assistant-bootstrap.md"
     set -l diffview_state_path "$guide_dir/diffview-review.json"
 
@@ -527,7 +548,7 @@ Instructions:
 
     set -l assistant_bootstrap "# Review assistant bootstrap for branch $branch_label
 
-You are the persistent local review assistant for this Diffview session. Use the pr-human-review-guide skill and contract in local branch/range review mode.
+You are the persistent local review assistant for this Diffview session. The pr-human-review-guide skill was explicitly invoked for this task; follow its contract in local branch/range review mode.
 
 Branch metadata:
 - Branch label: $branch_label
@@ -570,21 +591,20 @@ Artifact contract when generation or refresh is needed:
 
 Completion and follow-up mode:
 - When generation or refresh is needed, report READY after guide.md is non-empty and guide.json is valid JSON. The shell completion gate is the artifact files, not your message.
-- Stay alive after READY as review assistant $opencode_title.
+- Stay alive after READY as review assistant $pi_title.
 - Read guide.md, guide.json, and diffview-review.json when present.
 - Help answer/address local review comments, TODOs, and guide refinements without posting to GitHub or mutating external state unless a future user explicitly requests a different workflow.
-- For local replies, append to the matching parent comment's optional replies array in diffview-review.json only. Use {\"author\":\"opencode\",\"body\":\"...\",\"created_at\":\"<UTC ISO timestamp>\"}; include updated_at only when editing an existing local reply.
+- For local replies, append to the matching parent comment's optional replies array in diffview-review.json only. Use {\"author\":\"pi\",\"body\":\"...\",\"created_at\":\"<UTC ISO timestamp>\"}; include updated_at only when editing an existing local reply.
 - Match parent comments by stable fields in this order: github_id, guide_id, then file + line/end_line or file_level + normalized body preview. Preserve all existing comments and fields. Ask the user if more than one parent matches.
 - Never treat replies as separate anchors/comments, and never mutate GitHub or other external state while adding local replies."
 
-    __review_run_interactive_guide_flow "$repo_root" "$opencode_title" "$assistant_bootstrap_path" "$guide_dir" "$guide_md_path" "$guide_json_path" $guides_need_generation "$assistant_bootstrap"
+    __review_run_interactive_guide_flow "$repo_root" "$pi_title" "$assistant_bootstrap_path" "$guide_dir" "$guide_md_path" "$guide_json_path" $guides_need_generation "$assistant_bootstrap"
     if test $status -ne 0
         return 1
     end
 
     if test $guides_need_generation -eq 1 -a -z "$__review_interactive_pane_id"
-        set -l markdown_prompt "Prepare a concise manual human review guide for the current branch before a PR exists.
-Use the pr-human-review-guide skill contract in default raw Markdown manual-output mode.
+        set -l markdown_prompt "/skill:pr-human-review-guide Prepare a concise manual human review guide for the current branch before a PR exists in default raw Markdown manual-output mode.
 
 Branch metadata:
 - Branch label: $branch_label
@@ -610,8 +630,7 @@ Instructions:
 - The first content must be the review guide itself.
 - Keep the guide concise, reviewer-friendly, and actionable."
 
-        set -l json_prompt "Prepare a concise local Diffview review guide for the current branch before a PR exists.
-Use the pr-human-review-guide skill contract in structured JSON artifact mode.
+        set -l json_prompt "/skill:pr-human-review-guide Prepare a concise local Diffview review guide for the current branch before a PR exists in structured JSON artifact mode.
 
 Branch metadata:
 - Branch label: $branch_label
@@ -648,7 +667,7 @@ Instructions:
 - Use [] for empty arrays and omit optional suggestion fields only when they are not known.
 - Keep the output concise and actionable."
 
-        __review_generate_guides_noninteractive "$repo_root" $refresh_guide branch "$guide_md_status" "$guide_json_status" "$guide_md_path" "$guide_json_path" "$guide_md_tmp" "$guide_json_tmp" "Branch $branch_label Markdown review guide" "Branch $branch_label Diffview JSON review guide" "$markdown_prompt" "$json_prompt"
+        __review_generate_guides_noninteractive "$repo_root" $refresh_guide branch "$guide_md_status" "$guide_json_status" "$guide_md_path" "$guide_json_path" "$guide_md_tmp" "$guide_json_tmp" "$markdown_prompt" "$json_prompt"
         set -l generate_status $status
         if test $generate_status -ne 0
             return $generate_status
@@ -662,9 +681,9 @@ Instructions:
     set -l diffview_command "DiffviewOpen $diff_arg"
     set -l initial_jump_command "lua vim.defer_fn(function() require('utils.diffview_review').jump_to_initial_guide_file() end, 500)"
     if string match -qr '/Systems[^/]*(/|$)' -- (pwd)
-        set diffview_command "$diffview_command -- . :!.opencode/skills :!notes"
+        set diffview_command "$diffview_command -- . :!.pi/skills :!notes"
     else if string match -qr '/Systems[^/]*(/|$)' -- "$repo_root"
-        set diffview_command "$diffview_command -- . :!.opencode/skills :!notes"
+        set diffview_command "$diffview_command -- . :!.pi/skills :!notes"
     end
 
     command nvim "+lua require('utils.diffview_review').set_active_guide_context({ path = $guide_lua, markdown_path = $guide_md_lua, repo = $repo_lua })" "+$diffview_command" "+$initial_jump_command"

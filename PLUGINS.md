@@ -54,7 +54,6 @@
 | UI/Visual | zen-mode.nvim | Distraction-free mode | [zenmode.lua](nvim/.config/nvim/lua/plugins/ui/zenmode.lua) |
 | Languages | godbolt.nvim | Compiler explorer integration | [godbolt.lua](nvim/.config/nvim/lua/plugins/languages/godbolt.lua) |
 | Languages | bazel.nvim | Bazel build system support | [bazel.lua](nvim/.config/nvim/lua/plugins/languages/bazel.lua) |
-| AI | opencode.nvim | AI code assistant integration | [opencode.lua](nvim/.config/nvim/lua/plugins/ai/opencode.lua) |
 | Misc | leetcode.nvim | LeetCode integration | [leetcode.lua](nvim/.config/nvim/lua/plugins/misc/leetcode.lua) |
 
 ---
@@ -197,7 +196,7 @@
 |------|---------|----------------|
 | kitty | Terminal emulator | [install.sh](install.sh) |
 | fzf | Fuzzy finder | [install.sh](install.sh) |
-| opencode | AI coding assistant | [install.sh](install.sh) |
+| Pi (`@earendil-works/pi-coding-agent`) | AI coding agent; skills, prompts, Neovim/tmux/Fish workflows, and pre-push documentation check | [install.sh](install.sh), [pi/.pi/agent](pi/.pi/agent) |
 | keyd | Key remapping (Linux) | [install.sh](install.sh) (Fedora) |
 
 ---

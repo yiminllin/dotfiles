@@ -3,9 +3,9 @@
 set -euo pipefail
 
 separator=$'\034'
-ensure_script="$HOME/.tmux/opencode-agent-board-ensure"
-resize_script="$HOME/.tmux/opencode-agent-board-resize"
-focus_main_script="$HOME/.tmux/opencode-pane-focus-main"
+ensure_script="$HOME/.tmux/pi-agent-board-ensure"
+resize_script="$HOME/.tmux/pi-agent-board-resize"
+focus_main_script="$HOME/.tmux/pi-pane-focus-main"
 
 window_id=$(tmux display-message -p '#{window_id}')
 session_name=$(tmux display-message -p '#{session_name}')
@@ -21,13 +21,13 @@ board_pane_for_window() {
     return 0
   done < <(
     tmux list-panes -t "$window" \
-      -F "#{pane_top}${separator}#{pane_index}${separator}#{pane_id}${separator}#{@opencode_agent_board}" 2>/dev/null \
+      -F "#{pane_top}${separator}#{pane_index}${separator}#{pane_id}${separator}#{@pi_agent_board}" 2>/dev/null \
       | sort -t"$separator" -k1,1n -k2,2n || true
   )
 }
 
 is_board_pane() {
-  [[ "$(tmux show-option -pv -t "$1" @opencode_agent_board 2>/dev/null || true)" == 1 ]]
+  [[ "$(tmux show-option -pv -t "$1" @pi_agent_board 2>/dev/null || true)" == 1 ]]
 }
 
 if is_board_pane "$active_pane"; then

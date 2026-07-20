@@ -3,11 +3,11 @@
 set -euo pipefail
 
 separator=$'\034'
-board_script="$HOME/.tmux/opencode-agent-board"
+board_script="$HOME/.tmux/pi-agent-board"
 session_name=${1:-$(tmux display-message -p '#{session_name}')}
 target_window=${2:-}
 
-if [[ "$(tmux show-option -gqv @opencode_agent_board_disabled)" == 1 ]]; then
+if [[ "$(tmux show-option -gqv @pi_agent_board_disabled)" == 1 ]]; then
   exit 0
 fi
 
@@ -16,7 +16,7 @@ is_board_values() {
   local pane_title=$2
   local start_command=$3
 
-  [[ "$board_flag" == 1 || "$pane_title" == "Agent Board" || "$start_command" == *"$board_script"* ]]
+  [[ "$board_flag" == 1 || "$pane_title" == "Pi Agent Board" || "$start_command" == *"$board_script"* ]]
 }
 
 is_live_board_values() {
@@ -55,7 +55,7 @@ find_clean_live_board() {
     fi
   done < <(
     tmux list-panes -t "$window_id" \
-      -F "#{pane_top}${separator}#{pane_id}${separator}#{pane_height}${separator}#{pane_width}${separator}#{window_width}${separator}#{@opencode_agent_board}${separator}#{pane_title}${separator}#{pane_start_command}" 2>/dev/null || true
+      -F "#{pane_top}${separator}#{pane_id}${separator}#{pane_height}${separator}#{pane_width}${separator}#{window_width}${separator}#{@pi_agent_board}${separator}#{pane_title}${separator}#{pane_start_command}" 2>/dev/null || true
   )
 
   if ((live_count == 1 && board_like_count == 0 && stale_top_count == 0)); then
@@ -66,8 +66,8 @@ find_clean_live_board() {
 mark_live_board() {
   local pane_id=$1
 
-  tmux set-option -pt "$pane_id" @opencode_agent_board 1 >/dev/null 2>&1 || true
-  tmux select-pane -t "$pane_id" -T 'Agent Board' 2>/dev/null || true
+  tmux set-option -pt "$pane_id" @pi_agent_board 1 >/dev/null 2>&1 || true
+  tmux select-pane -t "$pane_id" -T 'Pi Agent Board' 2>/dev/null || true
   tmux resize-pane -t "$pane_id" -y 1 >/dev/null 2>&1 || true
 }
 
@@ -102,7 +102,7 @@ normalize_board_panes() {
     top_board_area=0
   done < <(
     tmux list-panes -t "$window_id" \
-      -F "#{pane_top}${separator}#{pane_index}${separator}#{pane_id}${separator}#{pane_height}${separator}#{pane_width}${separator}#{window_width}${separator}#{@opencode_agent_board}${separator}#{pane_title}${separator}#{pane_start_command}" 2>/dev/null \
+      -F "#{pane_top}${separator}#{pane_index}${separator}#{pane_id}${separator}#{pane_height}${separator}#{pane_width}${separator}#{window_width}${separator}#{@pi_agent_board}${separator}#{pane_title}${separator}#{pane_start_command}" 2>/dev/null \
       | sort -t"$separator" -k1,1n -k2,2n || true
   )
 
@@ -116,7 +116,7 @@ ensure_board() (
   local window_id=$1
   local active_pane board_pane lock_name new_pane start_command start_commands window_name
 
-  lock_name="opencode_agent_board_${window_id//[^A-Za-z0-9]/_}"
+  lock_name="pi_agent_board_${window_id//[^A-Za-z0-9]/_}"
   tmux wait-for -L "$lock_name"
   trap 'tmux wait-for -U "$lock_name"' EXIT
 
@@ -178,7 +178,7 @@ remove_inactive_boards() {
       tmux kill-pane -t "$pane_id" 2>/dev/null || true
     done < <(
       tmux list-panes -t "$window_id" \
-        -F "#{pane_id}${separator}#{@opencode_agent_board}${separator}#{pane_title}${separator}#{pane_start_command}" 2>/dev/null || true
+        -F "#{pane_id}${separator}#{@pi_agent_board}${separator}#{pane_title}${separator}#{pane_start_command}" 2>/dev/null || true
     )
   done < <(tmux list-windows -t "$session_name" -F '#{window_id}' 2>/dev/null || true)
 }

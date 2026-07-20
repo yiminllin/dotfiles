@@ -32,7 +32,7 @@ local function diffview_open(extra_args, keep_guide_context)
 
 	local args = extra_args and vim.deepcopy(extra_args) or {}
 	if in_systems_dir() then
-		vim.list_extend(args, { "--", ".", ":!.opencode/skills", ":!notes" })
+		vim.list_extend(args, { "--", ".", ":!notes" })
 	end
 	vim.api.nvim_cmd({ cmd = "DiffviewOpen", args = args }, {})
 end
@@ -41,7 +41,7 @@ local function diffview_file_history()
 	clear_review_guide_context()
 	local args = {}
 	if in_systems_dir() then
-		vim.list_extend(args, { ".", ":!.opencode/skills", ":!notes" })
+		vim.list_extend(args, { ".", ":!notes" })
 	end
 	vim.api.nvim_cmd({ cmd = "DiffviewFileHistory", args = args }, {})
 end
@@ -101,9 +101,17 @@ local function pr_guide_context(root, pr, diffview_rev_arg, base_oid, head_oid)
 		context_kind = "pr",
 		diffview_rev_arg = diffview_rev_arg,
 		head_oid = head_oid,
-		markdown_path = ("%s/notes/projects/%s/pr-reviews/%s/guide.md"):format(vim.env.HOME or vim.fn.expand("~"), repo_key, pr_number),
+		markdown_path = ("%s/notes/projects/%s/pr-reviews/%s/guide.md"):format(
+			vim.env.HOME or vim.fn.expand("~"),
+			repo_key,
+			pr_number
+		),
 		owner = owner,
-		path = ("%s/notes/projects/%s/pr-reviews/%s/guide.json"):format(vim.env.HOME or vim.fn.expand("~"), repo_key, pr_number),
+		path = ("%s/notes/projects/%s/pr-reviews/%s/guide.json"):format(
+			vim.env.HOME or vim.fn.expand("~"),
+			repo_key,
+			pr_number
+		),
 		pr_body = pr.body,
 		pr_number = pr_number,
 		pr_title = pr.title,
@@ -214,7 +222,10 @@ local function open_pr_diffview(opts)
 
 	local head_oid, head_error = resolve_commit_oid(root, head_ref)
 	if not head_oid then
-		notify_pr(("Could not resolve PR #%s head ref %s: %s"):format(pr_number, head_ref, head_error), vim.log.levels.ERROR)
+		notify_pr(
+			("Could not resolve PR #%s head ref %s: %s"):format(pr_number, head_ref, head_error),
+			vim.log.levels.ERROR
+		)
 		return
 	end
 	local diffview_rev_arg = base_oid .. "..." .. head_oid
@@ -358,7 +369,12 @@ return {
 			pattern = "DiffviewViewOpened",
 			callback = function()
 				previous_diffopt = vim.o.diffopt
-				vim.opt.diffopt:remove({ "algorithm:myers", "algorithm:minimal", "algorithm:patience", "algorithm:histogram" })
+				vim.opt.diffopt:remove({
+					"algorithm:myers",
+					"algorithm:minimal",
+					"algorithm:patience",
+					"algorithm:histogram",
+				})
 				vim.opt.diffopt:append({ "algorithm:histogram", "indent-heuristic" })
 				-- Check if this is a FileHistory view (don't close explorer for it)
 				local ok, view = pcall(function()

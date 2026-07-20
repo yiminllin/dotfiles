@@ -188,9 +188,13 @@ fi
 # Task theme is managed via stow (task/.task/themes/solarized.theme)
 
 ################################################################################
-# Install OpenCode
+# Install Pi
 ################################################################################
-curl -fsSL https://opencode.ai/install | bash
+if ! command -v npm >/dev/null 2>&1; then
+    echo "npm is required to install Pi; install Node with fnm and rerun install.sh" >&2
+    exit 1
+fi
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
 ################################################################################
 # Stow Configs
@@ -208,9 +212,7 @@ fi
 rm -rf ~/.config/fish
 
 # Clean up auto-generated lines from installers that don't support suppression flags
-# (opencode installer may still modify .bashrc)
 if [ -e ~/.bashrc ]; then
-    sed -i '/export PATH=.*\/home\/.*\/\.opencode\/bin/d' ~/.bashrc
     sed -i '/source.*bazel-complete\.bash/d' ~/.bashrc
 fi
 
@@ -222,7 +224,6 @@ CONFIGS=(
     git
     kitty
     nvim
-    opencode
     pi
     task
     tmux

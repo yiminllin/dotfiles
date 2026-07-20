@@ -192,14 +192,7 @@ function git_worktree_add --description "Interactive Adding Git Worktree"
         echo "Creating worktree for $branch in $worktree_path"
         if git worktree add "$worktree_path" "$branch"
             set exclude_file (git -C "$worktree_path" rev-parse --git-path info/exclude)
-            for pattern in ".opencode/skills/" "notes/"
-                grep -Fxq -- "$pattern" "$exclude_file"; or echo "$pattern" >> "$exclude_file"
-            end
-            set skills_src "$HOME/dotfiles/opencode/.config/opencode/skills"
-            if test -d "$skills_src"
-                mkdir -p "$worktree_path/.opencode/skills"
-                command cp -R "$skills_src"/. "$worktree_path/.opencode/skills"/
-            end
+            grep -Fxq -- "notes/" "$exclude_file"; or echo "notes/" >> "$exclude_file"
             fsw_init_worktree "$worktree_path"
             ~/.tmux/tmux-sessionizer "$worktree_path"
         end
@@ -267,8 +260,6 @@ set -U fish_complete_hidden 1
 set -gx FORCE_COLOR 3                                                              
 # Tell apps we have a light background (fixes cursor-agent theme detection in tmux)
 set -gx COLORFGBG "0;15"                                                           
-# Work around OpenCode 1.3.0 white code blocks in recent sessions
-set -gx OPENCODE_EXPERIMENTAL_MARKDOWN 0
 set -gx PHOENIX_LOG_UPLOAD_S3_PREFIX "s3://developers-local-sim-logs/yimin.lin"
 
 ################################################################################
@@ -305,76 +296,27 @@ end
 # git spice
 fish_add_path -m $HOME/go/bin
 
-# opencode
-fish_add_path ~/.opencode/bin
+# Pi
+function pi --description "Run Pi and name its tmux Agent Board entry"
+    if status is-interactive; and set -q TMUX_PANE; and test -n "$TMUX_PANE"; and command -q tmux
+        set -l current_name (command tmux show-option -pv -t "$TMUX_PANE" @pi_agent_name 2>/dev/null | string trim)
 
-function __opencode_prompt_agent_name --description "Prompt for OpenCode tmux Agent Board name"
-    set -l required 0
+        if test -z "$current_name"
+            set -l agent_name
+            read -P "Pi agent name: " agent_name
+            set agent_name (string trim -- "$agent_name")
 
-    for arg in $argv
-        switch $arg
-            case --required
-                set required 1
-            case '*'
-                echo "__opencode_prompt_agent_name: unknown option $arg" >&2
-                return 2
-        end
-    end
-
-    if not set -q TMUX_PANE; or not command -q tmux
-        if test $required -eq 1
-            return 1
-        end
-
-        return 0
-    end
-
-    set -l current_name (tmux show-option -pv -t "$TMUX_PANE" @opencode_agent_name 2>/dev/null | string trim)
-    set -l prompt "OpenCode agent name"
-
-    if test -n "$current_name"
-        set prompt "$prompt [$current_name]"
-    end
-
-    while true
-        set -l agent_name
-
-        if not read -P "$prompt: " agent_name
-            if test $required -eq 1
-                return 1
+            if test -z "$agent_name"
+                set agent_name (path basename "$PWD")
             end
 
-            return 0
-        end
-
-        set agent_name (string trim -- "$agent_name")
-
-        if test -n "$agent_name"
-            if tmux set-option -pt "$TMUX_PANE" @opencode_agent_name "$agent_name" >/dev/null
-                return 0
+            if test -n "$agent_name"
+                command tmux set-option -pt "$TMUX_PANE" @pi_agent_name "$agent_name" >/dev/null 2>/dev/null
             end
-
-            if test $required -eq 1
-                return 1
-            end
-
-            return 0
         end
-
-        if test $required -eq 0
-            return 0
-        end
-
-        echo "OpenCode agent name is required." >&2
-    end
-end
-
-function opencode --description "Run OpenCode and name its tmux Agent Board entry"
-    if status is-interactive
-        __opencode_prompt_agent_name
     end
 
-    command opencode $argv
+    command pi $argv
 end
 
 # fzf

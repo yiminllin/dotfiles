@@ -27,7 +27,9 @@ create_window() {
 
 if ! tmux has-session -t="$workspace_name" 2>/dev/null; then
     tmux new-session -ds "$workspace_name" -n "$shell_window" -c "$workspace"
-    create_window "$agent_window" 'opencode'
+    create_window "$agent_window"
+    tmux set-option -pt "$workspace_name:$agent_window" @pi_agent_name "$workspace_name"
+    tmux send-keys -t "$workspace_name:$agent_window" 'pi' C-m
     create_window "$code_window"
 
     tmux select-window -t "$workspace_name:$agent_window"

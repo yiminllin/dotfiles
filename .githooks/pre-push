@@ -4,10 +4,54 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-opencode run "Based on nvim/.config/nvim/lua/plugins/, tmux/.tmux.conf, fish/.config/fish/config.fish, and install.sh, update PLUGINS.md for plugin additions/removals only. If there are no plugin-related changes, don't update anything. Keep the change as minimal as possible." --agent dotfile-documenter
+REMOTE_NAME="${1:-}"
+REMOTE_URL="${2:-}"
+PUSH_UPDATES="$(cat)"
+PI_BIN="$(type -P pi || true)"
+PI_OUTPUT="$(mktemp)"
+trap 'rm -f "$PI_OUTPUT"' EXIT
+
+if [[ -z "$PI_BIN" ]]; then
+  echo "pre-push: Pi executable not found on PATH; plugin documentation was not verified." >&2
+  exit 1
+fi
+
+PI_STATUS=0
+"$PI_BIN" --print --no-session "/skill:dotfile-documenter
+Inspect the pushed/local diff described below and update PLUGINS.md only if the documented plugin or installed-tool inventory changed. Do not edit any other file.
+
+Git pre-push remote name: $REMOTE_NAME
+Git pre-push remote URL: $REMOTE_URL
+Git pre-push updates (local-ref local-sha remote-ref remote-sha):
+$PUSH_UPDATES
+
+Finish with exactly one result line: DOTFILE_DOCUMENTER_RESULT=updated if you changed PLUGINS.md, or DOTFILE_DOCUMENTER_RESULT=unchanged if you did not." >"$PI_OUTPUT" || PI_STATUS=$?
 
 if ! git diff --quiet -- PLUGINS.md; then
   git add PLUGINS.md
+fi
+
+if ((PI_STATUS != 0)); then
+  echo "pre-push: Pi documenter failed; plugin documentation was not verified." >&2
+  exit 1
+fi
+
+RESULT=""
+while IFS= read -r line; do
+  case "$line" in
+    DOTFILE_DOCUMENTER_RESULT=updated | DOTFILE_DOCUMENTER_RESULT=unchanged)
+      if [[ -n "$RESULT" ]]; then
+        echo "pre-push: Pi documenter returned multiple result lines; plugin documentation was not verified." >&2
+        exit 1
+      fi
+      RESULT="$line"
+      ;;
+  esac
+done <"$PI_OUTPUT"
+
+if [[ -z "$RESULT" ]]; then
+  echo "pre-push: Pi documenter returned no valid result; plugin documentation was not verified." >&2
+  exit 1
 fi
 
 if ! git diff --cached --quiet -- PLUGINS.md; then

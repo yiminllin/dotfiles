@@ -5,10 +5,10 @@ local WINDOW_PANE_FORMAT = table.concat({
 	"#{pane_id}",
 	"#{pane_left}",
 	"#{pane_current_command}",
-	"#{@opencode_agent_board}",
+	"#{@pi_agent_board}",
 	"#{pane_start_command}",
 }, "\t")
-local OPENCODE_LAUNCH_COMMAND = [[tmux set-option -pt "$TMUX_PANE" allow-passthrough off; exec fish -l -c '__opencode_prompt_agent_name --required; and exec opencode']]
+local PI_LAUNCH_COMMAND = [[tmux set-option -pt "$TMUX_PANE" allow-passthrough off; exec pi]]
 
 local function run_tmux(args)
 	local result = vim.system(vim.list_extend({ "tmux" }, args), { text = true }):wait()
@@ -27,11 +27,11 @@ local function ensure_tmux()
 		return true
 	end
 
-	vim.notify("This mapping only works inside tmux.", vim.log.levels.WARN, { title = "OpenCode" })
+	vim.notify("This mapping only works inside tmux.", vim.log.levels.WARN, { title = "Pi" })
 	return false
 end
 
-local function inspect_window_for_opencode()
+local function inspect_window_for_pi()
 	local context_output, context_err = run_tmux({ "display-message", "-p", CURRENT_CONTEXT_FORMAT })
 	if not context_output then
 		return nil, context_err
@@ -80,7 +80,7 @@ local function inspect_window_for_opencode()
 			context = context,
 			panes = panes,
 			decision = "notify",
-			message = "OpenCode pane was not created: current tmux window is not a simple 1- or 2-pane layout.",
+			message = "Pi pane was not created: current tmux window is not a simple 1- or 2-pane layout.",
 		},
 			nil
 	end
@@ -97,21 +97,20 @@ local function inspect_window_for_opencode()
 			context = context,
 			panes = panes,
 			decision = "notify",
-			message = "OpenCode pane was not created: current tmux window is stacked instead of a left/right split.",
+			message = "Pi pane was not created: current tmux window is stacked instead of a left/right split.",
 		},
 			nil
 	end
 
-	local right_pane_looks_like_opencode = right_pane.current_command == "opencode"
-		or right_pane.start_command:find("opencode", 1, true) ~= nil
-		or (right_pane.current_command == "fish" and right_pane.start_command:find("opencode", 1, true) ~= nil)
+	local right_pane_looks_like_pi = right_pane.current_command == "pi"
+		or right_pane.start_command:find("exec pi", 1, true) ~= nil
 
-	if not right_pane_looks_like_opencode then
+	if not right_pane_looks_like_pi then
 		return {
 			context = context,
 			panes = panes,
 			decision = "notify",
-			message = "OpenCode pane was not created: right pane is not an OpenCode pane.",
+			message = "Pi pane was not created: right pane is not a Pi pane.",
 		},
 			nil
 	end
@@ -136,15 +135,15 @@ local function focus_pane(pane_id)
 	return true
 end
 
-local function get_existing_opencode_target()
+local function get_existing_pi_target()
 	if not ensure_tmux() then
 		return nil
 	end
 
-	local inspection, err = inspect_window_for_opencode()
+	local inspection, err = inspect_window_for_pi()
 	if not inspection then
 		if err then
-			vim.notify("Failed to inspect tmux panes: " .. err, vim.log.levels.ERROR, { title = "OpenCode" })
+			vim.notify("Failed to inspect tmux panes: " .. err, vim.log.levels.ERROR, { title = "Pi" })
 		end
 		return nil
 	end
@@ -155,13 +154,13 @@ end
 local function send_text(target, text, submit)
 	local _, send_err = run_tmux({ "send-keys", "-t", target.pane_id, "-l", text })
 	if send_err then
-		return false, "Failed to send text to OpenCode: " .. send_err
+		return false, "Failed to send text to Pi: " .. send_err
 	end
 
 	if submit then
 		local _, enter_err = run_tmux({ "send-keys", "-t", target.pane_id, "Enter" })
 		if enter_err then
-			return false, "Failed to submit OpenCode prompt: " .. enter_err
+			return false, "Failed to submit Pi prompt: " .. enter_err
 		end
 	end
 
@@ -199,14 +198,14 @@ function M.scroll_pane(direction)
 		return
 	end
 
-	local target = get_existing_opencode_target()
+	local target = get_existing_pi_target()
 	if not target then
 		return
 	end
 
 	local _, err = run_tmux({ "send-keys", "-t", target.pane_id, scroll_key })
 	if err then
-		vim.notify("Failed to scroll OpenCode: " .. err, vim.log.levels.ERROR, { title = "OpenCode" })
+		vim.notify("Failed to scroll Pi: " .. err, vim.log.levels.ERROR, { title = "Pi" })
 	end
 end
 
@@ -215,14 +214,14 @@ function M.create_window_or_prompt()
 		return
 	end
 
-	local inspection, err = inspect_window_for_opencode()
+	local inspection, err = inspect_window_for_pi()
 	if not inspection then
-		vim.notify("Failed to inspect tmux panes: " .. err, vim.log.levels.ERROR, { title = "OpenCode" })
+		vim.notify("Failed to inspect tmux panes: " .. err, vim.log.levels.ERROR, { title = "Pi" })
 		return
 	end
 
 	if inspection.decision == "notify" then
-		vim.notify(inspection.message, vim.log.levels.WARN, { title = "OpenCode" })
+		vim.notify(inspection.message, vim.log.levels.WARN, { title = "Pi" })
 		return
 	end
 
@@ -235,10 +234,10 @@ function M.create_window_or_prompt()
 			"#{pane_id}",
 			"-c",
 			vim.fs.normalize(vim.fn.getcwd()),
-			OPENCODE_LAUNCH_COMMAND,
+			PI_LAUNCH_COMMAND,
 		})
 		if create_err then
-			vim.notify("Failed to open OpenCode pane: " .. create_err, vim.log.levels.ERROR, { title = "OpenCode" })
+			vim.notify("Failed to open Pi pane: " .. create_err, vim.log.levels.ERROR, { title = "Pi" })
 			return
 		end
 
@@ -248,20 +247,20 @@ function M.create_window_or_prompt()
 	local original_pane_id = inspection.context.pane_id
 	local target = inspection.target
 
-	vim.ui.input({ prompt = "OpenCode Prompt: " }, function(prompt)
+	vim.ui.input({ prompt = "Pi Prompt: " }, function(prompt)
 		if not prompt or prompt == "" then
 			return
 		end
 
 		local ok, send_err = send_text(target, prompt, true)
 		if not ok and send_err then
-			vim.notify(send_err, vim.log.levels.ERROR, { title = "OpenCode" })
+			vim.notify(send_err, vim.log.levels.ERROR, { title = "Pi" })
 			return
 		end
 
 		local focused, focus_err = focus_pane(original_pane_id)
 		if not focused then
-			vim.notify("Failed to restore pane focus: " .. focus_err, vim.log.levels.ERROR, { title = "OpenCode" })
+			vim.notify("Failed to restore pane focus: " .. focus_err, vim.log.levels.ERROR, { title = "Pi" })
 		end
 	end)
 end
@@ -272,14 +271,14 @@ function M.add_current_location()
 		return
 	end
 
-	local target = get_existing_opencode_target()
+	local target = get_existing_pi_target()
 	if not target then
 		return
 	end
 
 	local ok, err = send_text(target, reference, false)
 	if not ok and err then
-		vim.notify(err, vim.log.levels.ERROR, { title = "OpenCode" })
+		vim.notify(err, vim.log.levels.ERROR, { title = "Pi" })
 	end
 end
 
@@ -289,14 +288,14 @@ function M.add_current_buffer_path_relative_to_cwd()
 		return
 	end
 
-	local target = get_existing_opencode_target()
+	local target = get_existing_pi_target()
 	if not target then
 		return
 	end
 
 	local ok, err = send_text(target, reference, false)
 	if not ok and err then
-		vim.notify(err, vim.log.levels.ERROR, { title = "OpenCode" })
+		vim.notify(err, vim.log.levels.ERROR, { title = "Pi" })
 	end
 end
 

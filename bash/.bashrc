@@ -74,14 +74,11 @@ export PATH="$HOME/.fzf/bin:$PATH"
 export PATH="$HOME/go/bin:$PATH"
 export PATH="/usr/local/go/bin:$PATH"
 export PATH="/Library/TeX/texbin/:$PATH"
-export PATH=/home/ubuntu/.opencode/bin:$PATH
 FNM_PATH="/home/ubuntu/.local/share/fnm"
 if [ -d "$FNM_PATH" ]; then
   export PATH="$FNM_PATH:$PATH"
   eval "`fnm env`"
 fi
-export OPENCODE_CONFIG_DIR="$HOME/dotfiles/opencode/.config/opencode"
-
 export PS1="\[\e[30;47m\]\u\[\e[m\]\[\e[30;47m\]<\[\e[m\]\[\e[32;47m\]\w\[\e[m\]\[\e[30;47m\]>\[\e[m\]\[\e[33;47m\]\`parse_git_branch\`\[\e[m\] "
 export VISUAL="nvim"
 export EDITOR="nvim"
@@ -89,7 +86,6 @@ export LS_COLORS=$(vivid generate solarized-light)
 export SHELL_PATH=$(which fish)
 export EDITOR_PATH=$(which nvim)
 export XDG_CONFIG_HOME="$HOME/.config"
-export OPENCODE_EXPERIMENTAL_MARKDOWN=0
 export PHOENIX_LOG_UPLOAD_S3_PREFIX="s3://developers-local-sim-logs/yimin.lin"
 
 if [ -z "$TMUX" ] && [ "$TERM" = "xterm" ]; then

@@ -2,22 +2,22 @@
 
 set -euo pipefail
 
-BOARD_SCRIPT="$HOME/.tmux/opencode-agent-board"
-ENSURE_SCRIPT="$HOME/.tmux/opencode-agent-board-ensure"
+BOARD_SCRIPT="$HOME/.tmux/pi-agent-board"
+ENSURE_SCRIPT="$HOME/.tmux/pi-agent-board-ensure"
 RESURRECT_SAVE_SCRIPT="$HOME/.tmux/plugins/tmux-resurrect/scripts/save.sh"
 
 disable_board_creation() {
-  tmux set-option -gq @opencode_agent_board_disabled 1
+  tmux set-option -gq @pi_agent_board_disabled 1
 }
 
 enable_board_creation() {
-  tmux set-option -gu @opencode_agent_board_disabled 2>/dev/null || true
+  tmux set-option -gu @pi_agent_board_disabled 2>/dev/null || true
 }
 
 kill_board_panes() {
-  tmux list-panes -a -F '#{pane_id}	#{@opencode_agent_board}	#{pane_title}	#{pane_start_command}' |
+  tmux list-panes -a -F '#{pane_id}	#{@pi_agent_board}	#{pane_title}	#{pane_start_command}' |
     while IFS=$'\t' read -r pane_id board_flag pane_title start_command; do
-      if [[ "$board_flag" == 1 || "$pane_title" == "Agent Board" || "$start_command" == *"$BOARD_SCRIPT"* ]]; then
+      if [[ "$board_flag" == 1 || "$pane_title" == "Pi Agent Board" || "$start_command" == *"$BOARD_SCRIPT"* ]]; then
         tmux kill-pane -t "$pane_id" 2>/dev/null || true
       fi
     done
@@ -58,7 +58,7 @@ scrub_board_panes_from_saved_state() {
   [[ -n "$resolved_file" && -f "$resolved_file" ]] || return 0
 
   if ! command -v python3 >/dev/null 2>&1; then
-    tmux display-message 'python3 not found; Agent Board panes were not scrubbed from resurrect save'
+    tmux display-message 'python3 not found; Pi Agent Board panes were not scrubbed from resurrect save'
     return 0
   fi
 
@@ -219,7 +219,7 @@ def serialize(node: LayoutNode) -> str:
 def is_board_pane(fields: List[str]) -> bool:
     title = fields[6] if len(fields) > 6 else ""
     command = fields[10] if len(fields) > 10 else ""
-    return title == "Agent Board" or "opencode-agent-board" in command
+    return title == "Pi Agent Board" or "pi-agent-board" in command
 
 
 path = sys.argv[1]

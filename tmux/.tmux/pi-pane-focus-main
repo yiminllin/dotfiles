@@ -11,18 +11,17 @@ if [[ ${1:-} == "--if-board-active" ]]; then
 fi
 
 window_id=${1:-$(tmux display-message -p '#{window_id}')}
-opencode_pane=${2:-}
+pi_pane=${2:-}
 
 pane_exists() {
   tmux display-message -p -t "$1" '#{pane_id}' >/dev/null 2>&1
 }
 
-is_opencode_values() {
-  local pane_title=$1
-  local current_command=$2
-  local start_command=$3
+is_pi_values() {
+  local current_command=$1
+  local start_command=$2
 
-  [[ "$current_command" == opencode || "$start_command" == *opencode* || "$pane_title" == "OC | "* || "$pane_title" == opencode* ]]
+  [[ "$current_command" == pi ]] || [[ "$start_command" =~ (^|[[:space:];|\&])((exec[[:space:]]+)?([^[:space:];|\&]*/)?pi)([[:space:];|\&]|$) ]]
 }
 
 main_pane_for_window() {
@@ -36,13 +35,13 @@ main_pane_for_window() {
     [[ -z "$fallback" ]] && fallback=$pane_id
     [[ "$pane_id" == "$agent_pane" ]] && continue
 
-    if ! is_opencode_values "$pane_title" "$current_command" "$start_command"; then
+    if ! is_pi_values "$current_command" "$start_command"; then
       printf '%s' "$pane_id"
       return 0
     fi
   done < <(
     tmux list-panes -t "$window" \
-      -F "#{pane_left}${separator}#{pane_index}${separator}#{pane_id}${separator}#{@opencode_agent_board}${separator}#{pane_title}${separator}#{pane_current_command}${separator}#{pane_start_command}" \
+      -F "#{pane_left}${separator}#{pane_index}${separator}#{pane_id}${separator}#{@pi_agent_board}${separator}#{pane_title}${separator}#{pane_current_command}${separator}#{pane_start_command}" \
       | sort -t"$separator" -k1,1n -k2,2n
   )
 
@@ -52,10 +51,10 @@ main_pane_for_window() {
 if [[ "$mode" == if_board_active ]]; then
   active_pane=$(tmux display-message -p -t "$window_id" '#{pane_id}' 2>/dev/null || true)
   [[ -n "$active_pane" ]] || exit 0
-  [[ "$(tmux show-option -pv -t "$active_pane" @opencode_agent_board 2>/dev/null || true)" == 1 ]] || exit 0
+  [[ "$(tmux show-option -pv -t "$active_pane" @pi_agent_board 2>/dev/null || true)" == 1 ]] || exit 0
 fi
 
-target_pane=$(main_pane_for_window "$window_id" "$opencode_pane")
+target_pane=$(main_pane_for_window "$window_id" "$pi_pane")
 [[ -n "$target_pane" ]] || exit 0
 pane_exists "$target_pane" || exit 0
 
