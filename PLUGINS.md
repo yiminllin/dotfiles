@@ -197,6 +197,9 @@
 | kitty | Terminal emulator | [install.sh](install.sh) |
 | fzf | Fuzzy finder | [install.sh](install.sh) |
 | Pi (`@earendil-works/pi-coding-agent`) | AI coding agent; skills, prompts, Neovim/tmux/Fish workflows, and pre-push documentation check | [install.sh](install.sh), [pi/.pi/agent](pi/.pi/agent) |
+| Pi BTW | Ephemeral side questions without interrupting the main session | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
+| Pi Tool Display | Compact tool output and richer edit/write diffs | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
+| Pi Web Access | Web search, content extraction, GitHub cloning, and video understanding | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | keyd | Key remapping (Linux) | [install.sh](install.sh) (Fedora) |
 
 ---

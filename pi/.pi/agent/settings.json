@@ -7,5 +7,10 @@
     "openai-codex/gpt-5.6-sol",
     "openai-codex/gpt-5.6-luna"
   ],
-  "lastChangelogVersion": "0.80.10"
+  "packages": [
+    "git:github.com/Fatih0234/btw",
+    "npm:pi-tool-display",
+    "npm:pi-web-access"
+  ],
+  "lastChangelogVersion": "0.82.1"
 }
