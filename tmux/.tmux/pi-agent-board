@@ -250,7 +250,7 @@ while true; do
   if read_key key; then
     case "$key" in
       q) tmux kill-pane -t "$current_pane"; exit 0 ;;
-      [1-9]) refresh_current_context; jump_to_agent "$key" ;;
+      [1-9]) refresh_current_context; jump_to_agent "$key"; exit 0 ;;
     esac
   fi
 done
