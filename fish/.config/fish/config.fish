@@ -299,6 +299,8 @@ fish_add_path -m $HOME/go/bin
 # Pi
 function pi --description "Run Pi and name its tmux Agent Board entry"
     if status is-interactive; and set -q TMUX_PANE; and test -n "$TMUX_PANE"; and command -q tmux
+        # Clear a stale pane name before starting a new Pi session.
+        command tmux set-option -pt "$TMUX_PANE" -u @pi_agent_name >/dev/null 2>/dev/null
         set -l current_name (command tmux show-option -pv -t "$TMUX_PANE" @pi_agent_name 2>/dev/null | string trim)
 
         if test -z "$current_name"
@@ -317,6 +319,13 @@ function pi --description "Run Pi and name its tmux Agent Board entry"
     end
 
     command pi $argv
+    set -l pi_status $status
+
+    if status is-interactive; and set -q TMUX_PANE; and test -n "$TMUX_PANE"; and command -q tmux
+        command tmux set-option -pt "$TMUX_PANE" -u @pi_agent_name >/dev/null 2>/dev/null
+    end
+
+    return $pi_status
 end
 
 # fzf
