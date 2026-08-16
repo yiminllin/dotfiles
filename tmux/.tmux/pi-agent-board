@@ -3,7 +3,8 @@
 set -euo pipefail
 
 separator=$'\034'
-refresh_interval=0.5
+# Bash 3.2 on macOS only accepts integer values for `read -t`.
+refresh_interval=1
 current_pane=${TMUX_PANE:-$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)}
 current_client=""
 current_session_id=""
