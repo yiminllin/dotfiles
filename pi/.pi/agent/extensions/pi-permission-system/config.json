@@ -1,0 +1,32 @@
+{
+  "permission": {
+    "*": "allow",
+    "external_directory": {
+      "*": "ask",
+      "/tmp": "allow",
+      "/tmp/**": "allow",
+      "/private/tmp": "allow",
+      "/private/tmp/**": "allow"
+    },
+    "path": {
+      "*": "allow",
+      "*.env": "ask",
+      "*.env.*": "ask",
+      "*.env.example": "allow",
+      "*.pem": "ask",
+      "*.key": "ask"
+    },
+    "bash": {
+      "*": "allow",
+      "sudo *": "ask",
+      "git push --force": "ask",
+      "git push --force *": "ask",
+      "git push * --force": "ask",
+      "git push * --force *": "ask",
+      "git reset --hard": "ask",
+      "git reset --hard *": "ask",
+      "git clean": "ask",
+      "git clean *": "ask"
+    }
+  }
+}

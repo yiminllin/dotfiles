@@ -1,0 +1,13 @@
+{
+  "memoryMode": "policy-only",
+  "memoryPolicyStyle": "full",
+  "memoryDir": "~/notes/pi-memory",
+  "projectsMemoryDir": "projects-memory",
+  "reviewEnabled": true,
+  "reviewTransport": "direct",
+  "memoryOverflowStrategy": "auto-consolidate",
+  "correctionDetection": true,
+  "flushOnCompact": true,
+  "flushOnShutdown": true,
+  "standingInstructionsEnabled": true
+}

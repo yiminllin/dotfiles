@@ -200,6 +200,13 @@
 | Pi BTW | Ephemeral side questions without interrupting the main session | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi Tool Display | Compact tool output and richer edit/write diffs | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi Web Access | Web search, content extraction, GitHub cloning, and video understanding | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
+| Pi Background Tasks | Durable background shell tasks and delegated investigations | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
+| Pi Permission System | Permission gates for files, Bash, MCP, and extensions | [pi/.pi/agent/extensions/pi-permission-system/config.json](pi/.pi/agent/extensions/pi-permission-system/config.json) |
+| Pi Subagents | Scout, research, implementation, review, and second-opinion agents | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
+| Pi MCP Adapter | MCP server integration | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
+| Pi Hermes Memory | Persistent memory, session search, and reusable skills | [pi/.pi/agent/hermes-memory-config.json](pi/.pi/agent/hermes-memory-config.json) |
+| Pi Lens | LSP, linting, formatting, and type-check feedback | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
+| Pi FFF | Fuzzy file/content search; initially tools-only | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | keyd | Key remapping (Linux) | [install.sh](install.sh) (Fedora) |
 
 ---

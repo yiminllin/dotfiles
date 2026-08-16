@@ -10,7 +10,14 @@
   "packages": [
     "git:github.com/Fatih0234/btw",
     "npm:pi-tool-display",
-    "npm:pi-web-access"
+    "npm:pi-web-access",
+    "npm:pi-background-tasks",
+    "npm:@gotgenes/pi-permission-system",
+    "npm:pi-subagents",
+    "npm:pi-mcp-adapter",
+    "npm:pi-hermes-memory",
+    "npm:pi-lens",
+    "npm:@ff-labs/pi-fff"
   ],
   "lastChangelogVersion": "0.82.1",
   "hideThinkingBlock": true
