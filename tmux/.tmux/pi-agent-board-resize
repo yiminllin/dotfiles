@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-separator=$'\034'
+separator='|'
 
 resize_window_boards() (
   local window=$1

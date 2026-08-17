@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-separator=$'\034'
+separator='|'
 ensure_script="$HOME/.tmux/pi-agent-board-ensure"
 resize_script="$HOME/.tmux/pi-agent-board-resize"
 focus_main_script="$HOME/.tmux/pi-pane-focus-main"

@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-separator=$'\034'
+separator='|'
 mode=always
 
 if [[ ${1:-} == "--if-board-active" ]]; then

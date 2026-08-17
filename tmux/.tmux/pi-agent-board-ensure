@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-separator=$'\034'
+separator='|'
 board_script="$HOME/.tmux/pi-agent-board"
 session_name=${1:-$(tmux display-message -p '#{session_name}')}
 target_window=${2:-}
