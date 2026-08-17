@@ -318,7 +318,8 @@ function pi --description "Run Pi and name its tmux Agent Board entry"
         end
     end
 
-    env PI_FFF_MODE=tools-only command pi $argv
+    set -lx PI_FFF_MODE tools-only
+    command pi $argv
     set -l pi_status $status
 
     if status is-interactive; and set -q TMUX_PANE; and test -n "$TMUX_PANE"; and command -q tmux
