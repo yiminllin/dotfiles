@@ -113,3 +113,6 @@ venv/
 
 # Pi runtime logs
 pi/.pi/agent/extensions/**/logs/
+
+# Pi project-local runtime artifacts
+/.pi/
