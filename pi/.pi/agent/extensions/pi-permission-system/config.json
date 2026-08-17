@@ -6,7 +6,11 @@
       "/tmp": "allow",
       "/tmp/**": "allow",
       "/private/tmp": "allow",
-      "/private/tmp/**": "allow"
+      "/private/tmp/**": "allow",
+      "/Users/yiminlin/notes/**": "allow",
+      "/Users/yiminlin/dotfiles/**": "allow",
+      "/Users/yiminlin/.tmux/**": "allow",
+      "/Users/yiminlin/.pi/agent/sessions/--Users-yiminlin-dotfiles--/subagent-artifacts/**": "allow"
     },
     "path": {
       "*": "allow",
