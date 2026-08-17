@@ -110,3 +110,6 @@ venv/
 .Spotlight-V100
 # macOS trash files
 .Trashes
+
+# Pi runtime logs
+pi/.pi/agent/extensions/**/logs/
