@@ -1,6 +1,6 @@
 local M = {}
 
-local STATE_VERSION = 1
+local STATE_VERSION = 2
 
 local function new_state(ctx)
 	return {

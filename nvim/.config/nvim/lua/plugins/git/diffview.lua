@@ -97,6 +97,7 @@ local function pr_guide_context(root, pr, diffview_rev_arg, base_oid, head_oid)
 	end
 
 	return {
+		assistant_name = "review-" .. pr_number,
 		base_oid = base_oid,
 		context_kind = "pr",
 		diffview_rev_arg = diffview_rev_arg,
@@ -250,6 +251,8 @@ return {
 		"DiffviewReviewGuide",
 		"DiffviewReviewImportGithubComments",
 		"DiffviewReviewPostGithubComments",
+		"DiffviewReviewReply",
+		"DiffviewReviewReanchor",
 	},
 	dependencies = {
 		{ "lifepillar/vim-solarized8", branch = "neovim" }, -- Pin to master branch
@@ -264,13 +267,93 @@ return {
 		})
 		local previous_diffopt = nil
 
+		local function toggle_inline_diff()
+			local enabled = vim.o.diffopt:find("inline:word", 1, true) ~= nil
+			vim.opt.diffopt:remove({ "inline:none", "inline:simple", "inline:char", "inline:word" })
+			if enabled then
+				vim.opt.diffopt:append("inline:none")
+			else
+				vim.opt.diffopt:append("inline:word")
+			end
+			vim.notify(
+				enabled and "Diffview inline word diff disabled" or "Diffview inline word diff enabled",
+				vim.log.levels.INFO
+			)
+		end
+
+		vim.api.nvim_create_user_command("DiffviewToggleInlineDiff", toggle_inline_diff, {
+			desc = "Toggle word-level highlighting in Diffview",
+		})
+
 		require("diffview").setup({
 			enhanced_diff_hl = true,
+			view = {
+				default = {
+					layout = "diff2_horizontal",
+					disable_diagnostics = true,
+					winbar_info = false,
+				},
+				file_history = {
+					layout = "diff2_horizontal",
+					disable_diagnostics = true,
+					winbar_info = false,
+				},
+			},
+			file_panel = {
+				listing_style = "tree",
+				tree_options = {
+					flatten_dirs = true,
+					folder_statuses = "only_folded",
+				},
+				win_config = {
+					position = "left",
+					width = 28,
+				},
+			},
+			default_args = {
+				DiffviewOpen = {
+					"--imply-local",
+				},
+			},
+			hooks = {
+				diff_buf_win_enter = function(_, winid, _)
+					if not winid or not vim.api.nvim_win_is_valid(winid) then
+						return
+					end
+
+					vim.api.nvim_win_call(winid, function()
+						vim.opt_local.wrap = false
+						vim.opt_local.list = false
+						vim.opt_local.number = true
+						vim.opt_local.numberwidth = 5
+						vim.opt_local.relativenumber = false
+						vim.opt_local.signcolumn = "no"
+						vim.opt_local.foldcolumn = "0"
+						vim.opt_local.colorcolumn = ""
+						vim.opt_local.cursorline = false
+						vim.opt_local.foldtext = "v:lua.require('utils.diffview_review').review_foldtext()"
+					end)
+				end,
+			},
 			keymaps = review.diffview_keymaps(),
 		})
 
 		local function apply_diff2_winhl()
 			review.apply_highlights()
+
+			local syntax_winhl = {
+				"Comment:DiffviewReviewSyntaxComment",
+				"Constant:DiffviewReviewSyntaxConstant",
+				"Delimiter:DiffviewReviewSyntaxDelimiter",
+				"Function:DiffviewReviewSyntaxFunction",
+				"Identifier:DiffviewReviewSyntaxIdentifier",
+				"Operator:DiffviewReviewSyntaxOperator",
+				"PreProc:DiffviewReviewSyntaxPreProc",
+				"Special:DiffviewReviewSyntaxSpecial",
+				"Statement:DiffviewReviewSyntaxStatement",
+				"String:DiffviewReviewSyntaxString",
+				"Type:DiffviewReviewSyntaxType",
+			}
 
 			local view = require("diffview.lib").get_current_view()
 			if not view or not view.winopts or not view.winopts.diff2 then
@@ -287,14 +370,28 @@ return {
 				"DiffDelete:DiffviewDiffDeleteDim",
 				"DiffChange:DiffDelete",
 				"DiffText:DiffviewLeftDiffText",
+				unpack(syntax_winhl),
 			}
 			view.winopts.diff2.b.winhl = {
 				"DiffDelete:DiffviewDiffDeleteDim",
 				"DiffAdd:DiffviewDiffAdd",
 				"DiffChange:DiffAdd",
 				"DiffText:DiffviewRightDiffText",
+				unpack(syntax_winhl),
 			}
 		end
+
+		vim.api.nvim_create_autocmd("ColorScheme", {
+			callback = function()
+				local ok, view = pcall(function()
+					return require("diffview.lib").get_current_view()
+				end)
+				if ok and view then
+					review.apply_highlights()
+					apply_diff2_winhl()
+				end
+			end,
+		})
 
 		local refresh_ibl = function()
 			vim.api.nvim_set_hl(0, "Base2", { fg = "#eee8d5" })
@@ -369,13 +466,16 @@ return {
 			pattern = "DiffviewViewOpened",
 			callback = function()
 				previous_diffopt = vim.o.diffopt
-				vim.opt.diffopt:remove({
-					"algorithm:myers",
-					"algorithm:minimal",
-					"algorithm:patience",
+				vim.opt.diffopt = {
+					"internal",
+					"filler",
+					"closeoff",
+					"indent-heuristic",
+					"context:4",
+					"inline:none",
+					"linematch:60",
 					"algorithm:histogram",
-				})
-				vim.opt.diffopt:append({ "algorithm:histogram", "indent-heuristic" })
+				}
 				-- Check if this is a FileHistory view (don't close explorer for it)
 				local ok, view = pcall(function()
 					return require("diffview.lib").get_current_view()
@@ -487,6 +587,12 @@ return {
 			"<cmd>DiffviewToggleFiles<cr>",
 			mode = { "n", "v" },
 			desc = "[G]it [D]iffview Toggle File [E]xplorer",
+		},
+		{
+			"<leader>gdi",
+			"<cmd>DiffviewToggleInlineDiff<cr>",
+			mode = { "n", "v" },
+			desc = "[G]it [D]iffview Toggle [I]nline Diff",
 		},
 		{
 			"<leader>gdr",

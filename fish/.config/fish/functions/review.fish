@@ -35,7 +35,8 @@ function __review_open_pi_pane --argument-names repo_root title bootstrap_path
     set -l prompt_arg (__review_shell_single_quoted_string "$prompt")
     set -l title_arg (__review_shell_single_quoted_string "$title")
     set -l launch_command "tmux set-option -pt \"\$TMUX_PANE\" allow-passthrough off; tmux set-option -pt \"\$TMUX_PANE\" @pi_agent_name $title_arg; tmux select-pane -t \"\$TMUX_PANE\" -T $title_arg; exec pi --name $title_arg $prompt_arg"
-    set -l pane_id (command tmux split-window -h -p 33 -d -P -F '#{pane_id}' -c "$repo_root" "$launch_command" 2>&1)
+    # Keep the diff wide while giving the assistant enough room to be useful.
+    set -l pane_id (command tmux split-window -v -p 12 -d -P -F '#{pane_id}' -c "$repo_root" "$launch_command" 2>&1)
     if test $status -ne 0
         echo "review: could not open interactive Pi pane: $pane_id" >&2
         return 1
@@ -120,7 +121,7 @@ function __review_run_interactive_guide_flow --argument-names repo_root pi_title
 
     if set -q TMUX; and test -n "$TMUX"; and command -q tmux; and command -q pi
         command mkdir -p "$guide_dir"
-        printf '%s\n' "$assistant_bootstrap" > "$assistant_bootstrap_path"
+        printf '%s\n' "$assistant_bootstrap" >"$assistant_bootstrap_path"
 
         set -l guide_generation_started_at
         if test $guides_need_generation -eq 1
@@ -169,7 +170,7 @@ function __review_generate_guides_noninteractive --argument-names repo_root refr
     builtin cd "$repo_root"
     or return 1
 
-    command env -u FORCE_COLOR NO_COLOR=1 pi --print --no-session "$markdown_prompt" > "$guide_md_tmp"
+    command env -u FORCE_COLOR NO_COLOR=1 pi --print --no-session "$markdown_prompt" >"$guide_md_tmp"
     set -l pi_status $status
     if test $pi_status -ne 0
         builtin cd "$original_pwd"
@@ -183,7 +184,7 @@ function __review_generate_guides_noninteractive --argument-names repo_root refr
         return 1
     end
 
-    command env -u FORCE_COLOR NO_COLOR=1 pi --print --no-session "$json_prompt" > "$guide_json_tmp"
+    command env -u FORCE_COLOR NO_COLOR=1 pi --print --no-session "$json_prompt" >"$guide_json_tmp"
     set pi_status $status
     if test $pi_status -ne 0
         builtin cd "$original_pwd"
@@ -390,9 +391,10 @@ Completion and follow-up mode:
 - Stay alive after READY as review assistant $pi_title.
 - Read guide.md, guide.json, and diffview-review.json when present.
 - Help answer/address local review comments, TODOs, and guide refinements without posting to GitHub unless a future user explicitly requests a public mutation through the proper workflow.
-- For local replies, append to the matching parent comment's optional replies array in diffview-review.json only. Use {\"author\":\"pi\",\"body\":\"...\",\"created_at\":\"<UTC ISO timestamp>\"}; include updated_at only when editing an existing local reply.
-- Match parent comments by stable fields in this order: github_id, guide_id, then file + line/end_line or file_level + normalized body preview. Preserve all existing comments and fields. Ask the user if more than one parent matches.
-- Never treat replies as separate anchors/comments, and never mutate GitHub or other external state while adding local replies."
+- Automatic Diffview requests provide exact comment/request IDs and an exact agent-replies/ JSON artifact path next to diffview-review.json.
+- For each automatic request, write one raw JSON object with comment_id, request_id, author, body, created_at, and optional status/error to that exact path.
+- Write the artifact atomically through a temporary file in the same directory followed by rename. Never edit diffview-review.json for an automatic request.
+- Never mutate GitHub or other external state while answering local review requests."
 
         __review_run_interactive_guide_flow "$repo_root" "$pi_title" "$assistant_bootstrap_path" "$guide_dir" "$guide_md_path" "$guide_json_path" $guides_need_generation "$assistant_bootstrap"
         if test $status -ne 0
@@ -594,9 +596,10 @@ Completion and follow-up mode:
 - Stay alive after READY as review assistant $pi_title.
 - Read guide.md, guide.json, and diffview-review.json when present.
 - Help answer/address local review comments, TODOs, and guide refinements without posting to GitHub or mutating external state unless a future user explicitly requests a different workflow.
-- For local replies, append to the matching parent comment's optional replies array in diffview-review.json only. Use {\"author\":\"pi\",\"body\":\"...\",\"created_at\":\"<UTC ISO timestamp>\"}; include updated_at only when editing an existing local reply.
-- Match parent comments by stable fields in this order: github_id, guide_id, then file + line/end_line or file_level + normalized body preview. Preserve all existing comments and fields. Ask the user if more than one parent matches.
-- Never treat replies as separate anchors/comments, and never mutate GitHub or other external state while adding local replies."
+- Automatic Diffview requests provide exact comment/request IDs and an exact agent-replies/ JSON artifact path next to diffview-review.json.
+- For each automatic request, write one raw JSON object with comment_id, request_id, author, body, created_at, and optional status/error to that exact path.
+- Write the artifact atomically through a temporary file in the same directory followed by rename. Never edit diffview-review.json for an automatic request.
+- Never mutate GitHub or other external state while answering local review requests."
 
     __review_run_interactive_guide_flow "$repo_root" "$pi_title" "$assistant_bootstrap_path" "$guide_dir" "$guide_md_path" "$guide_json_path" $guides_need_generation "$assistant_bootstrap"
     if test $status -ne 0
@@ -677,6 +680,7 @@ Instructions:
     set -l guide_lua (__review_lua_single_quoted_string "$guide_json_path")
     set -l guide_md_lua (__review_lua_single_quoted_string "$guide_md_path")
     set -l repo_lua (__review_lua_single_quoted_string "$repo_root")
+    set -l assistant_name_lua (__review_lua_single_quoted_string "$pi_title")
     set -l diff_arg (__review_vim_arg "$base_ref")
     set -l diffview_command "DiffviewOpen $diff_arg"
     set -l initial_jump_command "lua vim.defer_fn(function() require('utils.diffview_review').jump_to_initial_guide_file() end, 500)"
@@ -686,5 +690,6 @@ Instructions:
         set diffview_command "$diffview_command -- . :!.pi/skills :!notes"
     end
 
-    command nvim "+lua require('utils.diffview_review').set_active_guide_context({ path = $guide_lua, markdown_path = $guide_md_lua, repo = $repo_lua })" "+$diffview_command" "+$initial_jump_command"
+    command nvim "+lua require('utils.diffview_review').set_active_guide_context({ path = $guide_lua, markdown_path = $guide_md_lua, repo = $repo_lua, assistant_name = $assistant_name_lua })" "+$diffview_command" "+$initial_jump_command"
+    return $status
 end

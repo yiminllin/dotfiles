@@ -592,6 +592,37 @@ local function side_from_current_buffer(view)
 	return file.symbol == "a" and "LEFT" or "RIGHT"
 end
 
+function M._anchor_git_identity(ctx, file, side)
+	local commit_sha = nil
+	if active_guide_context then
+		commit_sha = side == "LEFT" and active_guide_context.base_oid or active_guide_context.head_oid
+	end
+	if not commit_sha or not ctx or not ctx.root or not file then
+		return commit_sha, nil
+	end
+
+	local output = vim.fn.systemlist({ "git", "-C", ctx.root, "rev-parse", commit_sha .. ":" .. file })
+	local blob_sha = vim.v.shell_error == 0 and vim.trim(output[1] or "") or nil
+	return commit_sha, blob_sha ~= "" and blob_sha or nil
+end
+
+function M._capture_comment_anchor(ctx, file, side, line, end_line, bufnr)
+	bufnr = bufnr or vim.api.nvim_get_current_buf()
+	if not side or not vim.api.nvim_buf_is_valid(bufnr) then
+		return nil
+	end
+	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	local commit_sha, blob_sha = M._anchor_git_identity(ctx, file, side)
+	return require("utils.diffview_review_anchor").capture(lines, {
+		blob_sha = blob_sha,
+		commit_sha = commit_sha,
+		end_line = end_line,
+		line = line,
+		path = file,
+		side = side,
+	})
+end
+
 local function require_active_diffview(ctx, action)
 	if ctx and ctx.view then
 		return true
@@ -1815,6 +1846,9 @@ local function thread_card_row_count(thread)
 	local row_count = #thread_banner_lines(thread)
 	for _, entry in ipairs(thread.entries) do
 		row_count = row_count + #boxed_comment_lines(entry.comment, entry.start_line, entry.end_line)
+		for _, reply in ipairs(type(entry.comment.replies) == "table" and entry.comment.replies or {}) do
+			row_count = row_count + #review_format.boxed_reply_lines(reply, entry.comment)
+		end
 	end
 	return row_count
 end
@@ -1901,6 +1935,15 @@ local function refresh_buffer(bufnr, file, state, mode, winid, spacer_rows_by_li
 			for _, entry in ipairs(thread.entries) do
 				for _, line in ipairs(boxed_comment_lines(entry.comment, entry.start_line, entry.end_line)) do
 					table.insert(comment_boxes[display_line], line)
+				end
+
+				-- Keep agent/GitHub replies as separate indented cards rather than
+				-- concatenating them into the parent comment body. This gives each
+				-- reply a clear visual level while preserving one anchored thread.
+				for _, reply in ipairs(type(entry.comment.replies) == "table" and entry.comment.replies or {}) do
+					for _, line in ipairs(review_format.boxed_reply_lines(reply, entry.comment)) do
+						table.insert(comment_boxes[display_line], line)
+					end
 				end
 			end
 			spacer_rows[display_line] = #comment_boxes[display_line]
@@ -2021,9 +2064,10 @@ local function refresh_file_panel(bufnr, view, state)
 end
 
 
-local function open_comment_editor(ctx, line, end_line, initial, on_save)
+local function open_comment_editor(ctx, line, end_line, initial, on_save, title_prefix)
 	local height = math.min(8, math.max(5, math.floor(vim.o.lines * 0.18)))
-	local title = (" Review comment %s:%s "):format(ctx.file, range_label(line, end_line))
+	title_prefix = title_prefix or "Review comment"
+	local title = (" %s %s:%s "):format(title_prefix, ctx.file, range_label(line, end_line))
 	local source_win = vim.api.nvim_get_current_win()
 	local source_cursor = vim.api.nvim_win_get_cursor(source_win)
 	local bufnr = vim.api.nvim_create_buf(false, true)
@@ -2100,7 +2144,11 @@ local function open_comment_editor(ctx, line, end_line, initial, on_save)
 end
 
 function M.set_active_guide_context(context)
+	if M.stop_agent_reply_polling then
+		M.stop_agent_reply_polling()
+	end
 	active_guide_context = context and {
+		assistant_name = context.assistant_name,
 		base_oid = context.base_oid,
 		context_kind = context.context_kind,
 		diffview_rev_arg = context.diffview_rev_arg,
@@ -2121,8 +2169,20 @@ function M.set_active_guide_context(context)
 end
 
 function M.clear_active_guide_context()
+	if M.stop_agent_reply_polling then
+		M.stop_agent_reply_polling()
+	end
 	active_guide_context = nil
 	guide_cache = nil
+end
+
+function M.review_foldtext()
+	local count = math.max(vim.v.foldend - vim.v.foldstart + 1, 0)
+	local noun = count == 1 and "line" or "lines"
+	local label = (" %d unchanged %s "):format(count, noun)
+	local width = vim.api.nvim_win_get_width(0)
+	local remaining = math.max(width - vim.fn.strdisplaywidth(label), 0)
+	return string.rep("─", math.floor(remaining / 2)) .. label .. string.rep("─", math.ceil(remaining / 2))
 end
 
 function M.apply_highlights()
@@ -2135,9 +2195,9 @@ function M.apply_highlights()
 	set(0, "NormalNC", { bg = "#ffffff", fg = "#24292f" })
 	set(0, "SignColumn", { bg = "#ffffff" })
 	set(0, "FoldColumn", { bg = "#ffffff" })
-	set(0, "LineNr", { bg = "#ffffff", fg = "#6e7781" })
+	set(0, "LineNr", { bg = "#ffffff", fg = "#8c959f" })
 	set(0, "CursorLine", { bg = "#f6f8fa" })
-	set(0, "CursorLineNr", { bg = "#f6f8fa", fg = "#24292f", bold = true })
+	set(0, "CursorLineNr", { bg = "#f6f8fa", fg = "#57606a", bold = true })
 	set(0, "EndOfBuffer", { bg = "#ffffff", fg = "#ffffff" })
 	set(0, "WinSeparator", { bg = "#ffffff", fg = "#d0d7de" })
 	set(0, "StatusLine", { bg = "#f6f8fa", fg = "#24292f" })
@@ -2156,9 +2216,25 @@ function M.apply_highlights()
 	set(0, "DiffviewDiffAddAsDelete", { bg = "#ffebe9" })
 	set(0, "DiffviewDiffChange", { bg = "#ddf4ff" })
 	set(0, "DiffviewDiffDelete", { bg = "#ffebe9" })
-	set(0, "DiffviewDiffDeleteDim", { bg = "#ffffff", fg = "#d0d7de" })
-	set(0, "DiffviewDiffFiller", { bg = "#ffffff", fg = "#d0d7de" })
+	-- Keep counterpart/empty filler lines neutral; make folded context quiet.
+	set(0, "DiffviewDiffDeleteDim", { bg = "#f6f8fa", fg = "#8c959f" })
+	set(0, "DiffviewDiffFiller", { bg = "#f6f8fa", fg = "#8c959f" })
 	set(0, "DiffviewDiffText", { bg = "#aceebb", fg = "#24292f", bold = true })
+	set(0, "Folded", { bg = "#eef3f6", fg = "#8c959f", italic = true })
+
+	-- These are applied only through per-diff-window winhl mappings.
+	set(0, "DiffviewReviewSyntaxComment", { fg = "#839496", italic = true })
+	set(0, "DiffviewReviewSyntaxConstant", { fg = "#b58900" })
+	set(0, "DiffviewReviewSyntaxDelimiter", { fg = "#657b83" })
+	set(0, "DiffviewReviewSyntaxFunction", { fg = "#268bd2" })
+	set(0, "DiffviewReviewSyntaxIdentifier", { fg = "#586e75" })
+	set(0, "DiffviewReviewSyntaxOperator", { fg = "#657b83" })
+	set(0, "DiffviewReviewSyntaxPreProc", { fg = "#cb4b16" })
+	set(0, "DiffviewReviewSyntaxSpecial", { fg = "#2aa198" })
+	set(0, "DiffviewReviewSyntaxStatement", { fg = "#859900" })
+	set(0, "DiffviewReviewSyntaxString", { fg = "#2aa198" })
+	set(0, "DiffviewReviewSyntaxType", { fg = "#b58900" })
+
 	set(0, "DiffviewLeftDiffText", { bg = "#ffcecb", fg = "#24292f", bold = true })
 	set(0, "DiffviewRightDiffText", { bg = "#aceebb", fg = "#24292f", bold = true })
 	set(0, "DiffviewFilePanelInsertions", { fg = "#1a7f37", bold = true })
@@ -2166,10 +2242,12 @@ function M.apply_highlights()
 	set(0, "DiffviewFilePanelTitle", { fg = "#0969da", bold = true })
 	set(0, "DiffviewFolderSign", { fg = "#0969da" })
 	set(0, "DiffviewNonText", { fg = "#57606a" })
-	set(0, "DiffviewReviewCommentSign", { fg = "#0969da", bold = true })
-	set(0, "DiffviewReviewCommentBorder", { fg = "#0969da" })
-	set(0, "DiffviewReviewCommentRange", { bg = "#ddf4ff", fg = "#0969da", bold = true })
-	set(0, "DiffviewReviewCommentVirt", { fg = "#0969da" })
+	-- Normal comments stay quiet; stronger accents remain reserved for guide/GitHub state.
+	set(0, "DiffviewReviewCommentSign", { fg = "#8c959f" })
+	set(0, "DiffviewReviewCommentBorder", { fg = "#d0d7de" })
+	set(0, "DiffviewReviewReplyBorder", { fg = "#aeb7c2" })
+	set(0, "DiffviewReviewCommentRange", { bg = "#f6f8fa", fg = "#57606a" })
+	set(0, "DiffviewReviewCommentVirt", { fg = "#57606a" })
 	set(0, "DiffviewReviewGithub", { fg = "#8250df", bold = true })
 	set(0, "DiffviewReviewGithubBorder", { fg = "#8250df" })
 	set(0, "DiffviewReviewGithubRange", { bg = "#fbefff", fg = "#8250df", bold = true })
@@ -2209,6 +2287,52 @@ function M.apply_highlights()
 	set(0, "DiffviewReviewWinbarViewed", { bg = "#dafbe1", fg = "#1a7f37", bold = true })
 end
 
+function M._resolve_visible_comment_anchors(ctx, state, visible)
+	local review_anchor = require("utils.diffview_review_anchor")
+	local snapshots = {}
+	for _, item in ipairs(visible or {}) do
+		if item.file and item.side and vim.api.nvim_buf_is_valid(item.bufnr) then
+			local key = item.file .. "\0" .. item.side
+			snapshots[key] = snapshots[key] or vim.api.nvim_buf_get_lines(item.bufnr, 0, -1, false)
+		end
+	end
+
+	local changed = false
+	for _, comment in ipairs(state.comments or {}) do
+		if is_local_manual_comment(comment) and not review_format.is_file_level_comment(comment) then
+			if type(comment.anchor) ~= "table" then
+				if comment.anchor_status ~= "legacy_unverified" then
+					comment.anchor_status = "legacy_unverified"
+					changed = true
+				end
+			else
+				local side = tostring(comment.anchor.side or comment.side or ""):upper()
+				local file = normalize_file(comment.anchor.path or comment.file)
+				local lines = snapshots[(file or "") .. "\0" .. side]
+				if lines then
+					local before = vim.deepcopy(comment.anchor.resolved)
+					local old_line, old_end_line, old_status = comment.line, comment.end_line, comment.anchor_status
+					local resolution = review_anchor.resolve(comment.anchor, lines)
+					review_anchor.apply_resolution(comment, resolution)
+					if
+						not vim.deep_equal(before, comment.anchor.resolved)
+						or old_line ~= comment.line
+						or old_end_line ~= comment.end_line
+						or old_status ~= comment.anchor_status
+					then
+						changed = true
+					end
+				end
+			end
+		end
+	end
+
+	if changed then
+		save_state(ctx, state)
+	end
+	return changed
+end
+
 function M.refresh_visible()
 	local view = current_view()
 	local ctx = repo_context(view)
@@ -2240,6 +2364,8 @@ function M.refresh_visible()
 			end
 		end
 	end
+
+	M._resolve_visible_comment_anchors(ctx, state, visible)
 
 	local current_entry_path = normalize_file(view and view.cur_entry and view.cur_entry.path)
 	local current_entry_buffers = {}
@@ -2413,6 +2539,135 @@ function M.refresh_current()
 	refresh_winbar(0, ctx.file, state)
 end
 
+function M.stop_agent_reply_polling()
+	if M.agent_reply_poll_timer then
+		pcall(vim.fn.timer_stop, M.agent_reply_poll_timer)
+		M.agent_reply_poll_timer = nil
+	end
+end
+
+function M.process_agent_reply_artifacts()
+	if M.agent_reply_processing then
+		return
+	end
+	local view = current_view()
+	local ctx = repo_context(view)
+	if not (ctx and active_guide_context and active_guide_context.assistant_name) then
+		return
+	end
+
+	M.agent_reply_processing = true
+	local ok, process_error = pcall(function()
+		local state = load_state_with_guide(ctx)
+		local changed, stats = require("utils.diffview_review_agent").ingest(state, ctx.state_path)
+
+		-- Do not leave a spinner forever if the assistant pane exits before
+		-- producing an artifact. A later retry can create a fresh request.
+		local now = os.time()
+		for _, comment in ipairs(state.comments or {}) do
+			if comment.agent_status == "running" and comment.agent_updated_at then
+				local ok, started_at = pcall(vim.fn.strptime, "%Y-%m-%dT%H:%M:%SZ", comment.agent_updated_at)
+				if ok and tonumber(started_at) and now - tonumber(started_at) >= 900 then
+					comment.agent_status = "failed"
+					comment.agent_error = "Pi review timed out without a reply artifact"
+					comment.agent_updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+					changed = true
+					stats.failed = stats.failed + 1
+				end
+			end
+		end
+
+		if changed and save_state(ctx, state) then
+			M.refresh_visible()
+			if stats.completed > 0 then
+				notify(("Pi completed %d review repl%s"):format(stats.completed, stats.completed == 1 and "y" or "ies"))
+			elseif stats.failed > 0 then
+				notify(("Pi failed %d review request%s"):format(stats.failed, stats.failed == 1 and "" or "s"), vim.log.levels.WARN)
+			end
+		end
+	end)
+	M.agent_reply_processing = false
+	if not ok then
+		notify("Could not process Pi review replies: " .. tostring(process_error), vim.log.levels.ERROR)
+	end
+end
+
+function M.start_agent_reply_polling(ctx)
+	if not (ctx and ctx.state_path and active_guide_context and active_guide_context.assistant_name) then
+		return
+	end
+	local review_agent = require("utils.diffview_review_agent")
+	vim.fn.mkdir(review_agent.reply_dir(ctx.state_path), "p")
+	M.process_agent_reply_artifacts()
+	if M.agent_reply_poll_timer then
+		return
+	end
+	M.agent_reply_poll_timer = vim.fn.timer_start(1000, M.process_agent_reply_artifacts, { ["repeat"] = -1 })
+end
+
+function M.dispatch_agent_reply(ctx, state, comment, request_body)
+	local review_agent = require("utils.diffview_review_agent")
+	comment.local_id = comment.local_id or review_agent.new_id("local")
+	comment.agent_request_id = review_agent.new_id("request")
+	comment.agent_status = "pending"
+	comment.agent_error = nil
+	comment.agent_updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+
+	if not save_state(ctx, state) then
+		return false
+	end
+	M.refresh_visible()
+
+	local assistant_name = active_guide_context and active_guide_context.assistant_name or nil
+	if not assistant_name then
+		comment.agent_status = "unavailable"
+		comment.agent_error = "This Diffview was not opened by the review workflow"
+		comment.agent_updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+		save_state(ctx, state)
+		M.refresh_visible()
+		notify("Comment saved, but no persistent review assistant is active; start with `review ...`", vim.log.levels.WARN)
+		return false
+	end
+
+	local reply_path = review_agent.reply_path(ctx.state_path, comment.local_id, comment.agent_request_id)
+	vim.fn.mkdir(review_agent.reply_dir(ctx.state_path), "p")
+	local prompt = review_agent.build_prompt({
+		body = request_body or comment.body,
+		comment_id = comment.local_id,
+		end_line = comment.end_line,
+		file = comment.file,
+		line = comment.line,
+		reply_path = reply_path,
+		request_id = comment.agent_request_id,
+		state_path = ctx.state_path,
+	})
+	local pi_ok, pi = pcall(require, "utils.pi")
+	local sent, send_error = false, nil
+	if pi_ok and pi.send_to_named_agent then
+		sent, send_error = pi.send_to_named_agent(assistant_name, ctx.root, prompt)
+	else
+		send_error = "Pi integration is unavailable"
+	end
+
+	if sent then
+		comment.agent_status = "running"
+		comment.agent_error = nil
+	else
+		comment.agent_status = "unavailable"
+		comment.agent_error = send_error or "Persistent Pi pane is unavailable"
+	end
+	comment.agent_updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+	save_state(ctx, state)
+	M.refresh_visible()
+	M.start_agent_reply_polling(ctx)
+
+	if not sent then
+		notify(("Comment saved, but Pi request is unavailable: %s"):format(comment.agent_error), vim.log.levels.WARN)
+		return false
+	end
+	return true
+end
+
 function M.add_comment(opts)
 	local ctx = current_file_context()
 	if not require_active_diffview(ctx, "adding a review comment") then
@@ -2443,17 +2698,18 @@ function M.add_comment(opts)
 			return
 		end
 
-		if existing then
-			existing.body = input
+		local comment = existing
+		if comment then
+			comment.body = input
 			if side then
-				existing.side = side
+				comment.side = side
 			end
-			if pr and is_local_manual_comment(existing) then
-				set_comment_pr_context(existing, pr)
+			if pr and is_local_manual_comment(comment) then
+				set_comment_pr_context(comment, pr)
 			end
-			existing.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+			comment.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
 		else
-			local comment = {
+			comment = {
 				file = ctx.file,
 				line = line,
 				body = input,
@@ -2469,9 +2725,10 @@ function M.add_comment(opts)
 			table.insert(state.comments, comment)
 		end
 
-		if save_state(ctx, state) then
-			notify(("Saved review comment for %s:%s"):format(ctx.file, range_label(line, end_line)))
-			M.refresh_visible()
+		comment.anchor = M._capture_comment_anchor(ctx, ctx.file, side, line, end_line)
+		comment.anchor_status = comment.anchor and "anchored" or "legacy_unverified"
+		if M.dispatch_agent_reply(ctx, state, comment) then
+			notify(("Saved review comment and sent it to Pi for %s:%s"):format(ctx.file, range_label(line, end_line)))
 		end
 	end
 
@@ -2487,6 +2744,155 @@ function M.add_comment_visual()
 	local start_line = vim.fn.line("v")
 	local end_line = vim.fn.line(".")
 	M.add_comment({ line = math.min(start_line, end_line), end_line = math.max(start_line, end_line) })
+end
+
+function M.reply_comment()
+	local ctx = current_file_context()
+	if not require_active_diffview(ctx, "replying to a review thread") then
+		return
+	end
+	if not require_repo_context(ctx, "replying to a review thread") then
+		return
+	end
+	if not ctx.file then
+		notify("Open a Diffview file before replying to a review thread", vim.log.levels.WARN)
+		return
+	end
+
+	local line = vim.api.nvim_win_get_cursor(0)[1]
+	local state = load_state_with_guide(ctx)
+	local comment = find_comment(state, ctx.file, line)
+	if not comment then
+		notify(("No review thread at %s:%d"):format(ctx.file, line), vim.log.levels.WARN)
+		return
+	end
+
+	local reply_line = tonumber(comment.line) or line
+	local reply_end_line = tonumber(comment.end_line) or reply_line
+	open_comment_editor(ctx, reply_line, reply_end_line, "", function(input)
+		local body = vim.trim(input or "")
+		if body == "" then
+			notify("Empty thread reply skipped", vim.log.levels.WARN)
+			return
+		end
+
+		comment.replies = type(comment.replies) == "table" and comment.replies or {}
+		table.insert(comment.replies, {
+			author = vim.env.USER or "you",
+			body = body,
+			created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+		})
+		comment.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+		if save_state(ctx, state) then
+			M.refresh_visible()
+			local follow_up = ("Continue the existing review thread.\nOriginal comment: %s\nNew local reply: %s")
+				:format(tostring(comment.body or ""), body)
+			if M.dispatch_agent_reply(ctx, state, comment, follow_up) then
+				notify(("Added reply and sent a Pi follow-up for %s:%s"):format(
+					ctx.file,
+					range_label(reply_line, reply_end_line)
+				))
+			else
+				notify(("Added local reply to %s:%s"):format(ctx.file, range_label(reply_line, reply_end_line)))
+			end
+		end
+	end, "Reply")
+end
+
+function M.reanchor_comment(opts)
+	local ctx = current_file_context()
+	if not require_active_diffview(ctx, "re-anchoring a review comment") then
+		return
+	end
+	if not require_repo_context(ctx, "re-anchoring a review comment") then
+		return
+	end
+	if not ctx.file then
+		notify("Open a Diffview file before re-anchoring a comment", vim.log.levels.WARN)
+		return
+	end
+
+	local line, end_line = range_from_opts(opts)
+	local state = load_state_with_guide(ctx)
+	local comment = find_comment(state, ctx.file, line, { manual_only = true })
+	if not comment then
+		local unresolved = {}
+		for _, candidate in ipairs(state.comments or {}) do
+			if
+				is_local_manual_comment(candidate)
+				and candidate.file == ctx.file
+				and (
+					candidate.anchor_status == "stale"
+					or candidate.anchor_status == "ambiguous"
+					or candidate.anchor_status == "legacy_unverified"
+				)
+			then
+				table.insert(unresolved, candidate)
+			end
+		end
+		if #unresolved == 1 then
+			comment = unresolved[1]
+		elseif #unresolved > 1 then
+			notify(("%d unresolved comments exist in %s; jump to the intended comment first"):format(#unresolved, ctx.file), vim.log.levels.WARN)
+			return
+		else
+			notify(("No local review comment at %s:%d"):format(ctx.file, line), vim.log.levels.WARN)
+			return
+		end
+	end
+
+	local side = side_from_current_buffer(ctx.view)
+	local previous_anchor = type(comment.anchor) == "table" and vim.deepcopy(comment.anchor) or nil
+	local anchor = M._capture_comment_anchor(ctx, ctx.file, side, line, end_line)
+	if not anchor then
+		notify("Could not capture a content anchor in this Diffview pane", vim.log.levels.ERROR)
+		return
+	end
+	comment.anchor_history = type(comment.anchor_history) == "table" and comment.anchor_history or {}
+	if previous_anchor then
+		table.insert(comment.anchor_history, previous_anchor)
+	end
+	comment.anchor = anchor
+	comment.anchor_status = "anchored"
+	comment.line = line
+	comment.end_line = end_line ~= line and end_line or nil
+	comment.side = side
+	comment.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+	if save_state(ctx, state) then
+		M.refresh_visible()
+		notify(("Re-anchored review comment at %s:%s"):format(ctx.file, range_label(line, end_line)))
+	end
+end
+
+function M.reanchor_comment_visual()
+	local start_line = vim.fn.line("v")
+	local end_line = vim.fn.line(".")
+	M.reanchor_comment({ line = math.min(start_line, end_line), end_line = math.max(start_line, end_line) })
+end
+
+function M.retry_agent_reply(opts)
+	local ctx = current_file_context()
+	if not require_active_diffview(ctx, "retrying a Pi review reply") then
+		return
+	end
+	if not require_repo_context(ctx, "retrying a Pi review reply") then
+		return
+	end
+	if not ctx.file then
+		notify("Open a Diffview file before retrying a Pi review reply", vim.log.levels.WARN)
+		return
+	end
+
+	local line = line_from_opts(opts)
+	local state = load_state_with_guide(ctx)
+	local comment = find_comment(state, ctx.file, line, { manual_only = true })
+	if not comment then
+		notify(("No local review comment at %s:%d"):format(ctx.file, line), vim.log.levels.WARN)
+		return
+	end
+	if M.dispatch_agent_reply(ctx, state, comment) then
+		notify(("Retried Pi review for %s:%d"):format(ctx.file, line))
+	end
 end
 
 local function remove_comment_at_index(state, index)
@@ -3365,6 +3771,10 @@ local function github_post_candidates(state, files, pr)
 				increment_skipped(stats, "already-posted/exported")
 			elseif not matches_pr then
 				increment_skipped(stats, pr_skip_reason)
+			elseif comment.anchor_status == "stale" or comment.anchor_status == "ambiguous" then
+				increment_skipped(stats, "content-anchor-" .. comment.anchor_status)
+			elseif type(comment.anchor) ~= "table" or comment.anchor_status == "legacy_unverified" then
+				increment_skipped(stats, "legacy-unverified-anchor")
 			elseif comment.stale == true or comment.outdated == true or comment.sync_status == "unmapped" or comment.sync_status == "stale-anchor" then
 				increment_skipped(stats, "stale/unmapped")
 			elseif not file or not line then
@@ -4458,7 +4868,7 @@ end
 
 function M.diffview_keymaps()
 	-- Diffview local-review keymap contract:
-	-- <leader>gda/gdd/<leader>gdr add/delete/resolve comments, <leader>gdv toggles reviewed,
+	-- <leader>gda/gdd/<leader>gdr add/delete/resolve comments, <leader>gdt replies, <leader>gdl re-anchors, <leader>gdv toggles reviewed,
 	-- <leader>gdg opens file guide context,
 	-- <leader>gds opens the review comment quickfix, <leader>gdS opens the detailed guide/status,
 	-- <leader>gdU opens the reviewed/unreviewed dashboard,
@@ -4471,6 +4881,9 @@ function M.diffview_keymaps()
 			{ "x", "<leader>gda", M.add_comment_visual, { desc = "[G]it [D]iffview [A]dd Review Comment" } },
 			{ "n", "<leader>gdd", M.delete_comment, { desc = "[G]it [D]iffview [D]elete Review Comment" } },
 			{ "n", "<leader>gdr", M.resolve_comment, { desc = "[G]it [D]iffview [R]esolve/Hide Review Comment" } },
+			{ "n", "<leader>gdt", M.reply_comment, { desc = "[G]it [D]iffview Reply to [T]hread" } },
+			{ "n", "<leader>gdl", M.reanchor_comment, { desc = "[G]it [D]iffview Re[L]ocate Comment Anchor" } },
+			{ "x", "<leader>gdl", M.reanchor_comment_visual, { desc = "[G]it [D]iffview Re[L]ocate Comment Anchor" } },
 			{ "n", "<leader>gdg", M.show_guide_popup, { desc = "[G]it [D]iffview [G]uide" } },
 			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File Reviewed" } },
 			{ "n", "<leader>gds", M.show_comments_quickfix, { desc = "[G]it [D]iffview Review Comment Quickfix" } },
@@ -4517,6 +4930,7 @@ function M.setup()
 				if event.match == "DiffviewViewPostLayout" then
 					M.jump_to_initial_guide_file()
 					M.auto_import_github_comments()
+					M.start_agent_reply_polling(repo_context(current_view()))
 				end
 				for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
 					if vim.api.nvim_win_is_valid(winid) then
@@ -4549,6 +4963,20 @@ function M.setup()
 		range = true,
 		force = true,
 		desc = "Resolve or hide a Diffview review comment at the current line",
+	})
+	vim.api.nvim_create_user_command("DiffviewReviewRetryAgent", M.retry_agent_reply, {
+		range = true,
+		force = true,
+		desc = "Retry the persistent Pi reply for the current local review comment",
+	})
+	vim.api.nvim_create_user_command("DiffviewReviewReply", M.reply_comment, {
+		force = true,
+		desc = "Add a local reply to the review thread at the current line",
+	})
+	vim.api.nvim_create_user_command("DiffviewReviewReanchor", M.reanchor_comment, {
+		range = true,
+		force = true,
+		desc = "Re-anchor the local review comment at the current line",
 	})
 	vim.api.nvim_create_user_command("DiffviewReviewToggleViewed", M.toggle_file_viewed, {
 		force = true,

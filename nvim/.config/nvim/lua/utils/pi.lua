@@ -8,6 +8,14 @@ local WINDOW_PANE_FORMAT = table.concat({
 	"#{@pi_agent_board}",
 	"#{pane_start_command}",
 }, "\t")
+local NAMED_AGENT_PANE_FORMAT = table.concat({
+	"#{window_id}",
+	"#{pane_id}",
+	"#{@pi_agent_name}",
+	"#{pane_current_command}",
+	"#{pane_start_command}",
+	"#{pane_current_path}",
+}, "\t")
 local PI_LAUNCH_COMMAND = [[tmux set-option -pt "$TMUX_PANE" allow-passthrough off; exec pi]]
 
 local function run_tmux(args)
@@ -166,6 +174,92 @@ local function send_text(target, text, submit)
 
 	return true
 end
+
+local function normalize_path(path)
+	if type(path) ~= "string" or path == "" then
+		return nil
+	end
+	return vim.fs.normalize(vim.fn.fnamemodify(path, ":p")):gsub("/+$", "")
+end
+
+local function pane_is_pi(current_command, start_command)
+	current_command = tostring(current_command or "")
+	start_command = tostring(start_command or "")
+	return current_command == "pi"
+		or current_command:match("/pi$") ~= nil
+		or start_command:find("exec pi", 1, true) ~= nil
+end
+
+local function select_named_agent_target(lines, current_window_id, agent_name, repo_root)
+	local expected_root = normalize_path(repo_root)
+	local current_window_matches = {}
+	local all_matches = {}
+	for _, line in ipairs(lines or {}) do
+		local parts = vim.split(line, "\t", { plain = true })
+		if
+			parts[3] == agent_name
+			and pane_is_pi(parts[4], parts[5])
+			and normalize_path(parts[6]) == expected_root
+		then
+			local target = { window_id = parts[1], pane_id = parts[2] }
+			table.insert(all_matches, target)
+			if parts[1] == current_window_id then
+				table.insert(current_window_matches, target)
+			end
+		end
+	end
+
+	if #current_window_matches == 1 then
+		return current_window_matches[1]
+	end
+	if #current_window_matches > 1 then
+		return nil, ("Multiple Pi panes named %s exist in the current tmux window"):format(agent_name)
+	end
+	if #all_matches == 1 then
+		return all_matches[1]
+	end
+	if #all_matches > 1 then
+		return nil, ("Multiple Pi panes named %s exist; keep the review pane in this tmux window"):format(agent_name)
+	end
+	return nil, ("No active Pi pane named %s; start this review with `review ...`"):format(agent_name)
+end
+
+local function named_agent_target(agent_name, repo_root)
+	if not (vim.env.TMUX and vim.env.TMUX ~= "") then
+		return nil, "Not inside tmux; start this review with `review ...`"
+	end
+	if type(agent_name) ~= "string" or agent_name == "" then
+		return nil, "The active Diffview review has no persistent Pi assistant name"
+	end
+	if not normalize_path(repo_root) then
+		return nil, "The active Diffview review has no repository root"
+	end
+
+	local current_window_id, current_error = run_tmux({ "display-message", "-p", "#{window_id}" })
+	if not current_window_id then
+		return nil, current_error
+	end
+	local panes_output, panes_error = run_tmux({ "list-panes", "-a", "-F", NAMED_AGENT_PANE_FORMAT })
+	if not panes_output then
+		return nil, panes_error
+	end
+	return select_named_agent_target(
+		vim.split(panes_output, "\n", { trimempty = true }),
+		current_window_id,
+		agent_name,
+		repo_root
+	)
+end
+
+function M.send_to_named_agent(agent_name, repo_root, text)
+	local target, target_error = named_agent_target(agent_name, repo_root)
+	if not target then
+		return false, target_error
+	end
+	return send_text(target, text, true)
+end
+
+M._select_named_agent_target = select_named_agent_target
 
 local function current_ref(with_location)
 	local relative_path = vim.fn.expand("%:.")

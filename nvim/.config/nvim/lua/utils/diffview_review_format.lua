@@ -176,6 +176,34 @@ function M.comment_status_text(comment)
 		table.insert(labels, sync_status)
 	end
 
+	local anchor_status = tostring(comment and comment.anchor_status or "")
+	if anchor_status == "moved" then
+		local original_line = comment.anchor and comment.anchor.original and tonumber(comment.anchor.original.line)
+		local resolved_line = tonumber(comment.line)
+		if original_line and resolved_line then
+			table.insert(labels, ("moved L%d→L%d"):format(original_line, resolved_line))
+		else
+			table.insert(labels, "moved anchor")
+		end
+	elseif anchor_status == "stale" then
+		table.insert(labels, "stale anchor")
+	elseif anchor_status == "ambiguous" then
+		table.insert(labels, "ambiguous anchor")
+	elseif anchor_status == "legacy_unverified" then
+		table.insert(labels, "unverified legacy anchor")
+	end
+
+	local agent_status = tostring(comment and comment.agent_status or "")
+	if agent_status == "pending" then
+		table.insert(labels, "Pi pending")
+	elseif agent_status == "running" then
+		table.insert(labels, "Pi reviewing…")
+	elseif agent_status == "failed" then
+		table.insert(labels, "Pi failed")
+	elseif agent_status == "unavailable" then
+		table.insert(labels, "Pi unavailable")
+	end
+
 	return table.concat(labels, "; ")
 end
 
@@ -286,19 +314,6 @@ local function reply_label(reply)
 	return label .. ":"
 end
 
-local function boxed_comment_body_with_replies(comment)
-	local body = boxed_comment_body(comment)
-	local replies = type(comment) == "table" and type(comment.replies) == "table" and comment.replies or {}
-	for _, reply in ipairs(replies) do
-		local reply_body = type(reply) == "table" and tostring(reply.body or "") or ""
-		if reply_body ~= "" then
-			local prefix = body ~= "" and "\n\n" or ""
-			body = body .. prefix .. reply_label(reply) .. "\n" .. reply_body
-		end
-	end
-	return body
-end
-
 local function wrap_comment_body(value, width)
 	local lines = {}
 	for _, body_line in ipairs(vim.split(tostring(value or ""), "\n", { plain = true })) do
@@ -307,23 +322,48 @@ local function wrap_comment_body(value, width)
 	return #lines > 0 and lines or { "" }
 end
 
-function M.boxed_comment_lines(comment, start_line, end_line)
-	local body_width = M.COMMENT_BOX_WIDTH - 4
-	local hls = M.comment_highlights(comment)
-	local header = boxed_comment_header(comment, start_line, end_line)
+local function boxed_card_lines(header, body, hls, width)
+	local body_width = width - 4
 	local top = "╭─" .. header
-	top = top .. string.rep("─", math.max(M.COMMENT_BOX_WIDTH - M.display_width(top) - 1, 0)) .. "╮"
+	top = top .. string.rep("─", math.max(width - M.display_width(top) - 1, 0)) .. "╮"
 
 	local lines = { { { top, hls.border } } }
-	for _, body_line in ipairs(wrap_comment_body(boxed_comment_body_with_replies(comment), body_width)) do
+	for _, body_line in ipairs(wrap_comment_body(body, body_width)) do
 		table.insert(lines, {
 			{ "│ ", hls.border },
 			{ M.pad_right(body_line, body_width), hls.virt },
 			{ " │", hls.border },
 		})
 	end
-	table.insert(lines, { { "╰" .. string.rep("─", M.COMMENT_BOX_WIDTH - 2) .. "╯", hls.border } })
+	table.insert(lines, { { "╰" .. string.rep("─", width - 2) .. "╯", hls.border } })
 	return lines
+end
+
+local function indent_virtual_lines(lines, indent)
+	for _, line in ipairs(lines) do
+		table.insert(line, 1, { indent, "DiffviewReviewStatusMuted" })
+	end
+	return lines
+end
+
+function M.boxed_comment_lines(comment, start_line, end_line)
+	local hls = M.comment_highlights(comment)
+	return boxed_card_lines(boxed_comment_header(comment, start_line, end_line), boxed_comment_body(comment), hls, M.COMMENT_BOX_WIDTH)
+end
+
+function M.boxed_reply_lines(reply, parent_comment)
+	if type(reply) ~= "table" or vim.trim(tostring(reply.body or "")) == "" then
+		return {}
+	end
+
+	local hls = vim.tbl_extend("force", M.comment_highlights(parent_comment), {
+		border = "DiffviewReviewReplyBorder",
+	})
+	local width = M.COMMENT_BOX_WIDTH - 4
+	return indent_virtual_lines(
+		boxed_card_lines(reply_label(reply), tostring(reply.body or ""), hls, width),
+		"  "
+	)
 end
 
 function M.comment_preview(comment)

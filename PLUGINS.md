@@ -3,7 +3,7 @@
 ## Neovim Plugins
 
 | Category | Plugin | Purpose | Config File |
-|----------|----------------|---------|-------------|
+| ---------- | ---------------- | --------- | ------------- |
 | Essential/Core | lazy.nvim | Plugin manager | [init.lua](nvim/.config/nvim/init.lua) |
 | Essential/Core | nvim-lspconfig | LSP configuration | [lsp-config.lua](nvim/.config/nvim/lua/plugins/essential/lsp-config.lua) |
 | Essential/Core | mason.nvim | LSP/tool installer | [lsp-config.lua](nvim/.config/nvim/lua/plugins/essential/lsp-config.lua) |
@@ -61,8 +61,9 @@
 ## CLI Tools
 
 ### Rust Tools (via Cargo)
+
 | Tool | Purpose | Install File |
-|------|---------|--------------|
+| ------ | --------- | -------------- |
 | ripgrep | Fast grep replacement | [Cargofile](Cargofile) |
 | fd-find | Fast find replacement | [Cargofile](Cargofile) |
 | bat | Cat with syntax highlighting | [Cargofile](Cargofile) |
@@ -74,8 +75,9 @@
 | vivid | LS_COLORS generator | [Cargofile](Cargofile) |
 
 ### Python Tools (via UV)
+
 | Tool | Purpose | Install File |
-|------|---------|--------------|
+| ------ | --------- | -------------- |
 | ipython | Enhanced Python REPL | [Uvfile](Uvfile) |
 | rexi | Interactive regex testing | [Uvfile](Uvfile) |
 | visidata | CSV/data visualization & editing | [Uvfile](Uvfile) |
@@ -86,8 +88,9 @@
 | jupyter-client | Jupyter kernel client | [Uvfile](Uvfile) |
 
 ### System Packages
+
 | Category | Tool | Purpose | Install File |
-|----------|------|---------|--------------|
+| ---------- | ------ | --------- | -------------- |
 | Essential | tmux | Terminal multiplexer | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Essential | neovim | Text editor | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Essential | fish | Shell | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
@@ -112,8 +115,9 @@
 ## Languages & Development Tools
 
 ### Language Runtimes
+
 | Language | Tool | Install Method |
-|----------|------|----------------|
+| ---------- | ------ | ---------------- |
 | Rust | rustup | [install.sh](install.sh) |
 | Julia | juliaup | [install.sh](install.sh) |
 | Node.js | fnm (Fast Node Manager) | [install.sh](install.sh) |
@@ -123,8 +127,9 @@
 | Ruby | ruby | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 
 ### Language Servers (via Mason)
+
 | Language | LSP | Purpose |
-|----------|-----|---------|
+| ---------- | ----- | --------- |
 | C/C++ | clangd | C/C++ language server |
 | Lua | lua_ls | Lua language server |
 | Julia | julials | Julia language server |
@@ -133,34 +138,39 @@
 | Markdown | marksman | Markdown language server |
 
 ### Formatters & Linters
+
 | Tool | Purpose | Install Method |
-|------|---------|----------------|
+| ------ | --------- | ---------------- |
 | stylua | Lua formatter | Via Mason |
 | clang-format | C/C++ formatter | Via Mason, [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | black | Python formatter | Via Mason, [Uvfile](Uvfile) |
 | isort | Python import sorter | Via Mason, [Uvfile](Uvfile) |
-| rustfmt | Rust formatter | Via Mason |
+| rustfmt | Rust formatter | Via rustup ([install.sh](install.sh)) |
 | prettier | Multi-language formatter | Via Mason |
 
 ### Build Tools & Compilers
+
 | Tool | Purpose | Install Method |
-|------|---------|----------------|
+| ------ | --------- | ---------------- |
 | llvm/clang | C/C++ compiler | [Brewfile](Brewfile), [Dnffile](Dnffile) |
 | gcc/gcc-c++ | C/C++ compiler | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | make | Build automation | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 
 ### Package Managers
+
 | Tool | Purpose | Install Method |
 |------|---------|----------------|
 | luarocks | Lua package manager | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 
 ### Dependencies
+
 | Tool | Purpose | Install Method |
 |------|---------|----------------|
 | imagemagick | Image processing (for image.nvim) | [Brewfile](Brewfile), [Aptfile](Aptfile) |
 | libmagickwand-dev | ImageMagick development files | [Aptfile](Aptfile) |
 
 ### Fonts
+
 | Font | Purpose | Install Method |
 |------|---------|----------------|
 | CommitMono Nerd Font | Nerd font with icons | [Brewfile](Brewfile), [install.sh](install.sh) (Fedora) |
@@ -170,7 +180,7 @@
 ## Tmux Plugins
 
 | Plugin | Purpose | Config File |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | tpm | Tmux Plugin Manager | [.tmux.conf](tmux/.tmux.conf) |
 | tmux-sensible | Better defaults | [.tmux.conf](tmux/.tmux.conf) |
 | tmux-fzf | Fuzzy finder for tmux | [.tmux.conf](tmux/.tmux.conf) |
@@ -193,7 +203,7 @@
 ## Additional Tools
 
 | Tool | Purpose | Install Method |
-|------|---------|----------------|
+| ------ | --------- | ---------------- |
 | kitty | Terminal emulator | [install.sh](install.sh) |
 | fzf | Fuzzy finder | [install.sh](install.sh) |
 | Pi (`@earendil-works/pi-coding-agent`) | AI coding agent; skills, prompts, Neovim/tmux/Fish workflows, and pre-push documentation check | [install.sh](install.sh), [pi/.pi/agent](pi/.pi/agent) |
