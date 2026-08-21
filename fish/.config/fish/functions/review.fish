@@ -35,8 +35,8 @@ function __review_open_pi_pane --argument-names repo_root title bootstrap_path
     set -l prompt_arg (__review_shell_single_quoted_string "$prompt")
     set -l title_arg (__review_shell_single_quoted_string "$title")
     set -l launch_command "tmux set-option -pt \"\$TMUX_PANE\" allow-passthrough off; tmux set-option -pt \"\$TMUX_PANE\" @pi_agent_name $title_arg; tmux select-pane -t \"\$TMUX_PANE\" -T $title_arg; exec pi --name $title_arg $prompt_arg"
-    # Keep the diff wide while giving the assistant enough room to be useful.
-    set -l pane_id (command tmux split-window -v -p 12 -d -P -F '#{pane_id}' -c "$repo_root" "$launch_command" 2>&1)
+    # Match the largest stacked state in cycle-layouts.sh.
+    set -l pane_id (command tmux split-window -v -p 40 -d -P -F '#{pane_id}' -c "$repo_root" "$launch_command" 2>&1)
     if test $status -ne 0
         echo "review: could not open interactive Pi pane: $pane_id" >&2
         return 1
