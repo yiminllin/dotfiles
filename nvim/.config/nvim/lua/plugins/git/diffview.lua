@@ -268,16 +268,9 @@ return {
 		local previous_diffopt = nil
 
 		local function toggle_inline_diff()
-			local enabled = vim.o.diffopt:find("inline:word", 1, true) ~= nil
-			vim.opt.diffopt:remove({ "inline:none", "inline:simple", "inline:char", "inline:word" })
-			if enabled then
-				vim.opt.diffopt:append("inline:none")
-			else
-				vim.opt.diffopt:append("inline:word")
-			end
 			vim.notify(
-				enabled and "Diffview inline word diff disabled" or "Diffview inline word diff enabled",
-				vim.log.levels.INFO
+				"Inline diff options are not supported by this Neovim version",
+				vim.log.levels.WARN
 			)
 		end
 
@@ -472,7 +465,6 @@ return {
 					"closeoff",
 					"indent-heuristic",
 					"context:4",
-					"inline:none",
 					"linematch:60",
 					"algorithm:histogram",
 				}
