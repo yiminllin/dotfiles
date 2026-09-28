@@ -100,12 +100,14 @@ agent_name() {
 
 agent_state() {
   local pane_id=$1
-  local content
+  local content status_line status_pattern
 
-  content=$(tmux capture-pane -p -t "$pane_id" -S -12 -E - 2>/dev/null || true)
+  content=$(tmux capture-pane -p -t "$pane_id" 2>/dev/null | tail -n 7 || true)
   content="${content//$'\r'/}"
+  status_line=$(printf '%s\n' "$content" | tail -n 6 | head -n 1)
+  status_pattern="^[[:space:]]*──[[:space:]]*[^[:space:]─]+[[:space:]]+(Working|Retrying|Compacting|Auto-compacting|Summarizing)([[:space:].(]|$)"
 
-  if [[ "$content" == *"Working..."* || "$content" == *"Retrying ("* || "$content" == *"Compacting context..."* || "$content" == *"Auto-compacting..."* || "$content" == *"Summarizing branch..."* ]]; then
+  if [[ "$status_line" =~ $status_pattern ]]; then
     printf 'RUN'
   elif [[ "$content" =~ (^|$'\n')[[:space:]]*(Error:|Retry[[:space:]]failed[[:space:]]after|No[[:space:]]models[[:space:]]available) ]]; then
     printf 'ERR'
