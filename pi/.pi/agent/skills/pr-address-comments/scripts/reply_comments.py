@@ -286,6 +286,7 @@ def _post_issue_comment(ctx: RepoContext, body: str, dry_run: bool) -> dict[str,
             "owner": ctx.owner,
             "repo": ctx.repo,
             "number": ctx.number,
+            "body": body,
         }
 
     result = _run_json(
@@ -465,6 +466,7 @@ def _post_review_reply(
             "in_reply_to": in_reply_to,
             "normalized_in_reply_to": normalized_reply_target,
             "resolve_thread_id": resolve_thread_id,
+            "body": body,
         }
 
     root_reply_target = _resolve_root_review_comment_id(ctx, in_reply_to)

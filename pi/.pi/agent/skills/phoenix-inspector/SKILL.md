@@ -42,8 +42,6 @@ Prefer `--format both --out-dir /tmp/pi/<short-task>` for report commands and `-
 
 ## Evidence contract
 
-Keep a Topic Ledger for nontrivial work: active question; exact run/scenario/job and source; topic/signal/log; time window or attempt; status; next decisive probe. Preserve exact decisive commands, exit status, report/CSV paths, blockers, and evidence limits.
-
-Final claims must state: evidence supports/proves; evidence does not prove; missing comparison; blocker or next probe. Do not infer causal RCA from inventory, summaries, or signal deltas alone.
+Keep a Topic Ledger internally for nontrivial work: question, exact run/source, signal, time window, status, and next decisive probe. Preserve decisive commands, exit status, artifacts, and evidence limits. In the answer, lead with the conclusion, decisive evidence, and what remains unproven; show the full ledger only for multi-run investigations or on request. Do not infer causal RCA from inventory, summaries, or signal deltas alone.
 
 For detailed helper syntax, use `python3 "$PI" <command> -h`; do not load the operator README unless the user requests the guide.

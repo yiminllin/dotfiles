@@ -14,7 +14,7 @@ Handle existing PR feedback in one of two modes:
 
 This skill handles feedback already raised by reviewers or bots. It does not discover new review issues, create private review guides or new review notes (`pr-human-review-guide`), or manage the full PR lifecycle.
 
-Triage first. Do not edit code, post replies, resolve threads, commit, or push unless the user separately asks or approves the specific action.
+Triage first. When the user already asks to assess and fix valid issues, make evidence-backed local fixes without a second implementation request. Posting replies, resolving threads, committing, and pushing remain separate actions.
 
 ## Guardrails
 
@@ -24,7 +24,7 @@ Triage first. Do not edit code, post replies, resolve threads, commit, or push u
 - Require a PR number, URL, or current-branch lookup only in live mode. Local snapshots need no PR identifier.
 - Require fresh state only in live mode. Never reject a local snapshot merely because it is not current.
 - Treat bot feedback as a hypothesis. Verify claims against local code before recommending or making changes.
-- Escalate ambiguous, conflicting, architectural, product, safety, performance-policy, or strategic feedback.
+- Assess architectural or safety feedback against code and stated intent; fix only when the correct local change is clear. Escalate genuine policy/design choices or conflicting intent.
 - GitHub writes require separate explicit approval of the exact replies and resolutions. Prefix posted comments with `__Comment by Robot__`.
 - Never commit or push unless separately requested.
 
@@ -71,7 +71,7 @@ Number each item and report:
 
 Classify feedback as actionable only when its intent is specific, local, non-conflicting, and verifiable without product, architecture, safety, or strategy judgment. Read the referenced implementation and nearby tests before accepting reviewer or bot claims.
 
-Return the triage without edits unless the user already asked for implementation. If implementation was not requested, ask which actionable items to address.
+If implementation was requested, fix confirmed local issues and report rejected comments with evidence. Otherwise return triage without edits and ask which actionable items to address.
 
 ### 4. Implement approved fixes
 
@@ -85,7 +85,7 @@ Return the triage without edits unless the user already asked for implementation
 
 Drafting replies is local and does not authorize posting. Keep drafts short and evidence-based.
 
-Only after showing the exact writes and receiving explicit GitHub-write approval, post with the bundled helper:
+Use `scripts/reply_comments.py --replies /tmp/replies.json --pr "<number-or-url>" --dry-run --json` to preview exact reply text, targets, and thread resolutions. Only after showing these writes and receiving explicit GitHub-write approval, post with the bundled helper:
 
 ```text
 python "$SKILL_DIR/scripts/reply_comments.py" --replies /tmp/replies.json --pr "<number-or-url>" --json

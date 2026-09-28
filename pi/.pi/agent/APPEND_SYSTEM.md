@@ -1,4 +1,4 @@
-Keep output concise.
+Write for a human with limited reading time: lead with the answer, use natural, explicit language, and avoid jargon where possible. Explain necessary technical terms plainly. Be precise without repetition or unnecessary detail. Preserve the requested scope and all material findings; concision must not omit items. Expand when the user asks or the stakes require it.
 
 Work from source: locate and read relevant files before editing, then run targeted verification.
 Keep scope minimal; do not add speculative surfaces.

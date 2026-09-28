@@ -47,7 +47,7 @@ Prefer prompting the user with choices instead of open-ended questions.
 
 Guidelines:
 
-- Ask for one section or decision at a time.
+- Draft from facts already supplied; ask only for a consequential missing decision. For exploratory ticket design, ask one section at a time.
 - Offer 3-5 concise choices when possible.
 - Put the recommended/default choice first when there is a clear default.
 - Always allow custom text or edits.
@@ -118,7 +118,7 @@ Keep each section to 1-5 bullets when possible. If the ticket needs more detail,
    - Parent ticket: offer `none`, `existing key`, or `not sure`. Use `-P "<PARENT-KEY>"` only when an existing parent key is supplied and confirmed.
    - Due date: offer `none`, `today`, `this week`, or `custom`. Capture the choice in the description unless exact Jira CLI/custom-field syntax is confirmed.
    - Assignee defaults to `Yimin Lin`; ask only if the user wants a different assignee or no assignee.
-2. Collect fields one by one:
+2. Fill fields from the request first. Ask only for consequential missing fields, then check:
    - Summary, in Title Case after `[Phoenix]`
    - Parent ticket
    - Due date
@@ -129,7 +129,7 @@ Keep each section to 1-5 bullets when possible. If the ticket needs more detail,
    - Plan
    - Artifacts / PRs
    - Definition of Done
-3. For each section:
+3. For sections that remain unclear:
    - offer short suggested options when possible
    - ask the user to choose, edit, skip, or provide custom text
    - keep wording short and concrete

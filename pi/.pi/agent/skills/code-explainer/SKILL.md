@@ -7,7 +7,7 @@ description: Trace and explain call paths and code behavior across multi-languag
 
 ## Overview
 
-Provide high-level, conceptual understanding of code from a function, module, file, or directory. Summarize purpose, data flow, and key components with evidence. Keep results concise, translate jargon, and mark uncertainty. Include a short TL;DR, a small ASCII diagram, and a compact table for readability.
+Provide high-level, conceptual understanding of code from a function, module, file, or directory. Summarize purpose, data flow, and key components with evidence. Answer the user's question directly, translate jargon, and mark uncertainty. Add diagrams or tables only when they clarify a multi-step flow.
 
 ## Goals
 
@@ -115,19 +115,4 @@ Stop expanding when:
 
 ## Output format
 
-- TL;DR (2–4 bullets)
-- Scope and intent
-- Purpose (system context)
-- Diagram (ASCII only; include inputs/outputs/side effects if applicable)
-- Key responsibilities
-- Data flow (high level)
-- Dependencies and boundaries (table)
-- Inputs/Outputs/Side effects (table or bullets)
-- Call paths (only if needed; confirmed/likely)
-- Repo map / safe edit locations (only for change-location requests)
-- Terminology (plain-language definitions)
-- Error analysis (only when user provides an error/log/stack trace)
-- Evidence (short snippets or line-number references)
-- Key files to inspect next
-
-Keep file references precise and add line numbers when feasible.
+Start with the direct answer and precise file evidence. For a simple question, stop there. For a multi-step flow, add only the necessary call path, diagram, boundaries, or safe edit locations. Define essential technical terms plainly; avoid a fixed section template. Include uncertainty and the next decisive check only when material.

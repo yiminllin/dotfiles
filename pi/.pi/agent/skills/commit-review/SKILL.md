@@ -27,9 +27,9 @@ If no commit ref is provided, ask one short clarifying question.
    - Use commit subject/body plus the diff's dominant theme.
    - Keep it factual; do not speculate beyond evidence.
 3. Summarize modified files.
-   - List every changed file with status (`A`, `M`, `D`, `R`, etc.).
-   - Give one concise purpose line per file.
-4. Analyze each meaningful hunk.
+   - List changed files with status (`A`, `M`, `D`, `R`, etc.); group repetitive generated or mechanical files when the set is large.
+   - Give one concise purpose line per meaningful group or file.
+4. Analyze meaningful behavioral hunks. Group repetitive mechanical hunks, and for large commits say which areas were sampled.
    - State what changed in this hunk.
    - Explain surrounding code context around this hunk.
      - Use `git show <commit>^:<path>` and `git show <commit>:<path>` as needed.
@@ -91,7 +91,7 @@ Formatting reference (fake example):
 
 ## Review quality bar
 
-- Prefer precise, evidence-backed claims over broad summaries.
+- Lead with the commit's behavior and intent; expand mechanical details only when requested. Prefer precise, evidence-backed claims over broad summaries.
 - Keep each hunk to 3-4 concise bullets.
 - Avoid repeating the same idea across bullets.
 - Prioritize nearby code context over wide call-site enumeration.

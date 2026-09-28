@@ -28,7 +28,7 @@ Route a one-off leaf request directly instead:
 - stack topology or worktree operation: `/skill:stacked-pr-workflow`
 - public PR body draft/update: `/skill:pr-description-chain-writer`
 - existing review-comment triage: `/skill:pr-address-comments`
-- private local review guide: `/skill:pr-human-review-guide`
+- private PR or local review guide: `/skill:pr-human-review-guide`
 
 ## Boundaries
 
@@ -39,7 +39,7 @@ Route a one-off leaf request directly instead:
   action, stop and request approval for the exact boundary and action.
 - Never initiate or repair authentication. Never install dependencies.
 - Do not create, switch, delete, reset, clean, commit, push, merge, submit,
-  reparent, restack, resolve, post, or edit external state from this coordinator.
+  reparent, restack, resolve, post, or edit external state from this coordinator. Route a clearly requested leaf action to its owning skill rather than adding an extra queue gate.
 - Treat lifecycle state as memory, not authority. Reconcile it with available
   source evidence before recommending changes.
 - Destructive branch actions, PR close/merge, Jira terminal-status moves, and
@@ -86,14 +86,11 @@ instead of silently rewriting it.
 4. **Map boundaries.** Separate the next steps into local read, local draft,
    repository mutation, network/auth read, and external write. Keep gated steps
    pending until explicitly approved.
-5. **Build the pending queue.** Queue only concrete actions. Missing context is
+5. **Build the pending queue only for real coordination.** Skip it for a single clear leaf request. Otherwise queue only concrete actions. Missing context is
    an observation or next read, not a write proposal. Show the queue before any
    handoff and ask for item numbers, `all`, `none`, `edit`, `defer`, or
    `not needed`.
-6. **Hand off visibly.** For each confirmed item, tell the user the exact
-   `/skill:<name>` invocation and compact context packet to use next. Do not
-   perform or restate the leaf workflow. If later work depends on changed state,
-   return here and refresh local evidence before preparing another handoff.
+6. **Route directly.** For a clear request, use the owning leaf skill in this session instead of making the user invoke it. For a multi-system queue, confirm the affected items first and pass a compact context packet to the leaf skill. Refresh evidence if later steps depend on changed state.
 7. **Report status.** Mark each item `updated`, `not updated`, `draft only`,
    `deferred`, or `not needed` only from evidence returned in this session.
    Propose any durable state update as a separately confirmed queue item.
@@ -142,7 +139,7 @@ request any approval its workflow requires.
 
 1. **Current state** — active project, lifecycle phase, local source evidence,
    and limits.
-2. **Recommended next action** — one primary step and explicit skill handoff.
+2. **Recommended next action** — one primary step, or the result of a direct leaf-skill action.
 3. **Pending sync/reconciliation queue** — proposed items or `empty`.
 4. **Need from you** — only the decision, approval, or missing anchor needed now.
 

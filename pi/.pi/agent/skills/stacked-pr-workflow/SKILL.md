@@ -43,9 +43,9 @@ Do not use this as the primary workflow for:
 - Avoid interactive prompts and editors in autonomous runs. Supply explicit flags when possible; otherwise stop and ask.
 - Do not force push, pass `--force`, or pass `--no-verify` unless the user explicitly requests it.
 - Use GitHub/`gh` only for requested PR inspection or submission verification when authenticated. Do not run auth/login flows; if auth is missing, report the blocker.
-- Submit/update PRs only when the user asked for submission or resubmission. Prefer a dry run after recent reparent/restack/squash work.
+- Submit/update PRs only when the user asked for submission or resubmission. Default to the named branch, not its entire upstack; inspect a dry run before wider submissions. Verify exact command flags with installed `git-spice --help` rather than old memory.
 - When addressing stacked review feedback, fix the lowest affected PR first and re-check all upstack boundaries.
-- When updating stacked PR descriptions, keep the chain-level reason/context identical, update only the PR Tree arrow, and put per-PR details in Description of Change.
+- When updating stacked PR descriptions, preserve the live body and change only the requested sections; share chain-level context only where it is genuinely common.
 
 ## Core workflow
 
@@ -106,7 +106,7 @@ After each squash, inspect status, stack order, commit log, and boundary diffs. 
 
 ### submit-stack
 
-Submit only the narrowest requested scope: one branch or a branch plus its upstack. Before submitting, confirm branch order, starting branch, draft/non-draft intent, title/body readiness, and clean boundary diffs.
+Submit only the narrowest requested scope: a named branch by default, or a branch plus its upstack only when explicitly requested. Before submitting, confirm branch order, starting branch, draft/non-draft intent, title/body readiness, and clean boundary diffs.
 
 Use dry run first when the stack was recently restacked, squashed, or reparented. Prefer non-interactive metadata flags (`--fill` or explicit title/body) rather than allowing prompts. After submission, collect PR URLs and verify head/base refs and intended stack order.
 

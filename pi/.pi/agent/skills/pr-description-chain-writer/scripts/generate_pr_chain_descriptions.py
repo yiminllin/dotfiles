@@ -19,7 +19,7 @@ DEFAULT_REASON = (
 )
 DEFAULT_CRITICALITY = """- [ ] L1 Major <!-- Impacts critical safety systems (e.g. Paraland, DAA, fault mgmt) -->
 - [ ] L2 Moderate <!-- Impacts production system, or safety-related testing -->
-- [x] L3 Nonfunctional <!-- Trivial to validate no impact on prod (e.g. docs, style, dev tool) -->"""
+- [ ] L3 Nonfunctional <!-- Trivial to validate no impact on prod (e.g. docs, style, dev tool) -->"""
 DEFAULT_VERIFICATION = """- [ ] TODO: add exact verification command, run link, or manual result"""
 DEFAULT_RELEASE_NOTES = """- [ ] Release Notes or Upgrade Instructions required
 
@@ -132,9 +132,6 @@ class PullRequestInfo:
 @dataclass(frozen=True)
 class StyleTemplate:
     reason_text: str
-    criticality_block: str
-    verification_block: str
-    release_notes_block: str
 
 
 @dataclass(frozen=True)
@@ -426,28 +423,10 @@ def _infer_style_template(
             source = prs[0]
 
     if source is None:
-        return StyleTemplate(
-            reason_text=DEFAULT_REASON,
-            criticality_block=DEFAULT_CRITICALITY,
-            verification_block=DEFAULT_VERIFICATION,
-            release_notes_block=DEFAULT_RELEASE_NOTES,
-        )
+        return StyleTemplate(reason_text=DEFAULT_REASON)
 
     sections = _extract_sections(source.body)
-    verification_block = _clean_block(
-        sections.get("Verification", ""),
-        DEFAULT_VERIFICATION,
-        preserve_comments=True,
-    )
-    if _looks_generic_verification_block(verification_block):
-        verification_block = DEFAULT_VERIFICATION
-
-    return StyleTemplate(
-        reason_text=_extract_reason_text(sections.get("Reason for Change", "")),
-        criticality_block=DEFAULT_CRITICALITY,
-        verification_block=verification_block,
-        release_notes_block=DEFAULT_RELEASE_NOTES,
-    )
+    return StyleTemplate(reason_text=_extract_reason_text(sections.get("Reason for Change", "")))
 
 
 def _chain_tree(pr_chain: list[int], current: int) -> str:
@@ -1915,9 +1894,24 @@ def _build_pr_body(
     max_sections: int,
     max_bullets_per_section: int,
 ) -> str:
-    reason_text = reason_override.strip() if reason_override else style.reason_text.strip()
+    current_sections = _extract_sections(pr.body)
+    reason_text = style.reason_text.strip()
+    if "Reason for Change" in current_sections:
+        reason_text = _extract_reason_text(current_sections["Reason for Change"])
+    if reason_override:
+        reason_text = reason_override.strip()
     context_link_text = _format_context_link(context_link)
-    verification_block = style.verification_block.strip()
+    verification_block = _clean_block(
+        current_sections.get("Verification", ""), DEFAULT_VERIFICATION, preserve_comments=True
+    )
+    if _looks_generic_verification_block(verification_block):
+        verification_block = DEFAULT_VERIFICATION
+    criticality_block = _clean_block(
+        current_sections.get("Criticality of Change", ""), DEFAULT_CRITICALITY, preserve_comments=True
+    )
+    release_notes_block = _clean_block(
+        current_sections.get("Release Notes", ""), DEFAULT_RELEASE_NOTES, preserve_comments=True
+    )
     description_of_change = _build_description_of_change(
         repo=repo,
         pr=pr,
@@ -1955,7 +1949,7 @@ def _build_pr_body(
             "",
             "## Criticality of Change",
             "",
-            style.criticality_block.strip(),
+            criticality_block,
             "",
             "## Verification",
         ]
@@ -1969,7 +1963,7 @@ def _build_pr_body(
             "",
             "## Release Notes",
             "",
-            style.release_notes_block.strip(),
+            release_notes_block,
             "",
         ]
     )

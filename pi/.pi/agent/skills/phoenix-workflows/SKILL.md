@@ -1,6 +1,6 @@
 ---
 name: phoenix-workflows
-description: Plan and, only after explicit active-prompt approval, run Phoenix SIL/no_sync scenarios, launch or rerun HIL, and fetch or upload Phoenix artifacts; route read-only evidence inspection to phoenix-inspector.
+description: Plan and run explicitly requested local Phoenix SIL/no_sync scenarios, and run HIL or remote artifact workflows only after specific approval; route read-only evidence inspection to phoenix-inspector.
 ---
 
 # Phoenix Workflows
@@ -11,11 +11,7 @@ Load [references/command-recipes.md](references/command-recipes.md) only after c
 
 ## Mandatory approval boundary
 
-Before **every** Phoenix runtime command, `bazel test`/`bazel run`, repeated run, network/auth/AWS/S3/GitHub action, fetch, upload, presign/publish, workflow dispatch, hardware/HIL action, or other runtime mutation:
-
-1. Produce the decision packet below.
-2. Require explicit approval in the active prompt for that exact action.
-3. Stop. Do not treat prior turns, configured credentials, environment variables, or a general request as approval for an unresolved command/destination.
+For a specific local SIL test explicitly requested in the current prompt, confirm the target locally and run it without an extra approval exchange. Do not broaden to additional targets or repeats. Before HIL/hardware, network/auth/AWS/S3/GitHub, fetch, upload, presign/publish, workflow dispatch, or other remote mutation: show the decision packet below, obtain specific approval, and stop until approved. Prior turns and configured credentials are not approval.
 
 Never initiate auth/login, inspect credentials, install tools, use `sudo`, or silently broaden a target. If the mode is ambiguous between SIL and HIL, ask which. HIL always requires explicit hardware approval.
 
@@ -48,9 +44,9 @@ If multiple modes are requested, begin with the safest approved read-only local 
 ## Execution rules
 
 - Confirm scenario labels from the matching `BUILD.bazel`; `ash/scenarios/hil/*.pbtxt` are not standalone runnable targets.
-- Local runs normally use `bazel test <label> --config=debug`; repeats require separate approval of the count.
+- Local runs normally use `bazel test <label> --config=debug`; run the exact test/count requested, but ask before expanding to other targets or repeats.
 - Prefer `/Systems/.phoenix/logs/**` after runs. Do not inspect Bazel cache testlogs unless Phoenix logs are insufficient or explicitly requested; surface the exact cache path first.
-- Pi owns foreground progress: state the exact command and checkpoint/timeout plan, execute only after approval, and report command status and artifact paths. Do not promise background monitoring.
+- Pi owns foreground progress: state the exact command and checkpoint/timeout plan, execute after a clear local request or required remote/HIL approval, and report command status and artifact paths. Do not promise background monitoring.
 - Fetches require exact SHA/ref, bounded destination, approved network/AWS access, and stop condition. Uploads require exact source, destination/prefix, expected link/artifact, and separate approval.
 - Prefer checked-in GitHub HIL workflow for shared HILs. Local claimed-HIL execution requires an explicit claimed-box/container decision and a resolved version set or an explicit decision to use deployed software. Never assume raw checked-in version sets provide a usable sim image.
 - Post-run inspection belongs to `phoenix-inspector`, using `$HOME/dotfiles/scripts/phoenix_inspector.py`; seed it with exact log root, run attempt, selected ZMLs, topic/signal hints, and time window.

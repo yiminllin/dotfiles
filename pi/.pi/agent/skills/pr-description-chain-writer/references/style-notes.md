@@ -15,7 +15,7 @@ Use this as a flexible reviewer-friendly starting point for PR bodies in a stack
    - `## Verification`
    - `## Release Notes`
 3. Under `Reason for Change`, include:
-   - The shared chain-level reason paragraph/context. For stacked PRs in one chain, keep this text identical across PRs.
+   - The genuinely shared chain-level motivation. Preserve distinct existing reasons and explain per-PR effects in Description of Change.
    - Optional context link.
    - Default-on `PR Tree` list for stacks, with PR numbers only such as `- #123`, no PR titles or markdown links, and `◀` on the current PR as the only per-PR change in this section.
    - `Jira Ticket: [FSW-XXXXX](https://flyzipline.atlassian.net/browse/FSW-XXXXX)` directly below `PR Tree` when a ticket is known.
@@ -33,10 +33,10 @@ Use this as a flexible reviewer-friendly starting point for PR bodies in a stack
       - `**Context anchors**`: concise bullets for parent/child PRs, Jira/design/Slack context, key evidence, or validator follow-up.
     - Optionally add `### Watchouts` only for real risk or follow-up; skip it when there is no meaningful risk. Keep bullets compact: `**Risk**: ...`, `**Mitigation**: ...`, `**Follow-up**: ...`.
     - Both sections are optional; skip `Map for Reviewers` for tiny PRs and skip `Watchouts` when there is no real risk or follow-up. Do not include emoji, deep/skim labels, suggested comments, private TODOs, or unresolved inspection questions in public PR bodies.
-5. Keep the repository template order unchanged, and preserve the repository template checkbox blocks for `Criticality of Change` and `Release Notes` instead of collapsing them to prose such as `L3 Nonfunctional`. Use known repo checklist blocks when available; otherwise copy/preserve the exact checklist shape from the current PR template or style reference. Before finalizing, verify checked states reflect reality for the PR.
+5. Keep the repository template order unchanged, and preserve each existing PR's repository template checkbox blocks for `Criticality of Change` and `Release Notes` instead of collapsing them to prose such as `L3 Nonfunctional`. Use known repo checklist blocks when available; otherwise copy/preserve the exact checklist shape from the current PR template or style reference. Before finalizing, verify checked states reflect reality for the PR.
 6. In `Verification`, prefer checked concrete evidence over generic placeholders:
    - Use `- [x] Manual Test [Baraza](...) [S3](...)`, exact commands, concise run tables, or concrete manual results when available.
-   - Use one checked bullet per test or verification item.
+   - Use one checked bullet per test or verification item, only when it was verified for this PR; never inherit another PR's checked result.
    - Prefer Baraza and `[S3](...)` links over Aspect links or local paths when available.
    - Avoid vague `CI` claims unless CI itself is the changed surface or the only meaningful evidence.
    - If verification was intentionally not run, include a short explicit not-run reason rather than leaving the section empty.

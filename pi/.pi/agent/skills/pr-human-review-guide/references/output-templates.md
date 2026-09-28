@@ -1,6 +1,6 @@
 # PR Human Review Guide Output Templates
 
-Use only after `SKILL.md` routes a request into private local-review mode. Return raw artifact content without a fenced wrapper.
+Use only after `SKILL.md` routes a request into private review mode, using the resolved local or approved live PR boundary. Return raw artifact content without a fenced wrapper.
 
 ## Markdown skeleton
 
@@ -17,7 +17,7 @@ Use only after `SKILL.md` routes a request into private local-review mode. Retur
 
 ## Context
 - Diff boundary: `<base>...<head>`
-- Supplied PR metadata: <number/title/URL, only if provided>
+- PR metadata: <number/title/URL and head SHA, if verified or supplied>
 - Intent: <summary>
 - Main risk: <risk>
 - Validation focus: <focus>
