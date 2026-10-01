@@ -10,6 +10,7 @@
   "packages": [
     "git:github.com/Fatih0234/btw",
     "npm:pi-tool-display",
+    "npm:pi-quiet-tools",
     "npm:pi-web-access",
     "npm:@gotgenes/pi-permission-system",
     "npm:pi-mcp-adapter",
