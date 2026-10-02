@@ -115,4 +115,9 @@ Stop expanding when:
 
 ## Output format
 
-Start with the direct answer and precise file evidence. For a simple question, stop there. For a multi-step flow, add only the necessary call path, diagram, boundaries, or safe edit locations. Define essential technical terms plainly; avoid a fixed section template. Include uncertainty and the next decisive check only when material.
+Start with the direct answer and precise file evidence. For a simple question, stop there. When a structural view is clearer than prose, choose the smallest useful view:
+- Call tree for execution order or data flow.
+- Shallow file tree for ownership and module boundaries.
+- Before/after structural diff for changes to calls or file layout.
+
+Show only relevant nodes, cite the source, and label inferred links. Otherwise use prose. Do not repeat the view in a paragraph or require a diagram for every answer. Add boundaries or safe edit locations only when needed. Define essential technical terms plainly; avoid a fixed section template. Include uncertainty and the next decisive check only when material.

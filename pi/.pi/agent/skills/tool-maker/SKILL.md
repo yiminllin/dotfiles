@@ -42,7 +42,7 @@ Prefer a skill or script before an extension. Do not invent framework-specific s
 6. Design 3-8 evaluations: positive trigger, adjacent negative, ambiguous input, approval boundary, and a representative historical prompt when available. Define expected routing, key steps, output, and prohibited behavior.
 7. Compare baseline and candidate on trigger precision, completeness, safety handling, usefulness, and instruction bloat. Keep the candidate only when it materially improves behavior.
 8. After approval, apply the narrow source edit under the owning repository path. Validate metadata, relative resources, overlap, offline discovery, runtime resolution when activated, and vendor-specific residue.
-9. Remove redundant prose, speculative guardrails, unsupported tools, stale names, and unnecessary files before handoff.
+9. Keep instructions lean: preserve decisions, unwritten conventions, and hidden gotchas. Replace facts cheaply discoverable from config, scripts, or `--help` with a pointer unless the lookup is costly. Remove duplicated instructions, speculative guardrails, unsupported tools, stale names, and unnecessary files before handoff.
 
 ## Pi lifecycle
 
