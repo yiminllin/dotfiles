@@ -1,6 +1,6 @@
 {
   "memoryMode": "policy-only",
-  "memoryPolicyStyle": "full",
+  "memoryPolicyStyle": "compact",
   "memoryDir": "~/notes/pi-memory",
   "projectsMemoryDir": "projects-memory",
   "reviewEnabled": true,
