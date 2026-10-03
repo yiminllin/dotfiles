@@ -105,7 +105,7 @@
 | Utilities | lazygit | Git TUI | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Utilities | gh | GitHub CLI | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Utilities | task/taskwarrior | Task manager | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
-| Utilities | tmuxinator | Tmux session manager | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
+| Utilities | tmuxinator | Tmux session manager | [Brewfile](Brewfile), [Aptfile](Aptfile) |
 | Clipboard | xsel | X11 clipboard (Linux) | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Clipboard | xclip | X11 clipboard (Linux) | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Clipboard | wl-clipboard | Wayland clipboard (Fedora) | [Dnffile](Dnffile) |
