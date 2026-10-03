@@ -5,6 +5,7 @@ set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_ONCHANGE="$SCRIPT_DIR/scripts/run_onchange.sh"
+cd "$SCRIPT_DIR"
 
 ################################################################################
 # Install System Packages
@@ -60,14 +61,29 @@ fi
 
 if is_fedora; then
     sudo dnf makecache --refresh
-    sudo dnf copr enable dejan/lazygit
     sudo dnf install -y dnf-plugins-core
+    sudo dnf copr enable -y dejan/lazygit
     sudo dnf install -y $(sed 's/#.*//;/^$/d' Dnffile)
 fi
 
 if is_macos; then
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-  brew bundle --file="Brewfile"
+    if ! command -v brew >/dev/null 2>&1; then
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    fi
+
+    # Homebrew is not automatically added to PATH by its installer on a
+    # fresh macOS installation, especially on Apple Silicon.
+    if [ -x /opt/homebrew/bin/brew ]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [ -x /usr/local/bin/brew ]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+
+    command -v brew >/dev/null 2>&1 || {
+        echo "Homebrew was installed but could not be found in PATH" >&2
+        exit 1
+    }
+    brew bundle --file="$SCRIPT_DIR/Brewfile"
 fi
 
 ################################################################################
@@ -77,7 +93,8 @@ fi
 echo "Installing Kitty"
 curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin
 if is_macos; then
-    ln -sf ~/.local/kitty.app/bin/kitty ~/.local/bin/kitty
+    mkdir -p ~/.local/bin
+    ln -sfn ~/.local/kitty.app/bin/kitty ~/.local/bin/kitty
 fi
 # Setup Fedora desktop entries and fonts
 if is_fedora; then
@@ -236,7 +253,7 @@ for config in "${CONFIGS[@]}"; do
 done
 
 if is_fedora; then
-    sudo ln -s ~/dotfiles/keyd/default.conf /etc/keyd/default.conf
+    sudo ln -sfn "$SCRIPT_DIR/keyd/default.conf" /etc/keyd/default.conf
 fi
 
 ################################################################################

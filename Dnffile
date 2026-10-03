@@ -4,6 +4,7 @@ gcc-c++
 clang-devel
 llvm-devel
 make
+cmake
 tmux
 neovim
 fish

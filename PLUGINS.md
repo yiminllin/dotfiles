@@ -152,6 +152,7 @@
 
 | Tool | Purpose | Install Method |
 | ------ | --------- | ---------------- |
+| cmake | Build system generator | [Dnffile](Dnffile) |
 | llvm/clang | C/C++ compiler | [Brewfile](Brewfile), [Dnffile](Dnffile) |
 | gcc/gcc-c++ | C/C++ compiler | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | make | Build automation | [Aptfile](Aptfile), [Dnffile](Dnffile) |

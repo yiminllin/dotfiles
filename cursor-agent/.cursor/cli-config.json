@@ -4,5 +4,5 @@
   "permissions": {
     "allow": ["Shell(ls)", "Shell(echo)"],
     "deny": ["Shell(rm)"]
-  },
+  }
 }

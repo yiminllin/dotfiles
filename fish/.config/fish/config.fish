@@ -5,13 +5,13 @@ end
 ################################################################################
 # Theme
 ################################################################################
-. ~/.config/fish/themes/solarized.fish
+source ~/.config/fish/themes/solarized.fish
 
 ################################################################################
 # Scrollback pager
 ################################################################################
 function tmux_scrollback_pager
-    tmux capture-pane -S - -p > /tmp/tmux_full_scrollback.txt && $EDITOR_PATH  -c "normal G" /tmp/tmux_full_scrollback.txt
+    tmux capture-pane -S - -p > /tmp/tmux_full_scrollback.txt && nvim -c "normal G" /tmp/tmux_full_scrollback.txt
 end
 
 ################################################################################
@@ -25,7 +25,11 @@ abbr -a rm rm -ir
 # Better CLI tools
 abbr -a v nvim
 abbr -a ls eza -lah --git
-test (uname) = Darwin; and abbr -a cat bat; or abbr -a cat batcat 
+if command -q bat
+    abbr -a cat bat
+else if command -q batcat
+    abbr -a cat batcat
+end
 abbr -a du dust
 abbr -a top btop
 abbr -a gs git-spice
@@ -106,7 +110,12 @@ abbr -a jc --set-cursor 'set f (mktemp); nvim $f; and jira issue comment add % -
 abbr -a jn --set-cursor 'jira_create_phoenix %'
 
 function to_dev_container_flight_software
-    source ~/.config/dev-secrets/flightsystems.fish
+    set -l secrets_file (path resolve ~/.config/dev-secrets/flightsystems.fish)
+    if not test -f "$secrets_file"
+        echo "Missing $secrets_file" >&2
+        return 1
+    end
+    source "$secrets_file"
     cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems-systems -- env JIRA_API_TOKEN="$JIRA_API_TOKEN" BUILDKITE_API_TOKEN="$BUILDKITE_API_TOKEN" JIRA_API_USERNAME='yimin.lin@flyzipline.com' JIRA_API_BASE_URL='https://flyzipline.atlassian.net/' bash -il
 end
 abbr -a fs to_dev_container_flight_software 
@@ -285,8 +294,11 @@ function fish_clipboard_copy --description "Copy selection to system clipboard"
     if command -v pbcopy &> /dev/null
         # macOS
         commandline -b | pbcopy
+    else if command -v wl-copy &> /dev/null
+        # Linux Wayland (Fedora)
+        commandline -b | wl-copy
     else if command -v xclip &> /dev/null
-        # Linux (Fedora, Ubuntu)
+        # Linux X11 (Fedora, Ubuntu)
         commandline -b | xclip -selection clipboard
     else
         echo "No clipboard utility found"

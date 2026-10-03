@@ -37,26 +37,24 @@ check_bash_syntax() {
 
 check_fish_syntax() {
   command -v fish >/dev/null 2>&1 || return 77
-  shopt -s globstar nullglob
   local file
-  for file in **/*.fish; do
+  while IFS= read -r -d '' file; do
     fish --no-execute "$file" || return 1
-  done
+  done < <(find . -type f -name '*.fish' -not -path './.git/*' -print0)
 }
 
 check_json() {
-  shopt -s globstar nullglob
   local file
   if command -v python3 >/dev/null 2>&1; then
-    for file in **/*.json; do
+    while IFS= read -r -d '' file; do
       case "$file" in */node_modules/*|*/.git/*|*/.ruff_cache/*|pi/.pi/agent/auth.json|pi/.pi/agent/sessions/*) continue ;; esac
       python3 -m json.tool "$file" >/dev/null || return 1
-    done
+    done < <(find . -type f -name '*.json' -not -path './.git/*' -print0)
   elif command -v jq >/dev/null 2>&1; then
-    for file in **/*.json; do
+    while IFS= read -r -d '' file; do
       case "$file" in */node_modules/*|*/.git/*|*/.ruff_cache/*|pi/.pi/agent/auth.json|pi/.pi/agent/sessions/*) continue ;; esac
       jq empty "$file" >/dev/null || return 1
-    done
+    done < <(find . -type f -name '*.json' -not -path './.git/*' -print0)
   else
     return 77
   fi
@@ -64,11 +62,10 @@ check_json() {
 
 check_lua_parse() {
   command -v luac >/dev/null 2>&1 || return 77
-  shopt -s globstar nullglob
   local file
-  for file in nvim/.config/nvim/**/*.lua; do
+  while IFS= read -r -d '' file; do
     luac -p "$file" || return 1
-  done
+  done < <(find nvim/.config/nvim -type f -name '*.lua' -print0)
 }
 
 check_stylua() {
@@ -118,7 +115,7 @@ from pathlib import Path
 
 agent_root = Path("pi/.pi/agent")
 name_pattern = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
-resource_pattern = re.compile(r"(?:\]\(|`)((?:references|scripts)/[^)`]+)")
+resource_pattern = re.compile(r"(?:\]\(|`)((?:references|scripts)/[A-Za-z0-9_./-]+)")
 
 def frontmatter(path):
     lines = path.read_text().splitlines()
@@ -191,7 +188,7 @@ check_pi_source_references() {
   for file in "${board_files[@]}"; do
     [ -f "$file" ] || return 1
   done
-  grep -q 'pi-agent-board-ensure' tmux/.tmux.conf || return 1
+  grep -q 'pi-agent-board-ensure' tmux/.tmux/pi-agent-board-toggle tmux/.tmux/pi-agent-board-resurrect || return 1
   grep -q '@pi_agent_board' nvim/.config/nvim/lua/utils/pi.lua || return 1
   grep -q '@pi_agent_name' fish/.config/fish/config.fish || return 1
 }
