@@ -148,7 +148,9 @@ uv python install
 ################################################################################
 # Install Git Spice
 ################################################################################
-go install go.abhg.dev/gs@latest
+# v0.31.x currently contains a replace directive, which Go rejects for
+# versioned installs. Keep this pinned until upstream publishes a fixed release.
+go install go.abhg.dev/gs@v0.30.1
 go install github.com/ankitpokhrel/jira-cli/cmd/jira@latest
 
 ################################################################################
