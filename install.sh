@@ -248,8 +248,70 @@ CONFIGS=(
     tmuxinator
     visidata
 )
+
+# Stow has no built-in backup-and-replace mode. Back up conflicting files first
+# so the repository remains authoritative, while preserving existing files for
+# recovery. Symlinks already pointing into this repository can be replaced.
+BACKUP_DIR="$HOME/.dotfiles-backups/$(date +%Y%m%d-%H%M%S)"
+REPO_REALPATH="$(cd "$SCRIPT_DIR" && pwd -P)"
+
+is_repo_symlink() {
+    local path="$1"
+    local resolved
+
+    [ -L "$path" ] || return 1
+    resolved="$(realpath "$path" 2>/dev/null)" || return 1
+    [ "$resolved" = "$REPO_REALPATH" ] ||
+        [[ "$resolved" == "$REPO_REALPATH"/* ]]
+}
+
+has_repo_symlink_ancestor() {
+    local path="$1"
+    local parent
+
+    while [ "$path" != "$HOME" ] && [[ "$path" == "$HOME"/* ]]; do
+        if is_repo_symlink "$path"; then
+            return 0
+        fi
+        parent="$(dirname "$path")"
+        [ "$parent" = "$path" ] && break
+        path="$parent"
+    done
+    return 1
+}
+
+backup_stow_conflicts() {
+    local config="$1"
+    local source relative target backup_target
+
+    while IFS= read -r -d '' source; do
+        relative="${source#"$config"/}"
+        target="$HOME/$relative"
+
+        [ -e "$target" ] || [ -L "$target" ] || continue
+
+        # A package may already be exposed through a repo-owned directory link.
+        # Do not move files through that link into the backup directory.
+        if has_repo_symlink_ancestor "$target" && ! is_repo_symlink "$target"; then
+            continue
+        fi
+
+        if is_repo_symlink "$target"; then
+            rm "$target"
+            echo "Removed existing repository symlink: $target"
+            continue
+        fi
+
+        backup_target="$BACKUP_DIR/$relative"
+        mkdir -p "$(dirname "$backup_target")"
+        mv "$target" "$backup_target"
+        echo "Backed up conflicting target: $target"
+    done < <(find "$config" \( -type f -o -type l \) -print0)
+}
+
 for config in "${CONFIGS[@]}"; do
-    stow --adopt "$config"
+    backup_stow_conflicts "$config"
+    stow "$config"
 done
 
 if is_fedora; then
