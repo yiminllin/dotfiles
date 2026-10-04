@@ -7,6 +7,7 @@ make
 cmake
 fontconfig-devel
 pkgconf-pkg-config
+libuuid-devel
 tmux
 neovim
 fish

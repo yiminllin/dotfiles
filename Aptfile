@@ -33,5 +33,6 @@ texlive-full
 # Dependencies
 pkg-config
 libfontconfig1-dev
+uuid-dev
 imagemagick         # For image.nvim
 libmagickwand-dev

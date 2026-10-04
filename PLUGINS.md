@@ -171,6 +171,7 @@
 | libmagickwand-dev | ImageMagick development files | [Aptfile](Aptfile) |
 | pkg-config/pkgconf-pkg-config | Build dependency metadata lookup | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | libfontconfig1-dev/fontconfig-devel | Fontconfig development files | [Aptfile](Aptfile), [Dnffile](Dnffile) |
+| uuid-dev/libuuid-devel | UUID development files | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 
 ### Fonts
 
