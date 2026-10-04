@@ -2,7 +2,7 @@
 ripgrep       # grep
 fd-find       # find
 bat           # cat
-eza           # ls
+eza@0.23.4   # ls; v0.23.5 currently fails to compile on this toolchain
 git-delta     # git diff
 du-dust       # du
 tokei         # scc (line counter)
