@@ -286,7 +286,27 @@ backup_stow_conflicts() {
     local config="$1"
     local source relative target backup_target
 
+    # Stow may fold package directories into a symlink. Handle those directory
+    # links explicitly; find -type l only sees symlinks inside the package.
     while IFS= read -r -d '' source; do
+        [ "$source" = "$config" ] && continue
+        relative="${source#"$config"/}"
+        target="$HOME/$relative"
+
+        [ -L "$target" ] || continue
+        if is_repo_symlink "$target"; then
+            rm "$target"
+            echo "Removed existing repository symlink: $target"
+        else
+            backup_target="$BACKUP_DIR/$relative"
+            mkdir -p "$(dirname "$backup_target")"
+            mv "$target" "$backup_target"
+            echo "Backed up conflicting symlink: $target"
+        fi
+    done < <(find "$config" -type d -print0)
+
+    while IFS= read -r -d '' source; do
+        [ "$source" = "$config" ] && continue
         relative="${source#"$config"/}"
         target="$HOME/$relative"
 
