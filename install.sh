@@ -180,10 +180,15 @@ run_manifest_step uv-tools Uvfile bash -c "sed 's/#.*//;/^$/d' Uvfile | xargs -n
 
 echo "Installing Keymapping packages"
 if is_fedora; then
-    git clone https://github.com/rvaiya/keyd
-    cd keyd
-    make && sudo make install
-    cd .. && rm -rf keyd
+    # Build in a temporary directory so rerunning the installer is safe even
+    # when a previous clone or failed build was left in the repository.
+    (
+        keyd_build_dir="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-keyd.XXXXXX")"
+        trap 'rm -rf "$keyd_build_dir"' EXIT
+        git clone https://github.com/rvaiya/keyd "$keyd_build_dir/keyd"
+        make -C "$keyd_build_dir/keyd"
+        sudo make -C "$keyd_build_dir/keyd" install
+    )
 fi
 
 ################################################################################
