@@ -5,6 +5,8 @@ clang-devel
 llvm-devel
 make
 cmake
+fontconfig-devel
+pkgconf-pkg-config
 tmux
 neovim
 fish
