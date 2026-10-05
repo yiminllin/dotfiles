@@ -48,6 +48,14 @@ Route a one-off leaf request directly instead:
 - A user confirmation applies only to the numbered queue item(s) named. Silence,
   vague approval, or approval of a read does not authorize a write.
 
+## Structured questions
+
+- When `ask_user_question` is available, use it for consequential choices with clear alternatives, such as scope, PR boundaries, validation, or pending queue approval. Inspect available evidence first.
+- Describe each option, identify the recommendation with a brief reason, and allow a custom answer. Batch only independent questions; keep ordinary discussion in chat.
+- Show the pending queue before requesting approval. For queue approval, offer explicit approve/defer choices tied to the exact item ids, targets, actions, and boundaries. Do not preselect approval.
+- Cancellation, unanswered questions, and recommendations do not authorize action. If a custom answer or note changes the proposed action, clarify and confirm the revised scope before acting.
+- If the tool is unavailable or its UI fails, ask in chat instead. The dialog does not replace permission gates or change the approval boundaries above.
+
 ## Lifecycle state
 
 Track the active project in conversation first. When durable state is requested

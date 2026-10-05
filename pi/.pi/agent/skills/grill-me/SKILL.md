@@ -32,6 +32,14 @@ Pressure-test an idea before execution by finding unclear requirements, hidden a
 - Keep clarification minimum-needed by default; go deeper only when explicitly invoked or when risk remains material.
 - Do not turn every implementation request into grilling.
 
+## Structured questions
+
+- When `ask_user_question` is available, use it for a consequential choice with clear alternatives. Inspect available evidence first.
+- Ask one high-leverage question at a time. Describe each option and identify the recommended answer with a brief reason. Allow a custom answer.
+- Keep open-ended discussion in chat. If the tool is unavailable or its UI fails, ask in chat instead.
+- Cancellation or an unanswered question is not a decision or approval. Never treat a recommended answer as the user's choice.
+- When using the dialog, keep the surrounding context and captured decisions in chat; do not repeat the same question in the output format below.
+
 ## Workflow
 
 1. Restate the idea and the current goal in one or two sentences.

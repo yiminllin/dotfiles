@@ -13,7 +13,8 @@
     "npm:pi-web-access",
     "npm:@gotgenes/pi-permission-system",
     "npm:pi-hermes-memory",
-    "npm:@ff-labs/pi-fff"
+    "npm:@ff-labs/pi-fff",
+    "npm:@juicesharp/rpiv-ask-user-question"
   ],
   "lastChangelogVersion": "1.0.0",
   "hideThinkingBlock": true,
