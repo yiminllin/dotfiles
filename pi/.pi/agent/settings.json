@@ -14,7 +14,8 @@
     "npm:@gotgenes/pi-permission-system",
     "npm:pi-hermes-memory",
     "npm:@ff-labs/pi-fff",
-    "npm:@juicesharp/rpiv-ask-user-question"
+    "npm:@juicesharp/rpiv-ask-user-question",
+    "npm:@juicesharp/rpiv-todo"
   ],
   "lastChangelogVersion": "1.0.0",
   "hideThinkingBlock": true,
