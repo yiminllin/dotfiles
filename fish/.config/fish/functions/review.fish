@@ -229,6 +229,7 @@ function __review_wait_for_guides --argument-names guide_md_path guide_json_path
 
         if __review_guides_are_valid "$guide_md_path" "$guide_json_path" "$min_mtime"
             command sleep $stable_seconds
+            or return $status
             if __review_guides_are_valid "$guide_md_path" "$guide_json_path" "$min_mtime"
                 return 0
             end
@@ -244,6 +245,7 @@ function __review_wait_for_guides --argument-names guide_md_path guide_json_path
         end
 
         command sleep 1
+        or return $status
     end
 end
 
