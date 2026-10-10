@@ -17,7 +17,7 @@
     "npm:@juicesharp/rpiv-ask-user-question",
     "npm:@juicesharp/rpiv-todo"
   ],
-  "lastChangelogVersion": "1.0.2",
+  "lastChangelogVersion": "1.1.0",
   "hideThinkingBlock": true,
   "quietStartup": "header",
   "defaultTools": [
