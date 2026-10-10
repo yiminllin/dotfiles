@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Read Pi's OSC 7501 reports without saving terminal output or messages."""
+
+import os
+import re
+import shlex
+import subprocess
+import sys
+import time
+import uuid
+
+PREFIX = b"\x1b]7501;"
+STATES = {"idle", "working", "blocked", "done", "error", "clear"}
+
+
+class StatusParser:
+    def __init__(self):
+        self.buffer = b""
+
+    def feed(self, data):
+        self.buffer += data
+        while True:
+            start = self.buffer.find(PREFIX)
+            if start < 0:
+                self.buffer = self.buffer[-(len(PREFIX) - 1):]
+                return
+            self.buffer = self.buffer[start:]
+            end = re.search(b"[\x07\x1b]", self.buffer[len(PREFIX):])
+            if end is None:
+                if len(self.buffer) > 4096:
+                    self.buffer = self.buffer[-(len(PREFIX) - 1):]
+                return
+            index = len(PREFIX) + end.start()
+            if self.buffer[index] == 27:
+                if len(self.buffer) == index + 1:
+                    return
+                if self.buffer[index:index + 2] != b"\x1b\\":
+                    self.buffer = self.buffer[index:]
+                    continue
+                length = 2
+            else:
+                length = 1
+            body = self.buffer[len(PREFIX):index]
+            self.buffer = self.buffer[index + length:]
+            if len(body) > 4096:
+                continue
+            pairs = body.split(b":")
+            fields = dict(pair.split(b"=", 1) for pair in pairs if b"=" in pair)
+            state = fields.get(b"state", b"").decode("ascii", errors="replace")
+            app = fields.get(b"app")
+            # Pi clears the root record without an app field when its TUI stops.
+            if state in STATES and (app == b"pi" or (state == "clear" and app is None)):
+                yield state
+
+
+def tmux(*args):
+    result = subprocess.run(
+        ["tmux", *args], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def option(pane, name):
+    return tmux("show-option", "-pqv", "-t", pane, name)
+
+
+def owns(pane, token):
+    return option(pane, "@pi_agent_status_owner") == token
+
+
+def clear(pane, token):
+    if owns(pane, token):
+        tmux("set-option", "-pt", pane, "-u", "@pi_agent_status")
+        tmux("set-option", "-pt", pane, "-u", "@pi_agent_status_owner")
+
+
+def start(pane):
+    if tmux("display-message", "-p", "-t", pane, "#{pane_pipe}") != "0":
+        return
+    token = uuid.uuid4().hex
+    tmux("set-option", "-pt", pane, "@pi_agent_status_owner", token)
+    tmux("set-option", "-pt", pane, "-u", "@pi_agent_status")
+    command = shlex.join([sys.executable, os.path.abspath(__file__), "stream", pane, token])
+    # -o leaves any pipe attached concurrently by another program untouched.
+    tmux("pipe-pane", "-o", "-t", pane, command)
+    for _ in range(100):
+        if option(pane, "@pi_agent_status").startswith(f"{token}:"):
+            print(token)
+            return
+        time.sleep(0.01)
+    clear(pane, token)
+
+
+def stop(pane, token):
+    if owns(pane, token):
+        tmux("pipe-pane", "-t", pane)
+        clear(pane, token)
+
+
+def stream(pane, token):
+    if not owns(pane, token):
+        return
+    tmux("set-option", "-pt", pane, "@pi_agent_status", f"{token}:unknown")
+    parser = StatusParser()
+    previous = None
+    try:
+        while True:
+            data = os.read(sys.stdin.fileno(), 8192)
+            if not data:
+                break
+            for state in parser.feed(data):
+                if state == previous:
+                    continue
+                if not owns(pane, token):
+                    return
+                tmux("set-option", "-pt", pane, "@pi_agent_status", f"{token}:{state}")
+                previous = state
+    finally:
+        clear(pane, token)
+
+
+if __name__ == "__main__":
+    action, pane, *args = sys.argv[1:]
+    if action == "start":
+        start(pane)
+    elif action == "stop":
+        stop(pane, args[0])
+    elif action == "stream":
+        stream(pane, args[0])
