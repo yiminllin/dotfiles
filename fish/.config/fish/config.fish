@@ -152,34 +152,6 @@ abbr -a gsrc git-spice rebase continue
 abbr -a gsra git-spice rebase abort
 abbr -a gsrs git-spice repo sync
 
-# Task
-abbr -a t task
-abbr -a t0 task project: or estimate: or priority: list
-abbr -a tb task blocked:T
-abbr -a ta --set-cursor 'task add "%"'
-abbr -a td task done
-abbr -a tr task delete
-abbr -a te task edit 
-abbr -a ts --set-cursor 'task description.has:%'
-abbr -a tm task modify
-abbr -a teq --position anywhere "estimate:Q"
-abbr -a teh --position anywhere "estimate:H"
-abbr -a ted --position anywhere "estimate:D"
-abbr -a tew --position anywhere "estimate:W"
-abbr -a tem --position anywhere "estimate:M"
-abbr -a tpa --position anywhere "priority:A"
-abbr -a tph --position anywhere "priority:H"
-abbr -a tpm --position anywhere "priority:M"
-abbr -a tpl --position anywhere "priority:L"
-abbr -a tpn --position anywhere "project:note"
-abbr -a tpi --position anywhere "project:improve"
-abbr -a tpo --position anywhere "project:opensource"
-abbr -a tpc --position anywhere "project:code"
-abbr -a tpr --position anywhere "project:read"
-abbr -a tpw --position anywhere "project:work"
-abbr -a tbt --position anywhere "blocked:T"
-
-
 # Note
 abbr -a note --set-cursor 'echo "- %" >> ~/notes/main/quick_notes.md'
 

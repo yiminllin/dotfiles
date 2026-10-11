@@ -192,24 +192,11 @@ if is_fedora; then
 fi
 
 ################################################################################
-# Install Task
+# Install td
 ################################################################################
 
-# Install Taskwarrior from source on Linux
-if is_fedora || is_debian; then
-    echo "Installing Taskwarrior from source"
-    TASK_VERSION="3.4.2"
-    curl -LO "https://github.com/GothenburgBitFactory/taskwarrior/releases/download/v${TASK_VERSION}/task-${TASK_VERSION}.tar.gz"
-    tar xzvf "task-${TASK_VERSION}.tar.gz"
-    cd "task-${TASK_VERSION}"
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-    cmake --build build
-    sudo cmake --install build
-    cd ..
-    rm -rf "task-${TASK_VERSION}" "task-${TASK_VERSION}.tar.gz"
-fi
-
-# Task theme is managed via stow (task/.task/themes/solarized.theme)
+echo "Installing td"
+cargo install --path "$SCRIPT_DIR/td" --root "$HOME/.cargo" --locked
 
 ################################################################################
 # Install Pi
@@ -249,7 +236,6 @@ CONFIGS=(
     kitty
     nvim
     pi
-    task
     tmux
     tmux-powerline
     tmuxinator

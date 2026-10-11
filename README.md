@@ -48,11 +48,8 @@ For the first time starting tmux, use tmuxinator:
 tmuxinator start home
 ```
 
-Task import:
-
-```bash
-task import ~/notes/.task/tasks.json
-```
+Tasks are managed by [td](td/README.md), a local CLI/TUI. Open it with prefix + T
+in tmux, or run `td`. See its README for Taskwarrior migration instructions.
 
 Julia: To install
 

@@ -73,6 +73,7 @@
 | tokei | Line counter | [Cargofile](Cargofile) |
 | zoxide | Smart cd replacement | [Cargofile](Cargofile) |
 | vivid | LS_COLORS generator | [Cargofile](Cargofile) |
+| td | Local JSONL task CLI/TUI | [install.sh](install.sh), [td/README.md](td/README.md) |
 
 ### Python Tools (via UV)
 
@@ -104,7 +105,6 @@
 | Utilities | nvtop | GPU monitor | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Utilities | lazygit | Git TUI | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Utilities | gh | GitHub CLI | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
-| Utilities | task/taskwarrior | Task manager | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Utilities | tmuxinator | Tmux session manager | [Brewfile](Brewfile), [Aptfile](Aptfile) |
 | Clipboard | xsel | X11 clipboard (Linux) | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Clipboard | xclip | X11 clipboard (Linux) | [Aptfile](Aptfile), [Dnffile](Dnffile) |

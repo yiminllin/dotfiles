@@ -16,7 +16,6 @@ brew "btop"
 brew "nvtop"
 brew "lazygit"
 brew "gh"
-brew "task"
 
 # Languages
 brew "llvm"          # clangd, clang-format are part of llvm/clang on macOS
