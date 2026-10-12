@@ -73,8 +73,50 @@ or `Alt-]`/`Alt-[`. Run `/reload` after changing keybindings, skills, prompts,
 themes, extensions, or context files.
 
 Inside tmux, `<leader>cp` in Neovim opens or prompts the right-hand Pi pane.
-Fish `review` opens the Pi review flow, the tmux Agent Board tracks Pi panes,
-and `prefix + f` opens the sessionizer with a Pi agent window. The pre-push hook
+Fish `review [PR-number-or-URL]` opens Diffview without waiting for guidance.
+Inside tmux it also starts or reuses a visible Pi pane, named `review-<PR-number>`
+or `review-<branch-name>` on the Agent Board. Repeating the command in another
+pane moves the existing assistant below that invoking pane without restarting it;
+reuse searches the current tmux session, including its other windows. Use `--no-agent` for Diffview only;
+`--refresh-guide` requests fresh guidance without blocking review. Local review
+uses the committed branch diff, not uncommitted working-tree changes.
+
+In Diffview, `<leader>gda` saves a local note, `<leader>gdA` asks Pi, and
+`<leader>gdt` replies to a thread and asks Pi a follow-up. `<leader>gdR` refreshes
+the review without generating guidance or changing revisions. Tab / Shift-Tab
+follow the visible file order; `<leader>gdn` / `<leader>gdN` skip reviewed files.
+Until guidance is ready, Diffview uses its native order. When the guide arrives,
+the panel becomes a flat list in recommended order without moving the current
+diff or cursor. Later guide changes update this same order. `<leader>gdg` opens the concise PR-flow
+diagram and recommended route; Enter opens a route file. The guide preserves ASCII
+spacing and updates as Pi refines it during conversation, without moving the
+current diff cursor or clearing reviewed-file progress. Existing discussions and
+local resolutions stay saved when guide items are replaced; those threads are
+labelled "earlier guide". Winbars show route position
+and explicit completion separately. `<leader>gdv` marks a file reviewed.
+
+`<leader>gdf` toggles All/Phoenix scope in the actual Diffview panel and navigation.
+It reads CODEOWNERS at the reviewed head and matches the last applicable rule for
+`@ZiplineTeam/phoenix-reviewers`, including shared ownership. The diagram keeps
+full-PR context; progress counts only the visible scope. Filtering preserves rename
+pairs and saved progress. Missing CODEOWNERS leaves the full review available.
+
+`<leader>gdV` opens a read-only, scrollable diff of all visible files in the same
+review order. Enter on an added/removed line opens the exact RIGHT/LEFT location
+in Diffview for commenting; Enter on a heading opens that file. Use `za`, `zM`,
+and `zR` to fold files, `q` to return, and `r` to refresh. The skim view builds
+asynchronously from the pinned revisions, including rename pairs. Changes to
+order, scope, or revisions mark it outdated and block old jumps until refreshed.
+Opening it again preserves the previous skim position where possible. Skimming
+does not mark files reviewed. Lowercase `<leader>gdv` still marks a file reviewed.
+
+`<leader>gds` opens the comment list
+(`dd` dismisses/deletes locally, `R` resolves locally). `<leader>gdg` shows the
+route and progress. Local resolution does not resolve a GitHub thread.
+GitHub comment import requires a current `gh` supporting `gh api --slurp`.
+Run the offline workflow checks with `bash nvim/.config/nvim/tests/review.sh`.
+
+`prefix + f` opens the sessionizer with a Pi agent window. The pre-push hook
 runs `/skill:dotfile-documenter` and blocks when `PLUGINS.md` must be committed
 or Pi cannot verify it. Check the installed configuration without provider or
 network access with `pi --offline --version`.

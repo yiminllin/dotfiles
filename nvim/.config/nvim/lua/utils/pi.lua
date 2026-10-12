@@ -159,14 +159,14 @@ local function get_existing_pi_target()
 	return inspection.target
 end
 
-local function send_text(target, text, submit)
+local function send_text(target, text, submit, submit_key)
 	local _, send_err = run_tmux({ "send-keys", "-t", target.pane_id, "-l", text })
 	if send_err then
 		return false, "Failed to send text to Pi: " .. send_err
 	end
 
 	if submit then
-		local _, enter_err = run_tmux({ "send-keys", "-t", target.pane_id, "Enter" })
+		local _, enter_err = run_tmux({ "send-keys", "-t", target.pane_id, submit_key or "Enter" })
 		if enter_err then
 			return false, "Failed to submit Pi prompt: " .. enter_err
 		end
@@ -256,7 +256,7 @@ function M.send_to_named_agent(agent_name, repo_root, text)
 	if not target then
 		return false, target_error
 	end
-	return send_text(target, text, true)
+	return send_text(target, text, true, "M-Enter")
 end
 
 M._select_named_agent_target = select_named_agent_target

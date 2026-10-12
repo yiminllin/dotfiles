@@ -10,7 +10,7 @@ local function assert_equal(actual, expected, message)
   end
 end
 
-assert_equal(review_format.comment_status_text({ agent_status = "pending" }), "Pi pending", "pending status should render")
+assert_equal(review_format.comment_status_text({ agent_status = "pending" }), "Pi queued", "pending status should render")
 assert_equal(review_format.comment_status_text({ agent_status = "running" }), "Pi reviewing…", "running status should render")
 assert_equal(review_format.comment_status_text({ agent_status = "failed" }), "Pi failed", "failed status should render")
 
@@ -19,7 +19,7 @@ vim.fn.mkdir(temp_dir, "p")
 local state_path = vim.fs.joinpath(temp_dir, "diffview-review.json")
 local comment = {
   agent_request_id = "request-1",
-  agent_status = "running",
+  agent_status = "pending",
   body = "Could this race?",
   file = "lua/example.lua",
   line = 10,
@@ -30,6 +30,11 @@ local reply_dir = review_agent.reply_dir(state_path)
 vim.fn.mkdir(reply_dir, "p")
 
 local reply_path = review_agent.reply_path(state_path, "local-1", "request-1")
+vim.fn.writefile({ vim.json.encode({ comment_id = "local-1", request_id = "request-1", status = "running" }) }, reply_path)
+local started = review_agent.ingest(state, state_path)
+assert_equal(started, true, "the agent start marker should change queued state")
+assert_equal(comment.agent_status, "running", "only an agent marker should report active investigation")
+assert_equal(review_agent.ingest(state, state_path), false, "a repeated start marker should not change state")
 vim.fn.writefile({
   vim.fn.json_encode({
     author = "pi",
@@ -135,7 +140,7 @@ vim.env.TMUX = original_tmux
 assert_equal(send_ok, true, "named-pane dispatch should succeed with an exact match")
 assert_equal(send_error, nil, "successful named-pane dispatch should not return an error")
 assert_equal(tmux_calls[3], { "tmux", "send-keys", "-t", "%2", "-l", "automatic request" }, "dispatch should send literally to the exact pane")
-assert_equal(tmux_calls[4], { "tmux", "send-keys", "-t", "%2", "Enter" }, "dispatch should submit without focusing the pane")
+assert_equal(tmux_calls[4], { "tmux", "send-keys", "-t", "%2", "M-Enter" }, "dispatch should queue a follow-up without interrupting or focusing the pane")
 assert_equal(#tmux_calls, 4, "dispatch should not issue a pane-focus command")
 
 local prompt = review_agent.build_prompt({
@@ -149,6 +154,8 @@ local prompt = review_agent.build_prompt({
 })
 assert(prompt:find("Do not edit diffview%-review%.json") ~= nil, "the prompt should forbid shared-state edits")
 assert(prompt:find(failed_path, 1, true) ~= nil, "the prompt should contain the exact reply artifact")
+assert(prompt:find("The user explicitly authorizes writing this exact reply artifact", 1, true))
+assert(prompt:find(failed_path .. ".tmp", 1, true), "authorization must include the named atomic temporary file")
 assert(prompt:find("\n", 1, true) == nil, "the tmux prompt should remain a single submitted line")
 
 vim.fn.delete(temp_dir, "rf")

@@ -16,28 +16,24 @@ local GUIDE_STYLE_BY_SEVERITY = {
 		border = "DiffviewReviewGuideHighBorder",
 		range = "DiffviewReviewGuideHighRange",
 		sign = "DiffviewReviewGuideHigh",
-		status = "DiffviewReviewStatusGuideHigh",
 		virt = "DiffviewReviewGuideHighVirt",
 	},
 	Medium = {
 		border = "DiffviewReviewGuideMediumBorder",
 		range = "DiffviewReviewGuideMediumRange",
 		sign = "DiffviewReviewGuideMedium",
-		status = "DiffviewReviewStatusGuideMedium",
 		virt = "DiffviewReviewGuideMediumVirt",
 	},
 	Low = {
 		border = "DiffviewReviewGuideLowBorder",
 		range = "DiffviewReviewGuideLowRange",
 		sign = "DiffviewReviewGuideLow",
-		status = "DiffviewReviewStatusGuideLow",
 		virt = "DiffviewReviewGuideLowVirt",
 	},
 	Info = {
 		border = "DiffviewReviewGuideInfoBorder",
 		range = "DiffviewReviewGuideInfoRange",
 		sign = "DiffviewReviewGuideInfo",
-		status = "DiffviewReviewStatusGuideInfo",
 		virt = "DiffviewReviewGuideInfoVirt",
 	},
 }
@@ -46,7 +42,6 @@ local MANUAL_STYLE = {
 	border = "DiffviewReviewCommentBorder",
 	range = "DiffviewReviewCommentRange",
 	sign = "DiffviewReviewComment",
-	status = "DiffviewReviewStatusComment",
 	virt = "DiffviewReviewCommentVirt",
 }
 
@@ -54,7 +49,6 @@ local GITHUB_STYLE = {
 	border = "DiffviewReviewGithubBorder",
 	range = "DiffviewReviewGithubRange",
 	sign = "DiffviewReviewGithub",
-	status = "DiffviewReviewStatusGithub",
 	virt = "DiffviewReviewGithubVirt",
 }
 
@@ -157,6 +151,7 @@ end
 
 function M.comment_status_text(comment)
 	local labels = {}
+	if comment and comment.guide_retired then table.insert(labels, "earlier guide") end
 	local sync_status = tostring(comment and comment.sync_status or "")
 	if is_stale_github_anchor(comment) then
 		table.insert(labels, "stale original anchor")
@@ -195,7 +190,7 @@ function M.comment_status_text(comment)
 
 	local agent_status = tostring(comment and comment.agent_status or "")
 	if agent_status == "pending" then
-		table.insert(labels, "Pi pending")
+		table.insert(labels, "Pi queued")
 	elseif agent_status == "running" then
 		table.insert(labels, "Pi reviewing…")
 	elseif agent_status == "failed" then

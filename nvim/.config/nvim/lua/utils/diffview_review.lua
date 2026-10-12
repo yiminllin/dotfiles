@@ -2,9 +2,10 @@ local M = {}
 
 local review_format = require("utils.diffview_review_format")
 local review_state = require("utils.diffview_review_state")
+local guide_view = require("utils.diffview_review_guide")
+local ownership_scope = require("utils.diffview_review_scope")
 
 local NS = vim.api.nvim_create_namespace("diffview_review")
-local STATUS_NS = vim.api.nvim_create_namespace("diffview_review_status")
 local SIGN_GROUP = "diffview_review"
 local COMMENT_MARKER = review_format.COMMENT_MARKER
 local GUIDE_MARKER = review_format.GUIDE_MARKER
@@ -16,7 +17,6 @@ local active_comments_quickfix_context = nil
 local active_guide_context = nil
 local auto_imported_github_contexts = {}
 local auto_import_scheduled_contexts = {}
-local guide_cache = nil
 local post_confirmation_open = false
 local github_post_in_progress = false
 
@@ -67,23 +67,6 @@ local function normalize_file(path)
 	return path:gsub("\\", "/"):gsub("^%./", "")
 end
 
-local function string_list(value)
-	if type(value) == "string" and value ~= "" then
-		return { value }
-	end
-	if type(value) ~= "table" then
-		return {}
-	end
-
-	local result = {}
-	for _, item in ipairs(value) do
-		if item ~= nil and item ~= vim.NIL and tostring(item) ~= "" then
-			table.insert(result, tostring(item))
-		end
-	end
-	return result
-end
-
 local function positive_line(value)
 	if type(value) ~= "number" and type(value) ~= "string" then
 		return nil
@@ -123,80 +106,6 @@ local function github_repo_from_url(value)
 		return owner, repo
 	end
 	return nil, nil
-end
-
-local function is_stale_github_anchor(comment)
-	return review_format.is_imported_github_comment(comment)
-		and comment.github_line == nil
-		and comment.original_line ~= nil
-end
-
-local function github_status_label(comment)
-	local stale_anchor = is_stale_github_anchor(comment)
-	if comment.sync_status == "edited-locally" then
-		return stale_anchor and "edited locally; stale original anchor" or "edited locally"
-	end
-	if stale_anchor then
-		return "stale original anchor"
-	end
-	if comment.outdated == true or comment.stale == true then
-		return "outdated"
-	end
-	if comment.sync_status == "github-unknown-resolution" then
-		return "unknown resolution"
-	end
-end
-
-local function normalize_guide(decoded)
-	if type(decoded) ~= "table" then
-		return nil
-	end
-
-	local guide = {
-		pr_number = type(decoded.pr) == "table" and decoded.pr.number or nil,
-		pr_url = type(decoded.pr) == "table" and decoded.pr.url or nil,
-		schema_version = decoded.schema_version or decoded.version,
-		summary = type(decoded.summary) == "string" and decoded.summary or "",
-		change_map = string_list(decoded.change_map),
-		high_risk = string_list(decoded.high_risk),
-		review_strategy = string_list(decoded.review_strategy),
-		validation_focus = string_list(decoded.validation_focus),
-		files = {},
-		files_by_path = {},
-	}
-
-	for _, file in ipairs(type(decoded.files) == "table" and decoded.files or {}) do
-		local path = type(file) == "table" and normalize_file(file.path) or nil
-		if path then
-			local guide_file = {
-				id = string_id(file.guide_id) or string_id(file.id),
-				notes = string_list(file.notes),
-				path = path,
-				suggestions = {},
-			}
-			for _, suggestion in ipairs(type(file.suggestions) == "table" and file.suggestions or {}) do
-				local body = type(suggestion) == "table" and type(suggestion.body) == "string" and vim.trim(suggestion.body)
-					or ""
-				if body ~= "" then
-					local start_line = positive_line(suggestion.line)
-					local end_line = positive_line(suggestion.end_line) or start_line
-					table.insert(guide_file.suggestions, {
-						body = body,
-						end_line = end_line,
-						id = string_id(suggestion.guide_id) or string_id(suggestion.id),
-						line = start_line,
-						severity = type(suggestion.severity) == "string" and suggestion.severity or "Medium",
-						why = type(suggestion.why) == "string" and suggestion.why or nil,
-					})
-				end
-			end
-
-			table.insert(guide.files, guide_file)
-			guide.files_by_path[path] = guide_file
-		end
-	end
-
-	return guide
 end
 
 local function current_view()
@@ -249,29 +158,6 @@ local function active_guide_path(ctx)
 	return active_guide_context.path
 end
 
-local function active_guide_markdown_path(ctx)
-	local guide_path = active_guide_path(ctx)
-	if not guide_path then
-		return nil
-	end
-	return active_guide_context.markdown_path or join_path(vim.fn.fnamemodify(guide_path, ":p:h"), "guide.md")
-end
-
-local function read_nonempty_file(path)
-	if not path or vim.fn.filereadable(path) ~= 1 then
-		return nil
-	end
-
-	local read_ok, lines = pcall(vim.fn.readfile, path)
-	if not read_ok then
-		return nil
-	end
-	if vim.trim(table.concat(lines, "\n")) == "" then
-		return nil
-	end
-	return lines
-end
-
 local function review_state_path(ctx)
 	local guide_path = active_guide_path(ctx)
 	if guide_path then
@@ -306,6 +192,7 @@ local function repo_context(view)
 	local ctx = {
 		root = root,
 		gitdir = gitdir,
+		view = view,
 	}
 	ctx.state_path = review_state_path(ctx)
 	return ctx
@@ -459,8 +346,18 @@ local function diffview_entry_main_winid(view, entry)
 	end
 end
 
-local function focus_diffview_entry(view, entry, line)
-	local winid = diffview_entry_main_winid(view, entry)
+local function focus_diffview_entry(view, entry, line, side)
+	local winid = nil
+	if side then
+		for _, candidate in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+			local file = entry_file_for_buffer(entry, vim.api.nvim_win_get_buf(candidate))
+			if file and (file.symbol == "a" and "LEFT" or "RIGHT") == side then
+				winid = candidate
+				break
+			end
+		end
+	end
+	winid = winid or diffview_entry_main_winid(view, entry)
 	if not winid then
 		return false
 	end
@@ -565,8 +462,6 @@ local function current_file_context()
 		return { view = view }
 	end
 
-	ctx.view = view
-
 	local panel_file, panel_entry = file_from_panel(view)
 	if panel_file then
 		ctx.file = panel_file
@@ -657,38 +552,7 @@ local function save_state(ctx, state)
 end
 
 local function load_active_guide(ctx)
-	local path = active_guide_path(ctx)
-	if not path then
-		return nil
-	end
-
-	local mtime = vim.fn.getftime(path)
-	if mtime < 0 then
-		guide_cache = { path = path, mtime = mtime, guide = nil }
-		return nil
-	end
-	if guide_cache and guide_cache.path == path and guide_cache.mtime == mtime then
-		return guide_cache.guide
-	end
-
-	local read_ok, lines = pcall(vim.fn.readfile, path)
-	if not read_ok then
-		notify("Could not read guide JSON: " .. path, vim.log.levels.WARN)
-		guide_cache = { path = path, mtime = mtime, guide = nil }
-		return nil
-	end
-
-	local decode_ok, decoded = pcall(vim.fn.json_decode, table.concat(lines, "\n"))
-	local guide = decode_ok and normalize_guide(decoded) or nil
-	if not guide then
-		notify("Ignoring invalid guide JSON: " .. path, vim.log.levels.WARN)
-	else
-		guide.source_path = path
-		guide.context_pr_number = active_guide_context and active_guide_context.pr_number or nil
-		guide.repo_key = active_guide_context and active_guide_context.repo_key or nil
-	end
-	guide_cache = { path = path, mtime = mtime, guide = guide }
-	return guide
+	return guide_view.load(active_guide_path(ctx), active_guide_context)
 end
 
 local normalize_comment_text = review_format.normalize_comment_text
@@ -711,7 +575,7 @@ local function guide_suggestion_id(file, suggestion)
 	return "guide:suggestion:" .. guide_hash(
 		file.path,
 		"guide_suggestion",
-		line_key,
+		suggestion.side == "LEFT" and ("LEFT:" .. line_key) or line_key,
 		end_line_key,
 		normalize_comment_text(suggestion.body)
 	)
@@ -748,7 +612,7 @@ local function apply_imported_guide_comment(state, index_by_id, comment)
 			changed = true
 		end
 	end
-	for _, key in ipairs({ "line", "end_line" }) do
+	for _, key in ipairs({ "line", "end_line", "guide_retired" }) do
 		if comment[key] == nil and existing[key] ~= nil then
 			existing[key] = nil
 			changed = true
@@ -789,6 +653,7 @@ local function import_guide_comments(state, guide)
 				kind = "guide_suggestion",
 				repo_key = guide.repo_key,
 				severity = suggestion.severity or "Medium",
+				side = suggestion.side or "RIGHT",
 				source = "guide",
 				why = suggestion.why,
 			}
@@ -808,8 +673,15 @@ local function import_guide_comments(state, guide)
 				and comment.guide_path == guide.source_path
 				and not active_guide_ids[comment.guide_id]
 			then
-				table.remove(state.comments, index)
-				changed = true
+				if comment.resolved or #(comment.replies or {}) > 0 or comment.agent_request_id then
+					if not comment.guide_retired then
+						comment.guide_retired = true
+						changed = true
+					end
+				else
+					table.remove(state.comments, index)
+					changed = true
+				end
 			end
 		end
 	end
@@ -979,7 +851,7 @@ local function diffview_file_set(view)
 end
 
 local function github_import_context_key(ctx, pr)
-	return table.concat({ ctx.root or "", pr.owner or "", pr.repo or "", pr.pull_number or "" }, "\n")
+	return table.concat({ ctx.root or "", pr.owner or "", pr.repo or "", pr.pull_number or "", pr.head_oid or "" }, "\n")
 end
 
 local function flatten_github_comment_pages(decoded)
@@ -996,84 +868,13 @@ local function flatten_github_comment_pages(decoded)
 	return decoded
 end
 
-local function split_top_level_json_values(text)
-	local values = {}
-	local start = nil
-	local depth = 0
-	local in_string = false
-	local escaped = false
-	for index = 1, #text do
-		local char = text:sub(index, index)
-		if in_string then
-			if escaped then
-				escaped = false
-			elseif char == "\\" then
-				escaped = true
-			elseif char == '"' then
-				in_string = false
-			end
-		elseif char == '"' then
-			in_string = true
-		elseif char == "{" or char == "[" then
-			if depth == 0 then
-				start = index
-			end
-			depth = depth + 1
-		elseif char == "}" or char == "]" then
-			depth = depth - 1
-			if depth < 0 then
-				return nil
-			end
-			if depth == 0 and start then
-				table.insert(values, text:sub(start, index))
-				start = nil
-			end
-		elseif depth == 0 and not char:match("%s") then
-			return nil
-		end
-	end
-	if in_string or depth ~= 0 then
-		return nil
-	end
-	return values
-end
-
-local function decode_concatenated_github_comments(text)
-	local values = split_top_level_json_values(text)
-	if not values or #values == 0 then
-		return nil, "gh api returned invalid JSON"
-	end
-
-	local comments = {}
-	for _, value in ipairs(values) do
-		local ok, decoded = pcall(vim.fn.json_decode, value)
-		if not ok or type(decoded) ~= "table" then
-			return nil, "gh api returned invalid paginated JSON"
-		end
-		local page, page_error = flatten_github_comment_pages(decoded)
-		if not page then
-			return nil, page_error
-		end
-		vim.list_extend(comments, page)
-	end
-	return comments
-end
-
-local function decode_github_comments(output, allow_concatenated)
+local function decode_github_comments(output)
 	local text = table.concat(output or {}, "\n")
 	local ok, decoded = pcall(vim.fn.json_decode, text)
 	if ok and type(decoded) == "table" then
 		return flatten_github_comment_pages(decoded)
 	end
-	if allow_concatenated then
-		return decode_concatenated_github_comments(text)
-	end
 	return nil, "gh api returned invalid JSON"
-end
-
-local function is_unknown_slurp_flag_error(output)
-	local details = table.concat(output or {}, "\n"):lower()
-	return details:match("unknown flag") ~= nil and details:match("slurp") ~= nil
 end
 
 local function fetch_github_comments(pr)
@@ -1081,20 +882,16 @@ local function fetch_github_comments(pr)
 		return nil, "gh CLI is unavailable; install gh and run gh auth login before importing GitHub comments"
 	end
 
+	if pr.head_oid then
+		local head = vim.fn.systemlist({ "gh", "api",
+			("repos/%s/%s/pulls/%s"):format(pr.owner, pr.repo, pr.pull_number), "--jq", ".head.sha" })
+		if vim.v.shell_error ~= 0 or vim.trim(head[1] or "") ~= pr.head_oid then
+			return nil, "Cannot verify GitHub comments against this revision; reopen review to update the PR head"
+		end
+	end
 	local endpoint = ("repos/%s/%s/pulls/%s/comments?per_page=100"):format(pr.owner, pr.repo, pr.pull_number)
 	local output = vim.fn.systemlist({ "gh", "api", "--paginate", "--slurp", endpoint })
 	if vim.v.shell_error ~= 0 then
-		if is_unknown_slurp_flag_error(output) then
-			local fallback_output = vim.fn.systemlist({ "gh", "api", "--paginate", endpoint })
-			if vim.v.shell_error == 0 then
-				return decode_github_comments(fallback_output, true)
-			end
-			local fallback_details = vim.trim(table.concat(fallback_output or {}, "\n"))
-			if fallback_details ~= "" then
-				return nil, "gh api fallback without --slurp failed: " .. fallback_details
-			end
-			return nil, "gh api fallback without --slurp failed; check gh auth status and network access"
-		end
 		local details = vim.trim(table.concat(output or {}, "\n"))
 		if details ~= "" then
 			return nil, "gh api failed: " .. details
@@ -1111,7 +908,7 @@ local function copy_json_field(target, source, key)
 	end
 end
 
-local function normalize_github_comment(raw, files)
+local function normalize_github_comment(raw, files, head_oid)
 	if type(raw) ~= "table" then
 		return nil, "invalid"
 	end
@@ -1149,6 +946,7 @@ local function normalize_github_comment(raw, files)
 		file = path,
 		github_body = body,
 		github_id = github_id,
+		github_head_oid = head_oid,
 		github_in_reply_to_id = string_id(json_value(raw.in_reply_to_id)),
 		github_node_id = json_value(raw.node_id),
 		github_review_id = string_id(json_value(raw.pull_request_review_id)),
@@ -1165,7 +963,7 @@ local function normalize_github_comment(raw, files)
 	}
 
 	if current_line then
-		comment.line = current_line
+		comment.line = start_line or current_line
 		comment.github_line = current_line
 		if start_line and current_line ~= start_line then
 			comment.end_line = current_line
@@ -1289,7 +1087,7 @@ local function apply_imported_github_comment(state, index_by_id, incoming, stats
 	return false
 end
 
-local function import_github_comments_into_state(state, raw_comments, files)
+local function import_github_comments_into_state(state, raw_comments, files, head_oid)
 	state.comments = state.comments or {}
 	state.dismissed_github_comments = state.dismissed_github_comments or {}
 	local stats = { dismissed = 0, edited_locally = 0, imported = 0, skipped = 0, unchanged = 0, updated = 0 }
@@ -1297,7 +1095,7 @@ local function import_github_comments_into_state(state, raw_comments, files)
 	local changed = false
 
 	for _, raw in ipairs(raw_comments or {}) do
-		local comment = normalize_github_comment(raw, files)
+		local comment = normalize_github_comment(raw, files, head_oid)
 		if comment then
 			changed = apply_imported_github_comment(state, index_by_id, comment, stats) or changed
 		else
@@ -1309,7 +1107,10 @@ local function import_github_comments_into_state(state, raw_comments, files)
 end
 
 local function is_hidden_comment(comment)
-	return comment.resolved == true or comment.sync_status == "github-resolved-hidden"
+	return comment.resolved == true or comment.local_resolved == true or comment.sync_status == "github-resolved-hidden"
+		or (comment.source == "guide" and guide_view.cache and comment.guide_path == guide_view.cache.path and not guide_view.cache.guide)
+		or (comment.source == "github" and active_guide_context and active_guide_context.head_oid
+			and comment.github_head_oid ~= active_guide_context.head_oid)
 end
 
 local function load_state_with_guide(ctx)
@@ -1317,6 +1118,9 @@ local function load_state_with_guide(ctx)
 	local guide = load_active_guide(ctx)
 	if import_guide_comments(state, guide) then
 		save_state(ctx, state)
+	end
+	if ctx.view then
+		ownership_scope.apply_order(ctx.view, guide)
 	end
 	return state, guide
 end
@@ -1336,8 +1140,9 @@ local function clamp_comment_range(comment, line_count)
 
 	local end_line = tonumber(comment.end_line) or tonumber(comment.line) or start_line
 	start_line, end_line = math.min(start_line, end_line), math.max(start_line, end_line)
-	start_line = math.min(math.max(start_line, 1), line_count)
-	end_line = math.min(math.max(end_line, 1), line_count)
+	if start_line < 1 or end_line > line_count then
+		return nil, nil
+	end
 	return start_line, end_line
 end
 
@@ -1512,6 +1317,8 @@ local function find_comment(state, file, line, opts)
 			comment.file == file
 			and not is_hidden_comment(comment)
 			and (matches_file_level or (start_line and start_line <= line and line <= end_line))
+			and (not opts or not opts.side or review_format.is_file_level_comment(comment)
+				or (comment.side or "RIGHT") == opts.side)
 			and (not manual_only or (not is_guide and not is_github))
 		then
 			return comment, index
@@ -1590,63 +1397,30 @@ local function review_entries(view, state)
 	return entries
 end
 
-local function order_review_entries_by_guide(entries, guide)
-	if not (guide and type(guide.files) == "table") then
-		return entries
+local function ensure_review_scope(ctx, state)
+	local view = ctx.view
+	if view.review_scope then
+		return view.review_scope
 	end
-
-	local entries_by_path = {}
-	for _, item in ipairs(entries) do
-		if item.path and not entries_by_path[item.path] then
-			entries_by_path[item.path] = item
+	local head = active_guide_context
+			and active_pr_context_matches_view(active_guide_context, ctx)
+			and active_guide_context.head_oid
+		or nil
+	local scope = ownership_scope.attach(view, ctx.root, head)
+	if state.ownership_filter == "phoenix" then
+		local ok, err = ownership_scope.set(scope, true)
+		if ok then
+			view:update_files(function()
+				vim.schedule(M.refresh_visible)
+			end)
+		else
+			state.ownership_filter = "all"
+			save_state(ctx, state)
+			notify(err, vim.log.levels.WARN)
 		end
 	end
-
-	local ordered = {}
-	local added = {}
-	for _, file in ipairs(guide.files) do
-		local path = type(file) == "table" and normalize_file(file.path) or nil
-		local item = path and entries_by_path[path] or nil
-		if item and not added[path] then
-			table.insert(ordered, item)
-			added[path] = true
-		end
-	end
-	if #ordered == 0 then
-		return entries
-	end
-
-	for _, item in ipairs(entries) do
-		if item.path and not added[item.path] then
-			table.insert(ordered, item)
-			added[item.path] = true
-		end
-	end
-	return ordered
+	return scope
 end
-
-local function first_guide_ordered_entry(entries, guide)
-	if not (guide and type(guide.files) == "table") then
-		return nil
-	end
-
-	local entries_by_path = {}
-	for _, item in ipairs(entries) do
-		if item.path and not entries_by_path[item.path] then
-			entries_by_path[item.path] = item
-		end
-	end
-
-	for _, file in ipairs(guide.files) do
-		local path = type(file) == "table" and normalize_file(file.path) or nil
-		local item = path and entries_by_path[path] or nil
-		if item then
-			return item
-		end
-	end
-end
-
-local apply_buffer_keymaps
 
 local function comments_for_file(state, file)
 	local comments = {}
@@ -1661,7 +1435,7 @@ local function comments_for_file(state, file)
 	return comments
 end
 
-local function jump_to_entry(view, item, line)
+local function jump_to_entry(view, item, line, side)
 	local ok = pcall(function()
 		if view.set_file then
 			view:set_file(item.entry, false, true)
@@ -1674,14 +1448,14 @@ local function jump_to_entry(view, item, line)
 		return
 	end
 
-	local focus_ok = focus_diffview_entry(view, item.entry, line)
+	local focus_ok = focus_diffview_entry(view, item.entry, line, side)
 	if not focus_ok then
 		notify("Could not focus " .. item.path, vim.log.levels.WARN)
 		return false
 	end
 	if line then
 		vim.defer_fn(function()
-			focus_diffview_entry(view, item.entry, line)
+			focus_diffview_entry(view, item.entry, line, side)
 		end, 120)
 	end
 
@@ -1998,7 +1772,7 @@ local function winbar_file_label(file, max_width)
 	return fit_suffix(name, max_width)
 end
 
-local function refresh_winbar(winid, file, state)
+local function refresh_winbar(winid, file, state, progress)
 	local width = vim.api.nvim_win_get_width(winid)
 	local status = review_status(file, state)
 	local status_text = status.winbar_text
@@ -2007,14 +1781,16 @@ local function refresh_winbar(winid, file, state)
 	end
 
 	local separator = " · "
-	local file_width = width - vim.fn.strdisplaywidth(status_text) - vim.fn.strdisplaywidth(separator) - 1
+	local route = progress and (progress .. separator) or ""
+	local file_width = width - vim.fn.strdisplaywidth(route) - vim.fn.strdisplaywidth(status_text) - vim.fn.strdisplaywidth(separator) - 1
 	local file_label = winbar_file_label(file, file_width)
 	local file_part = ""
 	if file_label ~= "" then
 		file_part = "%#DiffviewReviewWinbarFile#" .. separator .. file_label:gsub("%%", "%%%%")
 	end
 
-	vim.wo[winid].winbar = "%#" .. status.winbar_hl .. "#" .. status_text .. file_part
+	vim.wo[winid].winbar = "%#DiffviewReviewWinbarFile#" .. route
+		.. "%#" .. status.winbar_hl .. "#" .. status_text .. file_part
 end
 
 local function refresh_file_panel(bufnr, view, state)
@@ -2147,13 +1923,18 @@ function M.set_active_guide_context(context)
 	if M.stop_agent_reply_polling then
 		M.stop_agent_reply_polling()
 	end
+	if context then
+		context = vim.deepcopy(context)
+		for key, value in pairs(context) do
+			if value == vim.NIL then context[key] = nil end
+		end
+	end
 	active_guide_context = context and {
 		assistant_name = context.assistant_name,
 		base_oid = context.base_oid,
 		context_kind = context.context_kind,
 		diffview_rev_arg = context.diffview_rev_arg,
 		head_oid = context.head_oid or context.pr_head_oid,
-		markdown_path = context.markdown_path,
 		owner = context.owner,
 		path = context.path,
 		pr_body = context.pr_body,
@@ -2165,7 +1946,7 @@ function M.set_active_guide_context(context)
 		repo_key = context.repo_key,
 		initial_guide_jump_done = false,
 	} or nil
-	guide_cache = nil
+	guide_view.cache = nil
 end
 
 function M.clear_active_guide_context()
@@ -2173,7 +1954,7 @@ function M.clear_active_guide_context()
 		M.stop_agent_reply_polling()
 	end
 	active_guide_context = nil
-	guide_cache = nil
+	guide_view.cache = nil
 end
 
 function M.review_foldtext()
@@ -2270,18 +2051,8 @@ function M.apply_highlights()
 	set(0, "DiffviewReviewGuideInfoVirt", { fg = "#57606a" })
 	set(0, "DiffviewReviewPanelUnviewed", { fg = "#9a6700", bold = true })
 	set(0, "DiffviewReviewPanelViewed", { fg = "#6e7781" })
-	set(0, "DiffviewReviewStatusHeader", { fg = "#24292f", bold = true })
 	set(0, "DiffviewReviewStatusFile", { fg = "#57606a", bold = true })
 	set(0, "DiffviewReviewStatusMuted", { fg = "#6e7781" })
-	set(0, "DiffviewReviewStatusComment", { fg = "#0969da" })
-	set(0, "DiffviewReviewStatusGithub", { fg = "#8250df", bold = true })
-	set(0, "DiffviewReviewStatusGuideHigh", { fg = "#cf222e", bold = true })
-	set(0, "DiffviewReviewStatusGuideMedium", { fg = "#9a6700", bold = true })
-	set(0, "DiffviewReviewStatusGuideLow", { fg = "#57606a" })
-	set(0, "DiffviewReviewStatusGuideInfo", { fg = "#57606a" })
-	set(0, "DiffviewReviewStatusGuideHeader", { fg = "#24292f", bold = true })
-	set(0, "DiffviewReviewStatusUnviewed", { fg = "#9a6700", bold = true })
-	set(0, "DiffviewReviewStatusViewed", { fg = "#1a7f37", bold = true })
 	set(0, "DiffviewReviewWinbarFile", { bg = "#f6f8fa", fg = "#57606a" })
 	set(0, "DiffviewReviewWinbarUnviewed", { bg = "#fff8c5", fg = "#9a6700", bold = true })
 	set(0, "DiffviewReviewWinbarViewed", { bg = "#dafbe1", fg = "#1a7f37", bold = true })
@@ -2340,7 +2111,14 @@ function M.refresh_visible()
 		return
 	end
 
-	local state = load_state_with_guide(ctx)
+	local state, guide = load_state_with_guide(ctx)
+	local scope = ensure_review_scope(ctx, state)
+	ownership_scope.apply_order(view, guide)
+	local entries = review_entries(view, state)
+	local function progress(winid)
+		return guide_view.progress(entries, normalize_file(view.cur_entry and view.cur_entry.path),
+			scope.enabled, vim.api.nvim_win_get_width(winid))
+	end
 
 	local visible = {}
 	for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
@@ -2350,6 +2128,7 @@ function M.refresh_visible()
 				vim.wo[winid].signcolumn = "yes:1"
 			end)
 			refresh_file_panel(bufnr, view, state)
+			vim.wo[winid].winbar = progress(winid)
 		else
 			local file = file_for_buffer(bufnr, ctx, view)
 			if file then
@@ -2361,6 +2140,9 @@ function M.refresh_visible()
 					side = side,
 					winid = winid,
 				})
+			elseif #entries == 0 and not vim.b[bufnr].diffview_review_guide
+				and not vim.b[bufnr].diffview_review_skim then
+				vim.wo[winid].winbar = progress(winid)
 			end
 		end
 	end
@@ -2482,8 +2264,9 @@ function M.refresh_visible()
 			end
 			refresh_buffer(item.bufnr, item.file, state, "spacers", item.winid, spacers)
 		end
-		refresh_winbar(item.winid, item.file, state)
+		refresh_winbar(item.winid, item.file, state, progress(item.winid))
 	end
+	guide_view.refresh_popup(view, guide, entries, normalize_file(view.cur_entry and view.cur_entry.path), scope.enabled)
 end
 
 function M.jump_to_initial_guide_file()
@@ -2510,33 +2293,19 @@ function M.jump_to_initial_guide_file()
 		return
 	end
 
-	local item = first_guide_ordered_entry(entries, guide)
 	context.initial_guide_jump_done = true
-	if item and normalize_file(view.cur_entry and view.cur_entry.path) ~= item.path then
-		jump_to_entry(view, item)
+	for _, item in ipairs(entries) do
+		if guide and guide.files_by_path[item.path] then
+			if normalize_file(view.cur_entry and view.cur_entry.path) ~= item.path then
+				jump_to_entry(view, item)
+			end
+			break
+		end
 	end
 end
 
 function M.refresh_current()
-	local ctx = current_file_context()
-	if not ctx.state_path then
-		return
-	end
-	if not ctx.file then
-		return
-	end
-
-	local state = load_state_with_guide(ctx)
-	refresh_buffer(
-		0,
-		ctx.file,
-		state,
-		true,
-		vim.api.nvim_get_current_win(),
-		nil,
-		side_from_current_buffer(ctx.view)
-	)
-	refresh_winbar(0, ctx.file, state)
+	M.refresh_visible()
 end
 
 function M.stop_agent_reply_polling()
@@ -2558,14 +2327,18 @@ function M.process_agent_reply_artifacts()
 
 	M.agent_reply_processing = true
 	local ok, process_error = pcall(function()
-		local state = load_state_with_guide(ctx)
+		local previous_guide = guide_view.cache and guide_view.cache.guide
+		local state, guide = load_state_with_guide(ctx)
+		if guide ~= previous_guide then
+			M.refresh_visible()
+		end
 		local changed, stats = require("utils.diffview_review_agent").ingest(state, ctx.state_path)
 
 		-- Do not leave a spinner forever if the assistant pane exits before
 		-- producing an artifact. A later retry can create a fresh request.
 		local now = os.time()
 		for _, comment in ipairs(state.comments or {}) do
-			if comment.agent_status == "running" and comment.agent_updated_at then
+			if (comment.agent_status == "running" or comment.agent_status == "pending") and comment.agent_updated_at then
 				local ok, started_at = pcall(vim.fn.strptime, "%Y-%m-%dT%H:%M:%SZ", comment.agent_updated_at)
 				if ok and tonumber(started_at) and now - tonumber(started_at) >= 900 then
 					comment.agent_status = "failed"
@@ -2637,6 +2410,7 @@ function M.dispatch_agent_reply(ctx, state, comment, request_body)
 		end_line = comment.end_line,
 		file = comment.file,
 		line = comment.line,
+		side = comment.side,
 		reply_path = reply_path,
 		request_id = comment.agent_request_id,
 		state_path = ctx.state_path,
@@ -2650,7 +2424,7 @@ function M.dispatch_agent_reply(ctx, state, comment, request_body)
 	end
 
 	if sent then
-		comment.agent_status = "running"
+		comment.agent_status = "pending"
 		comment.agent_error = nil
 	else
 		comment.agent_status = "unavailable"
@@ -2668,6 +2442,94 @@ function M.dispatch_agent_reply(ctx, state, comment, request_body)
 	return true
 end
 
+local function find_comment_by_identity(state, original)
+	for index, comment in ipairs(state.comments or {}) do
+		local matches = original.local_id and comment.local_id == original.local_id
+			or original.guide_id and comment.guide_id == original.guide_id
+			or original.github_id and comment.github_id == original.github_id
+		if
+			matches
+			or (
+				not original.local_id
+				and not original.guide_id
+				and not original.github_id
+				and comment.file == original.file
+				and comment.side == original.side
+				and comment.line == original.line
+				and comment.created_at == original.created_at
+				and comment.body == original.body
+			)
+		then
+			return comment, index
+		end
+	end
+end
+
+local function select_current_comment(ctx, state, opts, on_select)
+	local line = line_from_opts(opts)
+	local side = side_from_current_buffer(ctx.view)
+	local candidates = {}
+	local in_panel = is_file_panel_buffer(vim.api.nvim_get_current_buf())
+	for index, comment in ipairs(state.comments or {}) do
+		local first, last = clamp_comment_range(comment, math.huge)
+		local file_level = review_format.is_file_level_comment(comment)
+		if
+			comment.file == ctx.file
+			and not is_hidden_comment(comment)
+			and (
+				file_level
+				or (
+					not in_panel
+					and first
+					and first <= line
+					and line <= last
+					and (not side or (comment.side or "RIGHT") == side)
+				)
+			)
+		then
+			table.insert(candidates, { comment = comment, index = index })
+		end
+	end
+	local function apply_selection(item)
+		local comment, index = item.comment, item.index
+		if ctx.state_path then
+			local latest = load_state_with_guide(ctx)
+			comment, index = find_comment_by_identity(latest, comment)
+			if not comment then
+				notify("Selected comment is no longer available", vim.log.levels.WARN)
+				return
+			end
+			for key in pairs(state) do
+				state[key] = nil
+			end
+			for key, value in pairs(latest) do
+				state[key] = value
+			end
+		end
+		on_select(comment, index)
+	end
+	if #candidates == 0 then
+		notify("No review comment at this location or file level", vim.log.levels.WARN)
+	elseif #candidates == 1 then
+		apply_selection(candidates[1])
+	else
+		vim.ui.select(candidates, {
+			prompt = "Select review comment:",
+			format_item = function(item)
+				return ("[%s %s] %s"):format(
+					item.comment.guide_retired and "earlier guide" or item.comment.source or "local",
+					item.comment.file_level and "file" or (item.comment.side or "RIGHT"),
+					comment_preview(item.comment)
+				)
+			end,
+		}, function(item)
+			if item then
+				apply_selection(item)
+			end
+		end)
+	end
+end
+
 function M.add_comment(opts)
 	local ctx = current_file_context()
 	if not require_active_diffview(ctx, "adding a review comment") then
@@ -2683,7 +2545,7 @@ function M.add_comment(opts)
 
 	local line, end_line = range_from_opts(opts)
 	local state = load_state_with_guide(ctx)
-	local existing = find_comment(state, ctx.file, line, { manual_only = true })
+	local existing = find_comment(state, ctx.file, line, { manual_only = true, side = side_from_current_buffer(ctx.view) })
 	local provided = opts and opts.args and opts.args ~= "" and opts.args or nil
 	local side = side_from_current_buffer(ctx.view)
 	local pr = active_pr_context(ctx)
@@ -2698,7 +2560,8 @@ function M.add_comment(opts)
 			return
 		end
 
-		local comment = existing
+		state = load_state_with_guide(ctx)
+		local comment = existing and find_comment_by_identity(state, existing) or nil
 		if comment then
 			comment.body = input
 			if side then
@@ -2725,10 +2588,14 @@ function M.add_comment(opts)
 			table.insert(state.comments, comment)
 		end
 
+		comment.local_id = comment.local_id or require("utils.diffview_review_agent").new_id("local")
 		comment.anchor = M._capture_comment_anchor(ctx, ctx.file, side, line, end_line)
 		comment.anchor_status = comment.anchor and "anchored" or "legacy_unverified"
-		if M.dispatch_agent_reply(ctx, state, comment) then
-			notify(("Saved review comment and sent it to Pi for %s:%s"):format(ctx.file, range_label(line, end_line)))
+		if opts and opts.ask then
+			M.dispatch_agent_reply(ctx, state, comment)
+		elseif save_state(ctx, state) then
+			M.refresh_visible()
+			notify("Saved local review comment")
 		end
 	end
 
@@ -2740,10 +2607,10 @@ function M.add_comment(opts)
 	open_comment_editor(ctx, line, end_line, existing and existing.body or "", save_comment)
 end
 
-function M.add_comment_visual()
+function M.add_comment_visual(ask)
 	local start_line = vim.fn.line("v")
 	local end_line = vim.fn.line(".")
-	M.add_comment({ line = math.min(start_line, end_line), end_line = math.max(start_line, end_line) })
+	M.add_comment({ line = math.min(start_line, end_line), end_line = math.max(start_line, end_line), ask = ask == true })
 end
 
 function M.reply_comment()
@@ -2761,42 +2628,48 @@ function M.reply_comment()
 
 	local line = vim.api.nvim_win_get_cursor(0)[1]
 	local state = load_state_with_guide(ctx)
-	local comment = find_comment(state, ctx.file, line)
-	if not comment then
-		notify(("No review thread at %s:%d"):format(ctx.file, line), vim.log.levels.WARN)
-		return
-	end
-
-	local reply_line = tonumber(comment.line) or line
-	local reply_end_line = tonumber(comment.end_line) or reply_line
-	open_comment_editor(ctx, reply_line, reply_end_line, "", function(input)
-		local body = vim.trim(input or "")
-		if body == "" then
-			notify("Empty thread reply skipped", vim.log.levels.WARN)
-			return
-		end
-
-		comment.replies = type(comment.replies) == "table" and comment.replies or {}
-		table.insert(comment.replies, {
-			author = vim.env.USER or "you",
-			body = body,
-			created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-		})
-		comment.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
-		if save_state(ctx, state) then
-			M.refresh_visible()
-			local follow_up = ("Continue the existing review thread.\nOriginal comment: %s\nNew local reply: %s")
-				:format(tostring(comment.body or ""), body)
-			if M.dispatch_agent_reply(ctx, state, comment, follow_up) then
-				notify(("Added reply and sent a Pi follow-up for %s:%s"):format(
-					ctx.file,
-					range_label(reply_line, reply_end_line)
-				))
-			else
-				notify(("Added local reply to %s:%s"):format(ctx.file, range_label(reply_line, reply_end_line)))
+	select_current_comment(ctx, state, { line = line }, function(comment)
+		local reply_line = tonumber(comment.line) or line
+		local reply_end_line = tonumber(comment.end_line) or reply_line
+		open_comment_editor(ctx, reply_line, reply_end_line, "", function(input)
+			local body = vim.trim(input or "")
+			if body == "" then
+				notify("Empty thread reply skipped", vim.log.levels.WARN)
+				return
 			end
-		end
-	end, "Reply")
+
+			state = load_state_with_guide(ctx)
+			comment = find_comment_by_identity(state, comment)
+			if not comment then
+				notify("Thread was removed while editing the reply", vim.log.levels.WARN)
+				return
+			end
+			comment.replies = type(comment.replies) == "table" and comment.replies or {}
+			table.insert(comment.replies, {
+				author = vim.env.USER or "you",
+				body = body,
+				created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+			})
+			comment.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+			if save_state(ctx, state) then
+				M.refresh_visible()
+				local follow_up = ("Continue the existing review thread.\nOriginal comment: %s\nNew local reply: %s"):format(
+					tostring(comment.body or ""),
+					body
+				)
+				if M.dispatch_agent_reply(ctx, state, comment, follow_up) then
+					notify(
+						("Added reply and sent a Pi follow-up for %s:%s"):format(
+							ctx.file,
+							range_label(reply_line, reply_end_line)
+						)
+					)
+				else
+					notify(("Added local reply to %s:%s"):format(ctx.file, range_label(reply_line, reply_end_line)))
+				end
+			end
+		end, "Reply")
+	end)
 end
 
 function M.reanchor_comment(opts)
@@ -2926,25 +2799,14 @@ function M.delete_comment(opts)
 		return
 	end
 
-	local line = line_from_opts(opts)
 	local state = load_state_with_guide(ctx)
-	local comment, index = find_comment(state, ctx.file, line, { manual_only = true })
-	if not index then
-		local line_count = vim.api.nvim_buf_line_count(0)
-		comment, index = find_comment(state, ctx.file, line, {
-			file_level_line = file_level_display_line(0, vim.api.nvim_get_current_win(), line_count),
-		})
-	end
-	if not index then
-		notify(("No review comment at %s:%d"):format(ctx.file, line), vim.log.levels.WARN)
-		return
-	end
-
-	remove_comment_at_index(state, index)
-	if save_state(ctx, state) then
-		notify(("Deleted review comment at %s:%d"):format(ctx.file, line))
-		M.refresh_visible()
-	end
+	select_current_comment(ctx, state, opts, function(_, index)
+		remove_comment_at_index(state, index)
+		if save_state(ctx, state) then
+			notify("Deleted/dismissed local review comment")
+			M.refresh_visible()
+		end
+	end)
 end
 
 function M.resolve_comment(opts)
@@ -2960,30 +2822,50 @@ function M.resolve_comment(opts)
 		return
 	end
 
-	local line = line_from_opts(opts)
 	local state = load_state_with_guide(ctx)
-	local _, index = find_comment(state, ctx.file, line, { manual_only = true })
-	if not index then
-		local line_count = vim.api.nvim_buf_line_count(0)
-		_, index = find_comment(state, ctx.file, line, {
-			file_level_line = file_level_display_line(0, vim.api.nvim_get_current_win(), line_count),
-		})
-	end
-	if not index then
-		notify(("No review comment at %s:%d"):format(ctx.file, line), vim.log.levels.WARN)
+	select_current_comment(ctx, state, opts, function(comment)
+		if review_format.is_imported_github_comment(comment) then
+			comment.local_resolved = true
+		else
+			comment.resolved = true
+		end
+		comment.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+		if save_state(ctx, state) then
+			notify("Resolved locally; GitHub was not changed")
+			M.refresh_visible()
+		end
+	end)
+end
+
+function M.toggle_ownership_filter()
+	local ctx = current_file_context()
+	if
+		not require_active_diffview(ctx, "filtering review files")
+		or not require_repo_context(ctx, "filtering review files")
+	then
 		return
 	end
-
-	local comment = state.comments[index]
-	comment.resolved = true
-	if review_format.is_imported_github_comment(comment) then
-		comment.sync_status = "github-resolved-hidden"
+	local state = load_state_with_guide(ctx)
+	local scope = ensure_review_scope(ctx, state)
+	local previous = scope.enabled
+	local ok, err = ownership_scope.set(scope, not previous)
+	if not ok then
+		notify(err, vim.log.levels.WARN)
+		return
 	end
-	comment.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
-	if save_state(ctx, state) then
-		notify(("Resolved review comment at %s:%d"):format(ctx.file, line))
-		M.refresh_visible()
+	state.ownership_filter = scope.enabled and "phoenix" or "all"
+	if not save_state(ctx, state) then
+		scope.enabled = previous
+		return
 	end
+	ctx.view:update_files(function(update_error)
+		vim.schedule(function()
+			if update_error then
+				notify("Diffview filter refresh failed", vim.log.levels.ERROR)
+			end
+			M.refresh_visible()
+		end)
+	end)
 end
 
 function M.toggle_file_viewed()
@@ -3017,16 +2899,17 @@ local function comment_targets(view, state)
 			table.insert(targets, {
 				item = item,
 				line = comment.start_line,
+				side = comment.comment.side or "RIGHT",
 			})
 		end
 	end
 	return targets
 end
 
-local function current_comment_target_index(targets, file, line)
+local function current_comment_target_index(targets, file, line, side)
 	local fallback = nil
 	for index, target in ipairs(targets) do
-		if target.item.path == file then
+		if target.item.path == file and (not side or target.side == side) then
 			if not fallback then
 				fallback = index
 			end
@@ -3076,6 +2959,8 @@ local function quickfix_target(ctx, item, entry)
 		created_at = comment.created_at,
 		end_line = entry.end_line,
 		file_level = review_format.is_file_level_comment(comment),
+		local_id = comment.local_id,
+		side = comment.side,
 		github_id = comment.github_id and tostring(comment.github_id) or nil,
 		guide_id = comment.guide_id,
 		line = entry.start_line,
@@ -3210,7 +3095,7 @@ local function jump_to_quickfix_target(target)
 		notify("Comment file is not in the active Diffview: " .. tostring(target.path), vim.log.levels.WARN)
 		return false
 	end
-	return jump_to_entry(ctx.view, item, target.line or 1) == true
+	return jump_to_entry(ctx.view, item, target.line or 1, target.side) == true
 end
 
 local function comment_target_range(comment)
@@ -3221,6 +3106,9 @@ end
 local function comment_matches_quickfix_target(comment, target)
 	if normalize_file(comment.file) ~= normalize_file(target.path) then
 		return false
+	end
+	if target.local_id then
+		return comment.local_id == target.local_id
 	end
 	if target.guide_id then
 		return comment.guide_id == target.guide_id
@@ -3512,13 +3400,14 @@ quickfix_comment_actions.resolve = function()
 	end
 
 	local comment = state.comments[state_index]
-	comment.resolved = true
 	if review_format.is_imported_github_comment(comment) then
-		comment.sync_status = "github-resolved-hidden"
+		comment.local_resolved = true
+	else
+		comment.resolved = true
 	end
 	comment.updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
 	if save_state(ctx, state) then
-		notify(("Resolved review comment at %s:%d"):format(target.path, target.line or 1))
+		notify(("Resolved locally at %s:%d; GitHub was not changed"):format(target.path, target.line or 1))
 		M.refresh_visible()
 		open_comments_quickfix(ctx, load_state_with_guide(ctx), index)
 		return true
@@ -3562,7 +3451,7 @@ function M.next_review_comment(direction)
 
 	direction = direction == -1 and -1 or 1
 	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
-	local current_index = current_comment_target_index(targets, ctx.file, cursor_line)
+	local current_index = current_comment_target_index(targets, ctx.file, cursor_line, side_from_current_buffer(ctx.view))
 	local target_index
 	if current_index then
 		target_index = ((current_index - 1 + direction) % #targets) + 1
@@ -3571,7 +3460,7 @@ function M.next_review_comment(direction)
 	end
 
 	local target = targets[target_index]
-	jump_to_entry(ctx.view, target.item, target.line)
+	jump_to_entry(ctx.view, target.item, target.line, target.side)
 end
 
 function M.next_unviewed_file(direction)
@@ -3582,9 +3471,8 @@ function M.next_unviewed_file(direction)
 		return
 	end
 
-	local state = load_state(ctx)
-	local guide = load_active_guide(ctx)
-	local entries = order_review_entries_by_guide(review_entries(ctx.view, state), guide)
+	local state = load_state_with_guide(ctx)
+	local entries = review_entries(ctx.view, state)
 	local unreviewed = {}
 	local current_index = nil
 	local last_index = nil
@@ -3630,7 +3518,7 @@ local function import_github_comments(ctx, pr, files)
 	end
 
 	local state = load_state_with_guide(ctx)
-	local changed, stats = import_github_comments_into_state(state, raw_comments, files)
+	local changed, stats = import_github_comments_into_state(state, raw_comments, files, pr.head_oid)
 	if changed and not save_state(ctx, state) then
 		return
 	end
@@ -3671,6 +3559,21 @@ function M.import_github_comments()
 	end
 
 	import_github_comments(ctx, pr, files)
+end
+
+function M.refresh_review()
+	local ctx = current_file_context()
+	if not require_active_diffview(ctx, "refreshing review") then
+		return
+	end
+	guide_view.cache = nil
+	require("diffview").emit("refresh_files")
+	M.process_agent_reply_artifacts()
+	M.refresh_visible()
+	if active_pr_context(ctx) then
+		M.import_github_comments()
+	end
+	notify("Reloaded local review; the diff boundary was not changed")
 end
 
 function M.auto_import_github_comments()
@@ -3716,7 +3619,28 @@ function M.auto_import_github_comments()
 	end, 150)
 end
 
-local truncate_display
+local function truncate_display(value, width)
+	value = tostring(value or "")
+	if width <= 0 then
+		return ""
+	end
+	if review_format.display_width(value) <= width then
+		return value
+	end
+	if width <= 1 then
+		return "…"
+	end
+
+	local result = ""
+	for index = 0, vim.fn.strchars(value) - 1 do
+		local char = vim.fn.strcharpart(value, index, 1)
+		if review_format.display_width(result .. char .. "…") > width then
+			return result .. "…"
+		end
+		result = result .. char
+	end
+	return result
+end
 
 local function increment_skipped(stats, reason)
 	stats.skipped[reason] = (stats.skipped[reason] or 0) + 1
@@ -4061,853 +3985,124 @@ function M.post_github_comments()
 	open_post_confirmation(ctx, pr, state, candidates, stats)
 end
 
-local function guide_comment_counts(state, guide)
-	local counts = { notes = 0, suggestions = 0, total = 0 }
-	for _, comment in ipairs(state.comments or {}) do
-		if
-			review_format.is_guide_comment(comment)
-			and (not (guide and guide.source_path) or comment.guide_path == guide.source_path)
-		then
-			counts.total = counts.total + 1
-			if comment.kind == "guide_note" then
-				counts.notes = counts.notes + 1
-			elseif comment.kind == "guide_suggestion" then
-				counts.suggestions = counts.suggestions + 1
+function M.show_skim()
+	local ctx = current_file_context()
+	if
+		not require_active_diffview(ctx, "skimming the review") or not require_repo_context(ctx, "skimming the review")
+	then
+		return
+	end
+	local view = ctx.view
+	local state, guide = load_state_with_guide(ctx)
+	local scope = ensure_review_scope(ctx, state)
+	ownership_scope.apply_order(view, guide)
+	require("utils.diffview_review_skim").open({
+		snapshot = function()
+			if current_view() ~= view or not (view.left.commit and view.right.commit) then
+				return nil
 			end
-		end
-	end
-	return counts
-end
-
-local function guide_file_for_path(guide, path)
-	path = normalize_file(path)
-	if not (guide and path) then
-		return nil
-	end
-
-	local by_path = type(guide.files_by_path) == "table" and guide.files_by_path[path] or nil
-	if by_path then
-		return by_path
-	end
-
-	for _, file in ipairs(guide.files or {}) do
-		if normalize_file(file.path) == path then
-			return file
-		end
-	end
-end
-
-local function append_guide_list_item(lines, prefix, text)
-	local item_lines = split_comment_text(text)
-	for index, line in ipairs(item_lines) do
-		if index == 1 then
-			table.insert(lines, prefix .. line)
-		else
-			table.insert(lines, "  " .. line)
-		end
-	end
-end
-
-local function guide_popup_lines(path, file)
-	local lines = {
-		"# Diffview review guide",
-		"",
-		("**File:** `%s`"):format(path),
-		"",
-	}
-	local item_count = 0
-
-	if #(file.notes or {}) > 0 then
-		table.insert(lines, "## File notes")
-		for _, note in ipairs(file.notes or {}) do
-			append_guide_list_item(lines, "- ", note)
-			item_count = item_count + 1
-		end
-		table.insert(lines, "")
-	end
-
-	local suggestion_header_added = false
-	for _, suggestion in ipairs(file.suggestions or {}) do
-		if not suggestion.line then
-			if not suggestion_header_added then
-				table.insert(lines, "## File-level suggestions")
-				suggestion_header_added = true
-			end
-
-			local severity = review_format.severity_label(suggestion.severity)
-			local marker = review_format.severity_emoji(severity)
-			append_guide_list_item(lines, ("- %s **%s:** "):format(marker, severity), suggestion.body)
-			if suggestion.why and vim.trim(tostring(suggestion.why)) ~= "" then
-				append_guide_list_item(lines, "  - **Why:** ", suggestion.why)
-			end
-			item_count = item_count + 1
-		end
-	end
-
-	return lines, item_count
+			return {
+				view = view,
+				root = ctx.root,
+				base = view.left.commit,
+				head = view.right.commit,
+				scope = scope.enabled and "Phoenix" or "All",
+				entries = review_entries(view, state),
+			}
+		end,
+	})
 end
 
 function M.show_guide_popup()
 	local ctx = current_file_context()
-	if not require_active_diffview(ctx, "showing review guide") or not require_repo_context(ctx, "showing review guide") then
-		return
-	end
-	if not ctx.file then
-		notify("Move to a Diffview file before showing the review guide", vim.log.levels.WARN)
-		return
-	end
-
-	local _, guide = load_state_with_guide(ctx)
-	if not guide then
-		notify("No active Diffview review guide", vim.log.levels.WARN)
-		return
-	end
-
-	local guide_file = guide_file_for_path(guide, ctx.file)
-	if not guide_file then
-		notify("No review guide context for " .. ctx.file, vim.log.levels.INFO)
-		return
-	end
-
-	local lines, item_count = guide_popup_lines(ctx.file, guide_file)
-	if item_count == 0 then
-		notify("No file-level guide notes or suggestions for " .. ctx.file, vim.log.levels.INFO)
-		return
-	end
-
-	local max_width = math.max(20, vim.o.columns - 4)
-	local width = math.min(math.max(52, math.floor(vim.o.columns * 0.62)), max_width)
-	local max_height = math.max(6, vim.o.lines - 4)
-	local height = math.min(math.max(6, #lines), max_height)
-	local bufnr = vim.api.nvim_create_buf(false, true)
-	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-	vim.bo[bufnr].bufhidden = "wipe"
-	vim.bo[bufnr].filetype = "markdown"
-	vim.bo[bufnr].modifiable = false
-
-	local winid = vim.api.nvim_open_win(bufnr, true, {
-		border = "rounded",
-		col = math.max(math.floor((vim.o.columns - width) / 2), 0),
-		height = height,
-		relative = "editor",
-		row = math.max(math.floor((vim.o.lines - height) / 2), 0),
-		style = "minimal",
-		title = " Diffview Review Guide ",
-		title_pos = "center",
-		width = width,
-	})
-	vim.wo[winid].wrap = true
-
-	local function close_popup()
-		if vim.api.nvim_win_is_valid(winid) then
-			pcall(vim.api.nvim_win_close, winid, true)
-		end
-		if vim.api.nvim_buf_is_valid(bufnr) then
-			pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
-		end
-	end
-
-	vim.keymap.set("n", "q", close_popup, { buffer = bufnr, nowait = true, silent = true })
-	vim.keymap.set("n", "<Esc>", close_popup, { buffer = bufnr, nowait = true, silent = true })
-end
-
-local function status_row(action)
-	return { action = action, chunks = {}, text = "" }
-end
-
-local function add_status_text(row, text, hl_group)
-	local start_col = #row.text
-	row.text = row.text .. text
-	if hl_group then
-		table.insert(row.chunks, { end_col = #row.text, hl_group = hl_group, start_col = start_col })
-	end
-end
-
-truncate_display = function(value, width)
-	value = tostring(value or "")
-	if width <= 0 then
-		return ""
-	end
-	if review_format.display_width(value) <= width then
-		return value
-	end
-	if width <= 1 then
-		return "…"
-	end
-
-	local result = ""
-	for index = 0, vim.fn.strchars(value) - 1 do
-		local char = vim.fn.strcharpart(value, index, 1)
-		if review_format.display_width(result .. char .. "…") > width then
-			return result .. "…"
-		end
-		result = result .. char
-	end
-	return result
-end
-
-local function take_display_prefix(value, width)
-	local result = ""
-	for index = 0, vim.fn.strchars(value) - 1 do
-		local char = vim.fn.strcharpart(value, index, 1)
-		if review_format.display_width(result .. char) > width then
-			if result == "" then
-				return char, vim.fn.strcharpart(value, index + 1)
-			end
-			return result, vim.fn.strcharpart(value, index)
-		end
-		result = result .. char
-	end
-	return result, ""
-end
-
-local function wrap_status_text(value, first_width, next_width)
-	local text = review_format.normalize_comment_text(value)
-	if text == "" then
-		return {}
-	end
-
-	local lines = {}
-	local line = ""
-	local width = math.max(first_width, 1)
-	local continuation_width = math.max(next_width, 1)
-	for word in text:gmatch("%S+") do
-		local pending = word
-		while pending ~= "" do
-			local separator = line ~= "" and " " or ""
-			if review_format.display_width(line .. separator .. pending) <= width then
-				line = line .. separator .. pending
-				pending = ""
-			elseif line ~= "" then
-				table.insert(lines, line)
-				line = ""
-				width = continuation_width
-			else
-				local piece, rest = take_display_prefix(pending, width)
-				table.insert(lines, piece)
-				pending = rest
-				width = continuation_width
-			end
-		end
-	end
-
-	if line ~= "" then
-		table.insert(lines, line)
-	end
-	return lines
-end
-
-local function status_markdown_continuation_prefix(line)
-	return line:match("^(%s*[-*+]%s+%[[xX ]%]%s+)")
-		or line:match("^(%s*[-*+]%s+)")
-		or line:match("^(%s*%d+[.)]%s+)")
-		or line:match("^(%s*>%s*)")
-		or line:match("^%s*")
-		or ""
-end
-
-local function wrap_status_body_line(value, width)
-	local text = tostring(value or "")
-	if vim.trim(text) == "" then
-		return { "" }
-	end
-
-	width = math.max(width, 1)
-	if review_format.display_width(text) <= width then
-		return { text }
-	end
-
-	local first_prefix = text:match("^%s*") or ""
-	local continuation_prefix = string.rep(" ", review_format.display_width(status_markdown_continuation_prefix(text)))
-	local lines = {}
-	local line = first_prefix
-	local line_has_text = false
-
-	for word in text:sub(#first_prefix + 1):gmatch("%S+") do
-		local pending = word
-		while pending ~= "" do
-			local separator = line_has_text and " " or ""
-			if review_format.display_width(line .. separator .. pending) <= width then
-				line = line .. separator .. pending
-				line_has_text = true
-				pending = ""
-			elseif line_has_text then
-				table.insert(lines, line)
-				line = continuation_prefix
-				line_has_text = false
-			else
-				local piece_width = math.max(width - review_format.display_width(line), 1)
-				local piece, rest = take_display_prefix(pending, piece_width)
-				table.insert(lines, line .. piece)
-				pending = rest
-				line = continuation_prefix
-				line_has_text = false
-			end
-		end
-	end
-
-	if line_has_text then
-		table.insert(lines, line)
-	end
-	return lines
-end
-
-local function wrap_status_body(value, width)
-	local text = tostring(value or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
-	local lines = {}
-	for _, body_line in ipairs(vim.split(text, "\n", { plain = true })) do
-		for _, wrapped_line in ipairs(wrap_status_body_line(body_line, width)) do
-			table.insert(lines, wrapped_line)
-		end
-	end
-	return lines
-end
-
-local function add_pr_description_status(rows, ctx, width)
-	local context = active_guide_context
-	if not context or not context.pr_number then
-		return
-	end
-	if context.repo and ctx and ctx.root and normalize_dir(context.repo) ~= ctx.root then
-		return
-	end
-	if not active_pr_context_matches_view(context, ctx) then
-		return
-	end
-
-	local pr, pr_error = active_pr_context(ctx, "showing the PR description")
-	local title = status_row()
-	add_status_text(title, "PR:", "DiffviewReviewStatusHeader")
-	if not pr then
-		add_status_text(title, " " .. pr_error, "DiffviewReviewStatusMuted")
-		table.insert(rows, title)
-		table.insert(rows, status_row())
-		return
-	end
-
-	local description = pr
-
-	local heading = description.title and description.title ~= "" and description.title or "Untitled PR"
-	add_status_text(title, (" #%s · "):format(pr.pull_number), "DiffviewReviewStatusMuted")
-	add_status_text(title, truncate_display(heading, width - review_format.display_width(title.text)), "DiffviewReviewStatusFile")
-	table.insert(rows, title)
-
-	if description.url and description.url ~= "" then
-		local url = status_row()
-		add_status_text(url, "  ")
-		add_status_text(url, truncate_display(description.url, width - 2), "DiffviewReviewStatusMuted")
-		table.insert(rows, url)
-	end
-
-	local body = tostring(description.body or "")
-	if vim.trim(body) == "" then
-		local row = status_row()
-		add_status_text(row, "  No PR description", "DiffviewReviewStatusMuted")
-		table.insert(rows, row)
-	else
-		local header = status_row()
-		add_status_text(header, "  PR Description:", "DiffviewReviewStatusMuted")
-		table.insert(rows, header)
-
-		local body_indent = "  "
-		local body_lines = wrap_status_body(body, width - review_format.display_width(body_indent))
-		for _, line in ipairs(body_lines) do
-			local row = status_row()
-			if line ~= "" then
-				add_status_text(row, body_indent)
-				add_status_text(row, line, "DiffviewReviewStatusMuted")
-			end
-			table.insert(rows, row)
-		end
-	end
-	table.insert(rows, status_row())
-end
-
-local function add_review_summary(rows, counts)
-	local row = status_row()
-	add_status_text(row, "Review:", "DiffviewReviewStatusHeader")
-	add_status_text(
-		row,
-		(" %d files · %d reviewed · %d unreviewed · %d comments · %s %d · %s %d"):format(
-			counts.files,
-			counts.reviewed,
-			counts.unreviewed,
-			counts.comments,
-			GITHUB_MARKER,
-			counts.github,
-			GUIDE_MARKER,
-			counts.guide
-		),
-		"DiffviewReviewStatusMuted"
-	)
-	table.insert(rows, row)
-end
-
-local function add_guide_status(rows, state, guide, width)
-	local counts = guide_comment_counts(state, guide)
-	if not guide and counts.total == 0 then
-		return
-	end
-
-	local header = status_row()
-	add_status_text(header, GUIDE_MARKER, "DiffviewReviewStatusGuideInfo")
-	if counts.total > 0 then
-		add_status_text(
-			header,
-			(" · %d notes · %d suggestions"):format(counts.notes, counts.suggestions),
-			"DiffviewReviewStatusMuted"
-		)
-	end
-	table.insert(rows, header)
-
-	if guide then
-		local source = guide.source_path and vim.fn.fnamemodify(guide.source_path, ":~") or "unknown"
-		local source_prefix = "  Source: "
-		local source_width = width - review_format.display_width(source_prefix)
-		if review_format.display_width(source) > source_width then
-			source = vim.fn.pathshorten(source)
-		end
-		local source_row = status_row()
-		add_status_text(source_row, source_prefix, "DiffviewReviewStatusMuted")
-		add_status_text(
-			source_row,
-			truncate_display(source, source_width),
-			"DiffviewReviewStatusGuideInfo"
-		)
-		table.insert(rows, source_row)
-
-		local guide_counts = ("  Guide: schema %s · summary %s · change_map %d · high %d · validate %d · strategy %d · files %d"):format(
-			guide.schema_version or "?",
-			guide.summary and guide.summary ~= "" and "yes" or "no",
-			#(guide.change_map or {}),
-			#(guide.high_risk or {}),
-			#(guide.validation_focus or {}),
-			#(guide.review_strategy or {}),
-			#(guide.files or {})
-		)
-		local counts_row = status_row()
-		add_status_text(counts_row, truncate_display(guide_counts, width), "DiffviewReviewStatusMuted")
-		table.insert(rows, counts_row)
-	end
-
-	if guide and #(guide.change_map or {}) > 0 then
-		local title = status_row()
-		add_status_text(title, "  Change map:", "DiffviewReviewStatusMuted")
-		table.insert(rows, title)
-
-		for _, line in ipairs(guide.change_map) do
-			local prefix = "    "
-			local row = status_row()
-			add_status_text(row, prefix)
-			add_status_text(
-				row,
-				truncate_display(line, width - review_format.display_width(prefix)),
-				"DiffviewReviewStatusGuideInfo"
-			)
-			table.insert(rows, row)
-		end
-	end
-
-	if guide and guide.summary and guide.summary ~= "" then
-		local prefix = "  Summary: "
-		local indent = string.rep(" ", review_format.display_width(prefix))
-		local summary_lines = wrap_status_text(
-			guide.summary,
-			width - review_format.display_width(prefix),
-			width - review_format.display_width(indent)
-		)
-		for index, line in ipairs(summary_lines) do
-			local row = status_row()
-			if index == 1 then
-				add_status_text(row, prefix, "DiffviewReviewStatusMuted")
-			else
-				add_status_text(row, indent)
-			end
-			add_status_text(row, line, "DiffviewReviewStatusGuideInfo")
-			table.insert(rows, row)
-		end
-	end
-
-	local bullet_count = 0
-	for _, section in ipairs({
-		{ hl = "DiffviewReviewStatusGuideHigh", items = guide and guide.high_risk or {}, label = "High" },
-		{ hl = "DiffviewReviewStatusGuideMedium", items = guide and guide.validation_focus or {}, label = "Validate" },
-		{ hl = "DiffviewReviewStatusGuideInfo", items = guide and guide.review_strategy or {}, label = "Strategy" },
-	}) do
-		for _, item in ipairs(section.items) do
-			if bullet_count >= 3 then
-				break
-			end
-			local prefix = "  • "
-			local label = section.label .. ": "
-			local indent = string.rep(" ", review_format.display_width(prefix .. label))
-			local item_lines = wrap_status_text(
-				item,
-				width - review_format.display_width(prefix .. label),
-				width - review_format.display_width(indent)
-			)
-			for index, line in ipairs(item_lines) do
-				local row = status_row()
-				if index == 1 then
-					add_status_text(row, prefix, "DiffviewReviewStatusMuted")
-					add_status_text(row, label, section.hl)
-				else
-					add_status_text(row, indent)
-				end
-				add_status_text(row, line, "DiffviewReviewStatusGuideInfo")
-				table.insert(rows, row)
-			end
-			bullet_count = bullet_count + 1
-		end
-	end
-	table.insert(rows, status_row())
-end
-
-local function status_comment_row(entry, item, width)
-	local comment = entry.comment
-	local is_guide = review_format.is_guide_comment(comment)
-	local is_github = review_format.is_imported_github_comment(comment)
-	local label
-	if is_guide or is_github then
-		label = review_format.is_file_level_comment(comment) and "File-level"
-			or range_label(entry.start_line, entry.end_line)
-	else
-		label = line_range_label(entry.start_line, entry.end_line)
-	end
-	local row = status_row({ item = item, line = entry.start_line })
-	local indent = "    "
-	add_status_text(row, indent)
-
-	if is_github then
-		local author = comment.author and (" @" .. comment.author) or ""
-		local status = github_status_label(comment)
-		local status_text = status and (" [" .. status .. "]") or ""
-		local prefix = GITHUB_MARKER .. " " .. label .. author .. status_text .. ": "
-		add_status_text(row, GITHUB_MARKER, "DiffviewReviewStatusGithub")
-		add_status_text(row, " " .. label .. author .. status_text .. ": ", "DiffviewReviewStatusMuted")
-		add_status_text(
-			row,
-			truncate_display(comment_preview(comment), width - review_format.display_width(indent .. prefix)),
-			"DiffviewReviewStatusMuted"
-		)
-		return row
-	end
-
-	if not is_guide then
-		local prefix = COMMENT_MARKER .. " " .. label .. ": "
-		add_status_text(row, COMMENT_MARKER, "DiffviewReviewStatusComment")
-		add_status_text(row, " " .. label .. ": ", "DiffviewReviewStatusMuted")
-		add_status_text(
-			row,
-			truncate_display(comment_preview(comment), width - review_format.display_width(indent .. prefix)),
-			"DiffviewReviewStatusMuted"
-		)
-		return row
-	end
-
-	local guide_marker = GUIDE_MARKER
-	local severity_hl = "DiffviewReviewStatusGuideInfo"
-	local prefix = guide_marker .. " "
-	if comment.kind ~= "guide_note" then
-		local severity_key
-		local severity
-		severity, severity_key = review_format.severity_label(comment.severity)
-		guide_marker = review_format.severity_emoji(severity)
-		severity_hl = review_format.comment_highlights({ source = "guide", severity = severity_key }).status
-		prefix = guide_marker .. label .. ": "
-	end
-
-	add_status_text(row, prefix, severity_hl)
-	add_status_text(
-		row,
-		truncate_display(comment_preview(comment), width - review_format.display_width(indent .. prefix)),
-		"DiffviewReviewStatusMuted"
-	)
-	return row
-end
-
-local function count_file_comments(comments)
-	local counts = { github = 0, guide = 0, manual = 0, total = #comments }
-	for _, entry in ipairs(comments) do
-		if review_format.is_guide_comment(entry.comment) then
-			counts.guide = counts.guide + 1
-		elseif review_format.is_imported_github_comment(entry.comment) then
-			counts.github = counts.github + 1
-		else
-			counts.manual = counts.manual + 1
-		end
-	end
-	return counts
-end
-
-local function status_file_row(item, comments, width)
-	local counts = count_file_comments(comments)
-	local row = status_row({ item = item })
-	local marker_hl = item.viewed and "DiffviewReviewStatusViewed" or "DiffviewReviewStatusUnviewed"
-	local suffix_width = 0
-
-	if counts.guide > 0 then
-		suffix_width = suffix_width + review_format.display_width(GUIDE_MARKER .. counts.guide)
-	end
-	if counts.github > 0 then
-		if suffix_width > 0 then
-			suffix_width = suffix_width + 2
-		end
-		suffix_width = suffix_width + review_format.display_width(GITHUB_MARKER .. counts.github)
-	end
-	if counts.manual > 0 then
-		if suffix_width > 0 then
-			suffix_width = suffix_width + 2
-		end
-		suffix_width = suffix_width + review_format.display_width("💬" .. counts.manual)
-	end
-
-	local gap_width = suffix_width > 0 and 2 or 0
-	local path_width = math.max(12, width - 2 - gap_width - suffix_width)
-	add_status_text(row, item.viewed and "✓" or "○", marker_hl)
-	add_status_text(row, " ")
-	if suffix_width > 0 then
-		add_status_text(row, review_format.pad_right(truncate_display(item.path, path_width), path_width), "DiffviewReviewStatusFile")
-		add_status_text(row, "  ")
-		if counts.guide > 0 then
-			add_status_text(row, GUIDE_MARKER .. counts.guide, "DiffviewReviewStatusGuideInfo")
-		end
-		if counts.github > 0 then
-			if counts.guide > 0 then
-				add_status_text(row, "  ")
-			end
-			add_status_text(row, GITHUB_MARKER .. counts.github, "DiffviewReviewStatusGithub")
-		end
-		if counts.manual > 0 then
-			if counts.guide > 0 or counts.github > 0 then
-				add_status_text(row, "  ")
-			end
-			add_status_text(row, "💬" .. counts.manual, "DiffviewReviewStatusComment")
-		end
-	else
-		add_status_text(row, truncate_display(item.path, path_width), "DiffviewReviewStatusFile")
-	end
-	return row
-end
-
-function M.show_status()
-	local ctx = current_file_context()
-	if not require_active_diffview(ctx, "showing review status") or not require_repo_context(ctx, "showing review status") then
-		return
-	end
-	local markdown_lines = read_nonempty_file(active_guide_markdown_path(ctx))
-	if markdown_lines then
-		local width = math.max(48, math.floor(vim.o.columns * 0.62))
-		width = math.min(width, math.max(48, vim.o.columns - 4))
-		local height = math.max(10, math.floor(vim.o.lines * 0.82))
-		height = math.min(height, math.max(10, #markdown_lines))
-		local bufnr = vim.api.nvim_create_buf(false, true)
-		vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, markdown_lines)
-		vim.bo[bufnr].bufhidden = "wipe"
-		vim.bo[bufnr].filetype = "markdown"
-		vim.bo[bufnr].modifiable = false
-
-		local winid = vim.api.nvim_open_win(bufnr, true, {
-			border = "rounded",
-			col = math.max(math.floor((vim.o.columns - width) / 2), 0),
-			height = height,
-			relative = "editor",
-			row = math.max(math.floor((vim.o.lines - height) / 2), 0),
-			style = "minimal",
-			title = " Diffview Review Guide ",
-			title_pos = "center",
-			width = width,
-		})
-		vim.wo[winid].wrap = true
-
-		local function close_popup()
-			if vim.api.nvim_win_is_valid(winid) then
-				pcall(vim.api.nvim_win_close, winid, true)
-			end
-			if vim.api.nvim_buf_is_valid(bufnr) then
-				pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
-			end
-		end
-
-		vim.keymap.set("n", "q", close_popup, { buffer = bufnr, nowait = true, silent = true })
-		vim.keymap.set("n", "<Esc>", close_popup, { buffer = bufnr, nowait = true, silent = true })
-		return
-	end
-
-	M.show_review_dashboard()
-end
-
-function M.show_review_dashboard()
-	local ctx = current_file_context()
-	if not require_active_diffview(ctx, "showing review dashboard") or not require_repo_context(ctx, "showing review dashboard") then
+	if
+		not require_active_diffview(ctx, "showing review guide")
+		or not require_repo_context(ctx, "showing review guide")
+	then
 		return
 	end
 	local state, guide = load_state_with_guide(ctx)
-	local entries = order_review_entries_by_guide(review_entries(ctx.view, state), guide)
-	local width = math.max(48, math.floor(vim.o.columns * 0.58))
-	width = math.min(width, math.max(48, vim.o.columns - 4))
-	local content_width = math.max(40, width - 2)
-	local rows = {}
-	local line_to_action = {}
-	local comments_by_path = {}
-	local counts = { comments = 0, files = #entries, github = 0, guide = 0, reviewed = 0, unreviewed = 0 }
-
-	for _, item in ipairs(entries) do
-		if item.viewed then
-			counts.reviewed = counts.reviewed + 1
-		else
-			counts.unreviewed = counts.unreviewed + 1
-		end
-		local comments = comments_for_file(state, item.path)
-		comments_by_path[item.path] = comments
-		local file_counts = count_file_comments(comments)
-		counts.comments = counts.comments + file_counts.total
-		counts.github = counts.github + file_counts.github
-		counts.guide = counts.guide + file_counts.guide
-	end
-
-	add_review_summary(rows, counts)
-	add_guide_status(rows, state, guide, content_width)
-
-	for _, item in ipairs(entries) do
-		local comments = comments_by_path[item.path] or {}
-		local file_row = status_file_row(item, comments, content_width)
-		table.insert(rows, file_row)
-
-		for _, comment in ipairs(comments) do
-			table.insert(rows, status_comment_row(comment, item, content_width))
-		end
-	end
-	if #entries == 0 then
-		local row = status_row()
-		add_status_text(row, "No files in current Diffview", "DiffviewReviewStatusMuted")
-		table.insert(rows, row)
-	end
-	add_pr_description_status(rows, ctx, content_width)
-
-	local height = math.max(10, math.floor(vim.o.lines * 0.82))
-	height = math.min(height, math.max(10, #rows))
-	local bufnr = vim.api.nvim_create_buf(false, true)
-	local lines = {}
-	for index, row in ipairs(rows) do
-		lines[index] = row.text
-		line_to_action[index] = row.action
-	end
-	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-	vim.bo[bufnr].bufhidden = "wipe"
-	vim.bo[bufnr].filetype = "markdown"
-	vim.bo[bufnr].modifiable = false
-	for lnum, row in ipairs(rows) do
-		for _, chunk in ipairs(row.chunks) do
-			pcall(vim.api.nvim_buf_set_extmark, bufnr, STATUS_NS, lnum - 1, chunk.start_col, {
-				end_col = chunk.end_col,
-				hl_group = chunk.hl_group,
-				strict = false,
-			})
-		end
-	end
-
-	local winid = vim.api.nvim_open_win(bufnr, true, {
-		border = "rounded",
-		col = math.max(math.floor((vim.o.columns - width) / 2), 0),
-		height = height,
-		relative = "editor",
-		row = math.max(math.floor((vim.o.lines - height) / 2), 0),
-		style = "minimal",
-		title = " Diffview Review ",
-		title_pos = "center",
-		width = width,
-	})
-	vim.wo[winid].cursorline = true
-
-	local function close_popup()
-		if vim.api.nvim_buf_is_valid(bufnr) then
-			pcall(vim.api.nvim_buf_clear_namespace, bufnr, STATUS_NS, 0, -1)
-		end
-		if vim.api.nvim_win_is_valid(winid) then
-			pcall(vim.api.nvim_win_close, winid, true)
-		end
-		if vim.api.nvim_buf_is_valid(bufnr) then
-			pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
-		end
-	end
-
-	vim.keymap.set("n", "q", close_popup, { buffer = bufnr, nowait = true, silent = true })
-	vim.keymap.set("n", "<CR>", function()
-		local cursor_ok, cursor = pcall(vim.api.nvim_win_get_cursor, winid)
-		if not cursor_ok then
-			close_popup()
-			return
-		end
-		local action = line_to_action[cursor[1]]
-		if not action then
-			return
-		end
-		close_popup()
-		jump_to_entry(ctx.view, action.item, action.line)
-	end, { buffer = bufnr, nowait = true, silent = true })
-end
-
-apply_buffer_keymaps = function(bufnr)
-	if not vim.api.nvim_buf_is_valid(bufnr) then
-		return
-	end
-	vim.keymap.set("n", "<Tab>", function() M.next_unviewed_file(1) end, {
-		buffer = bufnr,
-		desc = "Next unreviewed Diffview file",
-		nowait = true,
-		silent = true,
-	})
-	vim.keymap.set("n", "<S-Tab>", function() M.next_unviewed_file(-1) end, {
-		buffer = bufnr,
-		desc = "Previous unreviewed Diffview file",
-		nowait = true,
-		silent = true,
-	})
+	local scope = ensure_review_scope(ctx, state)
+	ownership_scope.apply_order(ctx.view, guide)
+	guide_view.show(ctx.view, guide, review_entries(ctx.view, state), ctx.file, scope.enabled, function(item)
+		jump_to_entry(ctx.view, item)
+	end)
 end
 
 function M.diffview_keymaps()
-	-- Diffview local-review keymap contract:
-	-- <leader>gda/gdd/<leader>gdr add/delete/resolve comments, <leader>gdt replies, <leader>gdl re-anchors, <leader>gdv toggles reviewed,
-	-- <leader>gdg opens file guide context,
-	-- <leader>gds opens the review comment quickfix, <leader>gdS opens the detailed guide/status,
-	-- <leader>gdU opens the reviewed/unreviewed dashboard,
-	-- <leader>gdp posts after confirmation,
-	-- <leader>gd[/] jump comments,
-	-- and <Tab>/<S-Tab> move only through unreviewed files.
-	return {
-		view = {
-			{ "n", "<leader>gda", M.add_comment, { desc = "[G]it [D]iffview [A]dd Review Comment" } },
-			{ "x", "<leader>gda", M.add_comment_visual, { desc = "[G]it [D]iffview [A]dd Review Comment" } },
-			{ "n", "<leader>gdd", M.delete_comment, { desc = "[G]it [D]iffview [D]elete Review Comment" } },
-			{ "n", "<leader>gdr", M.resolve_comment, { desc = "[G]it [D]iffview [R]esolve/Hide Review Comment" } },
-			{ "n", "<leader>gdt", M.reply_comment, { desc = "[G]it [D]iffview Reply to [T]hread" } },
-			{ "n", "<leader>gdl", M.reanchor_comment, { desc = "[G]it [D]iffview Re[L]ocate Comment Anchor" } },
-			{ "x", "<leader>gdl", M.reanchor_comment_visual, { desc = "[G]it [D]iffview Re[L]ocate Comment Anchor" } },
-			{ "n", "<leader>gdg", M.show_guide_popup, { desc = "[G]it [D]iffview [G]uide" } },
-			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File Reviewed" } },
-			{ "n", "<leader>gds", M.show_comments_quickfix, { desc = "[G]it [D]iffview Review Comment Quickfix" } },
-			{ "n", "<leader>gdS", M.show_status, { desc = "[G]it [D]iffview Detailed Review Status" } },
-			{ "n", "<leader>gdU", M.show_review_dashboard, { desc = "[G]it [D]iffview Viewed/[U]nviewed Dashboard" } },
-			{ "n", "<leader>gdp", M.post_github_comments, { desc = "[G]it [D]iffview [P]ost GitHub Comments" } },
-			{ "n", "<leader>gd]", function() M.next_review_comment(1) end, { desc = "Next Diffview review comment" } },
-			{ "n", "<leader>gd[", function() M.next_review_comment(-1) end, { desc = "Previous Diffview review comment" } },
-			{ "n", "<Tab>", function() M.next_unviewed_file(1) end, { desc = "Next unreviewed Diffview file" } },
-			{ "n", "<S-Tab>", function() M.next_unviewed_file(-1) end, { desc = "Previous unreviewed Diffview file" } },
+	local shared = {
+		{ "n", "<leader>gdf", M.toggle_ownership_filter, { desc = "Toggle All/Phoenix CODEOWNERS scope" } },
+		{ "n", "<leader>gdR", M.refresh_review, { desc = "Refresh review (no guide generation)" } },
+		{ "n", "<leader>gdg", M.show_guide_popup, { desc = "PR flow and review route" } },
+		{ "n", "<leader>gdV", M.show_skim, { desc = "View whole review diff" } },
+		{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "Toggle file reviewed" } },
+		{ "n", "<leader>gds", M.show_comments_quickfix, { desc = "Review comment quickfix" } },
+		{ "n", "<leader>gdp", M.post_github_comments, { desc = "Post GitHub comments after confirmation" } },
+		{
+			"n",
+			"<leader>gd]",
+			function()
+				M.next_review_comment(1)
+			end,
+			{ desc = "Next review comment" },
 		},
-		file_panel = {
-			{ "n", "<leader>gdg", M.show_guide_popup, { desc = "[G]it [D]iffview [G]uide" } },
-			{ "n", "<leader>gdv", M.toggle_file_viewed, { desc = "[G]it [D]iffview Toggle File Reviewed" } },
-			{ "n", "<leader>gds", M.show_comments_quickfix, { desc = "[G]it [D]iffview Review Comment Quickfix" } },
-			{ "n", "<leader>gdS", M.show_status, { desc = "[G]it [D]iffview Detailed Review Status" } },
-			{ "n", "<leader>gdU", M.show_review_dashboard, { desc = "[G]it [D]iffview Viewed/[U]nviewed Dashboard" } },
-			{ "n", "<leader>gdp", M.post_github_comments, { desc = "[G]it [D]iffview [P]ost GitHub Comments" } },
-			{ "n", "<leader>gd]", function() M.next_review_comment(1) end, { desc = "Next Diffview review comment" } },
-			{ "n", "<leader>gd[", function() M.next_review_comment(-1) end, { desc = "Previous Diffview review comment" } },
-			{ "n", "<Tab>", function() M.next_unviewed_file(1) end, { desc = "Next unreviewed Diffview file" } },
-			{ "n", "<S-Tab>", function() M.next_unviewed_file(-1) end, { desc = "Previous unreviewed Diffview file" } },
+		{
+			"n",
+			"<leader>gd[",
+			function()
+				M.next_review_comment(-1)
+			end,
+			{ desc = "Previous review comment" },
+		},
+		{
+			"n",
+			"<leader>gdn",
+			function()
+				M.next_unviewed_file(1)
+			end,
+			{ desc = "Next unreviewed file" },
+		},
+		{
+			"n",
+			"<leader>gdN",
+			function()
+				M.next_unviewed_file(-1)
+			end,
+			{ desc = "Previous unreviewed file" },
 		},
 	}
+	local view, panel = vim.deepcopy(shared), vim.deepcopy(shared)
+	vim.list_extend(view, {
+		{ "n", "<leader>gda", M.add_comment, { desc = "Add review comment" } },
+		{ "x", "<leader>gda", M.add_comment_visual, { desc = "Add range review comment" } },
+		{
+			"n",
+			"<leader>gdA",
+			function()
+				M.add_comment({ ask = true })
+			end,
+			{ desc = "Ask Pi about this location" },
+		},
+		{
+			"x",
+			"<leader>gdA",
+			function()
+				M.add_comment_visual(true)
+			end,
+			{ desc = "Ask Pi about this range" },
+		},
+		{ "n", "<leader>gdd", M.delete_comment, { desc = "Delete review comment locally" } },
+		{ "n", "<leader>gdr", M.resolve_comment, { desc = "Resolve review comment locally" } },
+		{ "n", "<leader>gdt", M.reply_comment, { desc = "Reply to review thread" } },
+		{ "n", "<leader>gdl", M.reanchor_comment, { desc = "Relocate comment anchor" } },
+		{ "x", "<leader>gdl", M.reanchor_comment_visual, { desc = "Relocate range comment anchor" } },
+	})
+	vim.list_extend(panel, {
+		{ "n", "<leader>gdd", M.delete_comment, { desc = "Delete/dismiss file-level comment locally" } },
+		{ "n", "<leader>gdr", M.resolve_comment, { desc = "Resolve file-level comment locally" } },
+		{ "n", "<leader>gdt", M.reply_comment, { desc = "Reply/ask Pi about a file-level comment" } },
+	})
+	return { view = view, file_panel = panel }
 end
 
 function M.setup()
@@ -4924,6 +4119,10 @@ function M.setup()
 		group = group,
 		pattern = { "DiffviewViewPostLayout", "DiffviewDiffBufWinEnter" },
 		callback = function(event)
+			if event.match == "DiffviewViewPostLayout" then
+				local ctx = repo_context(current_view())
+				if ctx then ensure_review_scope(ctx, load_state(ctx)) end
+			end
 			vim.defer_fn(function()
 				M.apply_highlights()
 				M.refresh_visible()
@@ -4931,11 +4130,6 @@ function M.setup()
 					M.jump_to_initial_guide_file()
 					M.auto_import_github_comments()
 					M.start_agent_reply_polling(repo_context(current_view()))
-				end
-				for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-					if vim.api.nvim_win_is_valid(winid) then
-						apply_buffer_keymaps(vim.api.nvim_win_get_buf(winid))
-					end
 				end
 			end, 100)
 		end,
@@ -4954,6 +4148,14 @@ function M.setup()
 		force = true,
 		desc = "Add or update a local Diffview review comment",
 	})
+	vim.api.nvim_create_user_command("DiffviewReviewRefresh", M.refresh_review, {
+		force = true,
+		desc = "Reload review state and GitHub comments without regenerating guidance",
+	})
+	vim.api.nvim_create_user_command("DiffviewReviewAsk", function(opts)
+		opts.ask = true
+		M.add_comment(opts)
+	end, { nargs = "*", range = true, force = true, desc = "Save a question and ask the visible Pi review assistant" })
 	vim.api.nvim_create_user_command("DiffviewReviewDeleteComment", M.delete_comment, {
 		range = true,
 		force = true,
@@ -4982,21 +4184,17 @@ function M.setup()
 		force = true,
 		desc = "Toggle the current Diffview file reviewed state",
 	})
-	vim.api.nvim_create_user_command("DiffviewReviewStatus", M.show_status, {
-		force = true,
-		desc = "Show the detailed Diffview review guide, falling back to the review dashboard",
-	})
-	vim.api.nvim_create_user_command("DiffviewReviewDashboard", M.show_review_dashboard, {
-		force = true,
-		desc = "Show the Diffview viewed/unviewed review dashboard",
-	})
 	vim.api.nvim_create_user_command("DiffviewReviewCommentsQf", M.show_comments_quickfix, {
 		force = true,
 		desc = "Show Diffview review comments in quickfix",
 	})
+	vim.api.nvim_create_user_command("DiffviewReviewTogglePhoenix", M.toggle_ownership_filter, {
+		force = true,
+		desc = "Toggle All/Phoenix CODEOWNERS-owned changed files",
+	})
 	vim.api.nvim_create_user_command("DiffviewReviewGuide", M.show_guide_popup, {
 		force = true,
-		desc = "Show current-file Diffview review guide context",
+		desc = "Show the PR flow diagram and recommended review route",
 	})
 	vim.api.nvim_create_user_command("DiffviewReviewImportGithubComments", M.import_github_comments, {
 		force = true,

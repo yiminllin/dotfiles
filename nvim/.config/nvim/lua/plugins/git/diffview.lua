@@ -229,7 +229,13 @@ local function open_pr_diffview(opts)
 		)
 		return
 	end
-	local diffview_rev_arg = base_oid .. "..." .. head_oid
+	local merge_ok, merge_output = git_command(root, { "merge-base", base_oid, head_oid })
+	if not merge_ok then
+		notify_pr("Could not resolve the PR comparison base", vim.log.levels.ERROR)
+		return
+	end
+	base_oid = trim_command_output(merge_output)
+	local diffview_rev_arg = base_oid .. ".." .. head_oid
 
 	local review = review_module()
 	if review and review.set_active_guide_context then

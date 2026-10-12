@@ -57,16 +57,21 @@ function M.build_prompt(opts)
   local body = tostring(opts.body or ""):gsub("%s+", " ")
 
   return table.concat({
-    "A new automatic Diffview review request is ready.",
+    "A new Diffview review question is ready. Show your investigation and answer in this visible session.",
+    "Diff side: " .. tostring(opts.side or "RIGHT"),
     "Comment ID: " .. opts.comment_id,
     "Request ID: " .. opts.request_id,
     "Target: " .. opts.file .. ":" .. line_label,
     "Comment: " .. body,
     "State (read-only): " .. opts.state_path,
     "Reply artifact: " .. opts.reply_path,
+    "The user explicitly authorizes writing this exact reply artifact and " .. opts.reply_path .. ".tmp for this requested question, including outside the source repository. Do not ask again for these two files; this does not authorize other writes.",
     "Review the comment using this persistent review session and inspect relevant local code as needed.",
-    "Write one raw JSON object with comment_id, request_id, author, body, created_at, and optional status/error.",
-    "Write atomically via a temporary file in the same directory followed by rename to the exact reply artifact path.",
+    "If this discussion changes the PR flow or review order, update the shared diagram-first guide.json beside the state file, atomically.",
+    "Preserve its exact revision stamps and stable suggestion IDs. Keep full-PR context and do not edit review progress or ownership scope.",
+    "When you start this request, write a JSON status artifact with the exact IDs, status=running, and created_at.",
+    "When finished, replace it with one raw JSON object with comment_id, request_id, author, body, created_at, and status=completed or failed/error.",
+    "Write atomically via the reply artifact path plus .tmp, followed by rename to the exact reply artifact path.",
     "Do not edit diffview-review.json and do not mutate or post to GitHub.",
   }, " ")
 end
@@ -103,7 +108,13 @@ function M.ingest(state, state_path)
       local body = type(artifact.body) == "string" and vim.trim(artifact.body) or ""
       local error_message = type(artifact.error) == "string" and vim.trim(artifact.error) or ""
       local artifact_status = type(artifact.status) == "string" and artifact.status:lower() or ""
-      if artifact_status == "failed" or (body == "" and error_message ~= "") then
+      if artifact_status == "running" then
+        if comment.agent_status == "pending" then
+          comment.agent_status = "running"
+          comment.agent_updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ")
+          changed = true
+        end
+      elseif artifact_status == "failed" or (body == "" and error_message ~= "") then
         local failure = error_message ~= "" and error_message or "Persistent Pi review failed"
         if comment.agent_status ~= "failed" or comment.agent_error ~= failure then
           comment.agent_status = "failed"

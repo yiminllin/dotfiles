@@ -11,6 +11,8 @@ Produce a private guide that helps a human inspect a change efficiently. Accept 
 
 Default to private Markdown. Emit structured JSON only when requested or required by a local Diffview/prdv workflow. Read `references/output-templates.md` when exact artifact structure is needed.
 
+For diagram-first Diffview guides, load `code-diagram` and use its source checks and renderer. Produce one sentence, a concise PR-flow diagram, recommended file order with short reasons, and at most three risks/questions. Keep full-PR context even when the viewer filters ownership. An explicitly requested one-shot guide does not need a separate layout approval. When ongoing guide updates are authorized, revise the same artifact as conversation changes understanding; preserve exact revision stamps and stable suggestion IDs. Neovim owns comment state, reviewed-file progress, and ownership scope—do not edit those.
+
 ## Inputs
 
 Accept a PR number/URL, local branch, commit range, current-worktree diff boundary, Diffview/prdv context, or existing guide. For a bare PR number, establish the repo from the checkout or ask if ambiguous. If the local boundary is ambiguous, ask one short question rather than guessing. When remote access is unavailable or not approved, use a known local boundary if one exists; otherwise name the missing evidence and ask for network approval or a local ref. Do not initiate authentication.
