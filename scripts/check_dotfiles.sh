@@ -27,7 +27,7 @@ run_check() {
 }
 
 check_bash_syntax() {
-  local files=(install.sh install_minimal.sh scripts/*.sh tmux/.tmux/cycle-layouts.sh git/git-tree.sh tmux-powerline/.config/tmux-powerline/config.sh .githooks/pre-push)
+  local files=(install.sh install_minimal.sh scripts/*.sh tmux/.tmux/cycle-layouts.sh git/git-tree.sh .githooks/pre-push)
   local file
   for file in "${files[@]}"; do
     [ -f "$file" ] || continue
@@ -77,7 +77,7 @@ check_stow_dry_run() {
   command -v stow >/dev/null 2>&1 || return 77
   local target
   target="$(mktemp -d)"
-  stow --no --target "$target" bash bat fish flightsystems git kitty nvim pi task tmux tmux-powerline tmuxinator visidata >/dev/null
+  stow --no --target "$target" bash bat fish flightsystems git kitty nvim pi task tmux tmuxinator visidata >/dev/null
   local status=$?
   rm -rf "$target"
   return "$status"

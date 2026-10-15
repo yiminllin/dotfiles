@@ -237,7 +237,6 @@ CONFIGS=(
     nvim
     pi
     tmux
-    tmux-powerline
     tmuxinator
     visidata
 )

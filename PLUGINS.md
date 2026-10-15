@@ -191,7 +191,6 @@
 | tmux-resurrect | Save/restore sessions | [.tmux.conf](tmux/.tmux.conf) |
 | tmux-continuum | Auto-save sessions | [.tmux.conf](tmux/.tmux.conf) |
 | tmux-copycat | Enhanced search in copy mode | [.tmux.conf](tmux/.tmux.conf) |
-| tmux-powerline | Better status line | [.tmux.conf](tmux/.tmux.conf) |
 | vim-tmux-navigator | Seamless vim/tmux navigation | [.tmux.conf](tmux/.tmux.conf) |
 
 ---

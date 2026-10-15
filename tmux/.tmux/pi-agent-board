@@ -25,10 +25,10 @@ refresh_current_context() {
   current_window_id=""
 
   [[ -n "$current_pane" ]] || return 0
-  current_client=$(tmux display-message -p -t "$current_pane" '#{client_tty}' 2>/dev/null || true)
-  current_session_id=$(tmux display-message -p -t "$current_pane" '#{session_id}' 2>/dev/null || true)
-  current_session_name=$(tmux display-message -p -t "$current_pane" '#{session_name}' 2>/dev/null || true)
-  current_window_id=$(tmux display-message -p -t "$current_pane" '#{window_id}' 2>/dev/null || true)
+  IFS="$separator" read -r current_client current_session_id current_session_name current_window_id < <(
+    tmux display-message -p -t "$current_pane" \
+      "#{client_tty}${separator}#{session_id}${separator}#{session_name}${separator}#{window_id}" 2>/dev/null || true
+  ) || true
 }
 
 trim() {
