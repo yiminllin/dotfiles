@@ -279,11 +279,19 @@ impl App {
 
     fn visible_tasks(&self) -> Vec<&TaskView> {
         let filter = self.filter.to_ascii_lowercase();
+        let now = OffsetDateTime::now_utc();
+        let cutoff = now - time::Duration::days(1);
         let mut tasks: Vec<_> =
             self.tasks
                 .iter()
                 .filter(|view| {
-                    view.task.status == self.status
+                    (view.task.status == self.status
+                        || (self.status == TaskStatus::Pending
+                            && view.task.status == TaskStatus::Completed
+                            && view.task.completed_at.as_deref().is_some_and(|at| {
+                                OffsetDateTime::parse(at, &Rfc3339)
+                                    .is_ok_and(|at| at > cutoff && at <= now)
+                            })))
                         && (view.task.description.to_ascii_lowercase().contains(&filter)
                             || view.task.project.as_deref().is_some_and(|project| {
                                 project.to_ascii_lowercase().contains(&filter)
@@ -532,6 +540,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             app.mode = Mode::Search;
         }
         KeyCode::Char('d') => append_selected(app, Event::TaskCompleted)?,
+        KeyCode::Char('u') => append_selected(app, Event::TaskRestored)?,
         KeyCode::Char('x') => append_selected(app, Event::TaskDeleted)?,
         KeyCode::Char('b') => {
             if let Some(task) = app.selected_task() {
@@ -596,6 +605,7 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
 fn append_selected(app: &mut App, event: Event) -> Result<()> {
     if let Some(task) = app.selected_task() {
         if matches!(event, Event::TaskCompleted) && task.task.status != TaskStatus::Pending
+            || matches!(event, Event::TaskRestored) && task.task.status != TaskStatus::Completed
             || matches!(event, Event::TaskDeleted) && task.task.status == TaskStatus::Deleted
         {
             return Ok(());
@@ -618,7 +628,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
     let (mode, help) = match app.mode {
         Mode::Normal => (
             "",
-            "Tab view  j/k gg/G ^u/^d move  a add  e edit  d done  x delete  b block  / filter  q",
+            "Tab view  j/k gg/G ^u/^d move  a add  e edit  d done  u reopen  x delete  b block  / filter  q",
         ),
         Mode::Form(id) => (
             if id.is_some() {
@@ -699,7 +709,22 @@ fn draw(frame: &mut Frame, app: &mut App) {
             let is_empty = visible.is_empty();
             let descriptions: Vec<_> = visible
                 .iter()
-                .map(|view| wrap_description(&view.task.description, columns[4].width as usize))
+                .map(|view| {
+                    let completed = view.task.status == TaskStatus::Completed;
+                    let width =
+                        (columns[4].width as usize).saturating_sub(if completed { 2 } else { 0 });
+                    let mut description = wrap_description(&view.task.description, width);
+                    if completed {
+                        for (index, line) in description.lines.iter_mut().enumerate() {
+                            for span in &mut line.spans {
+                                span.style = span.style.add_modifier(Modifier::CROSSED_OUT);
+                            }
+                            line.spans
+                                .insert(0, Span::raw(if index == 0 { "✓ " } else { "  " }));
+                        }
+                    }
+                    description
+                })
                 .collect();
             let row_heights = descriptions.iter().map(|text| text.lines.len()).collect();
             let rows: Vec<_> = visible
@@ -707,7 +732,10 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 .zip(descriptions)
                 .flat_map(|(view, description)| {
                     let task = &view.task;
-                    let row_style = project_row_style(task.project.as_deref().unwrap_or(""));
+                    let mut row_style = project_row_style(task.project.as_deref().unwrap_or(""));
+                    if task.status == TaskStatus::Completed {
+                        row_style = row_style.add_modifier(Modifier::DIM);
+                    }
                     description
                         .lines
                         .into_iter()
@@ -1136,7 +1164,10 @@ mod tests {
         app.form.values[0] = "done task".to_string();
         save_form(&mut app, None).unwrap();
         handle_key(&mut app, KeyCode::Char('d')).unwrap();
-        assert!(app.visible_tasks().is_empty());
+        assert_eq!(app.visible_tasks()[0].task.status, TaskStatus::Completed);
+        let before = std::fs::read_to_string(&app.path).unwrap();
+        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
         handle_key(&mut app, KeyCode::Tab).unwrap();
         assert_eq!(app.status_name(), "Done");
         assert_eq!(app.visible_tasks()[0].task.status, TaskStatus::Completed);
@@ -1145,7 +1176,7 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
         handle_key(&mut app, KeyCode::Tab).unwrap();
         assert_eq!(app.status_name(), "Pending");
-        assert!(app.visible_tasks().is_empty());
+        assert_eq!(app.visible_tasks()[0].task.status, TaskStatus::Completed);
         handle_key(&mut app, KeyCode::BackTab).unwrap();
         assert_eq!(app.status_name(), "Done");
         assert_eq!(app.visible_tasks().len(), 1);
@@ -1153,6 +1184,118 @@ mod tests {
         for key in [KeyCode::Tab, KeyCode::BackTab] {
             handle_key(&mut app, key).unwrap();
             assert!(app.visible_tasks().is_empty());
+        }
+    }
+
+    #[test]
+    fn pending_view_includes_only_recent_completions_and_honors_filter() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        app.form.values[0] = "recent work".to_string();
+        save_form(&mut app, None).unwrap();
+        let now = OffsetDateTime::now_utc();
+        app.tasks[0].task.status = TaskStatus::Completed;
+        for (at, visible) in [
+            (
+                Some((now - time::Duration::hours(23)).format(&Rfc3339).unwrap()),
+                true,
+            ),
+            (
+                Some((now - time::Duration::hours(25)).format(&Rfc3339).unwrap()),
+                false,
+            ),
+            (
+                Some((now + time::Duration::hours(1)).format(&Rfc3339).unwrap()),
+                false,
+            ),
+            (Some("invalid".to_string()), false),
+            (None, false),
+        ] {
+            app.tasks[0].task.completed_at = at;
+            assert_eq!(!app.visible_tasks().is_empty(), visible);
+        }
+        app.tasks[0].task.completed_at = Some(now.format(&Rfc3339).unwrap());
+        app.filter = "missing".to_string();
+        assert!(app.visible_tasks().is_empty());
+        app.filter = "recent".to_string();
+        assert_eq!(app.visible_tasks().len(), 1);
+        app.tasks[0].task.status = TaskStatus::Deleted;
+        assert!(app.visible_tasks().is_empty());
+    }
+
+    #[test]
+    fn completed_rows_are_crossed_out_and_can_be_reopened() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        app.form.values = [
+            "wrapped description ".repeat(6),
+            "work".to_string(),
+            "H".to_string(),
+            "D".to_string(),
+        ];
+        save_form(&mut app, None).unwrap();
+        let id = app.selected_task().unwrap().task.id;
+        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let background = project_row_style("work").bg;
+        let buffer = terminal.backend().buffer();
+        let rows: Vec<_> = buffer
+            .content
+            .chunks(80)
+            .filter(|row| Some(row[1].bg) == background)
+            .collect();
+        assert!(rows.len() > 1);
+        let description_start = rows[0]
+            .iter()
+            .position(|cell| cell.symbol() == "✓")
+            .unwrap()
+            + 2;
+        for row in &rows {
+            assert!(row[1..79]
+                .iter()
+                .all(|cell| cell.modifier.contains(Modifier::DIM)));
+            assert!(row[..description_start]
+                .iter()
+                .all(|cell| !cell.modifier.contains(Modifier::CROSSED_OUT)));
+            assert!(row[description_start..79]
+                .iter()
+                .any(|cell| cell.symbol() != " "));
+            assert!(row[description_start..79]
+                .iter()
+                .filter(|cell| cell.symbol() != " ")
+                .all(|cell| cell.modifier.contains(Modifier::CROSSED_OUT)));
+        }
+        assert_eq!(
+            buffer
+                .content
+                .iter()
+                .filter(|cell| cell.symbol() == "✓")
+                .count(),
+            1
+        );
+        for view in [TaskStatus::Pending, TaskStatus::Completed] {
+            app.status = view;
+            handle_key(&mut app, KeyCode::Char('u')).unwrap();
+            let task = &app.tasks[0].task;
+            assert_eq!(task.id, id);
+            assert_eq!(task.status, TaskStatus::Pending);
+            assert!(task.completed_at.is_none());
+            app.status = TaskStatus::Pending;
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            assert!(terminal
+                .backend()
+                .buffer()
+                .content
+                .chunks(80)
+                .filter(|row| Some(row[1].bg) == background)
+                .all(|row| row[1..79].iter().all(|cell| !cell
+                    .modifier
+                    .intersects(Modifier::DIM | Modifier::CROSSED_OUT))));
+            let before = std::fs::read_to_string(&app.path).unwrap();
+            handle_key(&mut app, KeyCode::Char('u')).unwrap();
+            assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
+            handle_key(&mut app, KeyCode::Char('d')).unwrap();
         }
     }
 

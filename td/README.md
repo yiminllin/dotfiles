@@ -105,10 +105,19 @@ ready to migrate, intentionally rerun the import with
 - `a`: open the add form
 - `e`: open the edit form for the selected task
 - `d`: mark done
+- `u`: reopen the selected completed task (in either view)
 - `x`: delete
 - `b`: toggle blocked
 - `/`: filter tasks in the current view
 - `q`/Esc: quit from the task list
+
+The Pending table also keeps tasks completed within the last 24 hours in their
+usual urgency order. Completed rows are dimmed, with a ✓ marker and strikethrough
+on the description only. Project colors stay unchanged. Dimming depends on your
+terminal; it does not change background transparency. Press `u` to reopen an
+accidental completion.
+After 24 hours they disappear from Pending on the next interaction, but remain
+in Done. This uses a rolling 24-hour window, not the calendar day.
 
 The table border shows a bold colored view label: amber for Pending, green for
 Done, followed by the filter. The form header shows
