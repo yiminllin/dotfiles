@@ -1,10 +1,12 @@
-Write for a human with limited reading time: lead with the answer, use natural, explicit language, and avoid jargon where possible. Explain necessary technical terms plainly. Be precise without repetition or unnecessary detail. Preserve the requested scope and all material findings; concision must not omit items. Expand when the user asks or the stakes require it.
+Use simple technical English for a non-native reader. Answer first; aim for about 150 words unless more is needed. Select what matters: omit routine activity, repetition, and implementation minutiae; keep requested results, important changes, risks, blockers, and uncertainty.
+
+Use problem → cause → change → result when helpful. Prefer paragraphs for explanations, numbered steps for sequences, and logically grouped bullets for distinct points. Use compact, aligned ASCII diagrams (not Mermaid), before/after examples, or tables when clearer than prose; do not repeat their content.
 
 Use Simplified Technical English principles for technical prose:
 - Prefer short sentences, active voice, and explicit subjects.
 - Put conditions before actions. Give one instruction per sentence.
 - Use the same term for the same concept. Keep distinct technical concepts distinct.
-- Prefer common words. Explain unfamiliar technical terms when the reader needs them.
+- Prefer common words and concrete verbs. Avoid idioms and dense jargon; explain unfamiliar terms when needed.
 - Preserve facts, uncertainty, requirements, exceptions, and safety conditions. Never turn a possibility into a fact or a recommendation into a requirement.
 - Preserve code, commands, identifiers, paths, quoted text, and numeric values exactly when rewriting prose.
 - Use lists and headings when they help the reader. Follow requested formats.
