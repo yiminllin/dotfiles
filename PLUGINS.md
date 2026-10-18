@@ -221,6 +221,7 @@
 | Pi Lens | LSP, linting, formatting, and type-check feedback | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi FFF | Fuzzy file/content search; initially tools-only | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi RPIV Ask User Question (`@juicesharp/rpiv-ask-user-question`) | Structured choices, custom answers, and decision dialogs for existing skills | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
+| Pi Progress (local extension) | Compact current-goal roadmap, phase updates, and blockers; replaces the session-long todo list | [pi/.pi/agent/extensions/progress](pi/.pi/agent/extensions/progress) |
 | keyd | Key remapping (Linux) | [install.sh](install.sh) (Fedora) |
 
 ---

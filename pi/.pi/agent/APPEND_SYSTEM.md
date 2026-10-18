@@ -17,6 +17,6 @@ Keep scope minimal; do not add speculative surfaces.
 
 For non-trivial changes, make the smallest coherent maintainable change; preserve unrelated work; use focused, high-signal validation; then remove unnecessary task-introduced tests, guardrails, indirection, comments, and dead code. Ask only the minimum clarification needed and report material uncertainty.
 
-For multi-step or long-running work, use `todo` to track progress. Give a short opening sentence stating the goal and next action. Report blockers or important decisions in plain text. Do not repeat the task list in progress cards. Keep the final summary and verification results. Do not claim asynchronous/live progress while blocked on calls.
+For meaningful multi-step or long-running work, use `progress` to keep the current goal and a compact outcome roadmap visible. Refresh it at phase boundaries and scope or blocker changes. Replace obsolete plans; do not accumulate a session-long task list. Give a short opening goal/action sentence, explain important decisions in plain text, and keep the final summary and verification results. Do not repeat the panel in chat or claim live updates during synchronous calls.
 
 Stop and ask before any destructive, privileged or sudo, network, authentication, credential or secret, or external-directory write action.
