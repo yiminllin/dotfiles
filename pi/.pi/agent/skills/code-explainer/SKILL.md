@@ -1,13 +1,13 @@
 ---
 name: code-explainer
-description: Trace and explain call paths and code behavior across multi-language repositories. Use when asked to show a call graph, find callers/callees, locate entry points, map a subsystem, find where behavior lives, identify safe edit locations, explain how a function/module works, summarize code flow, or explain an error message with evidence.
+description: Explain code behavior and PR concepts with source evidence; choose core code snippets, pseudocode, diagrams, or a direct answer. Use for "explain this PR", "show the core change", "explain with code and a diagram", call paths, callers/callees, entry points, subsystem maps, safe edit locations, and error explanations.
 ---
 
 # Code Explainer
 
 ## Overview
 
-Provide high-level, conceptual understanding of code from a function, module, file, or directory. Summarize purpose, data flow, and key components with evidence. Answer the user's question directly, translate jargon, and mark uncertainty. Add diagrams or tables only when they clarify a multi-step flow.
+Explain the concept, not the size of the diff. Investigate source, identify the problem and core mechanism, then choose the smallest faithful explanation. Answer directly, translate jargon, and mark uncertainty. Coordinate code examples and diagrams when useful; do not require either for a simple question.
 
 ## Goals
 
@@ -25,20 +25,41 @@ Accept any of the following as the starting point:
 - File path
 - Directory path
 - Module/package name (language inferred when possible)
+- PR URL/number or a commit range
 - Error message / log snippet / stack trace
 - Behavior or change request, e.g. "where should this change go?" or "map this subsystem before editing"
 
 If the request is ambiguous, ask only one short clarifying question (e.g., "Do you want the whole module, or just a specific file?").
 
+## Choose the explanation
+
+Investigate enough source to choose the view. Load these procedures as needed; they are not separate agents:
+
+| What the reader needs | Action |
+|---|---|
+| A definition, location, narrow behavior, or error cause | Answer directly using the investigation workflows below. |
+| An algorithm, API, type, state transition, or core change | Read `../core-code-extractor/SKILL.md` and follow its snippet procedure. |
+| Architecture, ownership, dependencies, or message/data flow | Read `../code-diagram/SKILL.md` and follow its source-checking and rendering procedure. |
+| Both behavior and relationships, or an explicit request for both | Load both specialists; combine complementary views of the same verified scope. |
+
+Choose only useful views and honor explicit format requests. When combining views, use consistent names and put snippets beside the corresponding stages. Cover distinct major mechanisms, not every changed file. Follow the selected specialist's approval rules, including the diagram draft checkpoint.
+
 ## Workflow
 
-1. Identify the starting scope (function, file, or directory). Infer language from extension when possible.
+1. Identify the starting scope (symbol, behavior, file, directory, or change). Infer language from extension when possible.
 2. Locate top-level docs (README, module docs, docs/system) nearest to the scope; skim for purpose.
 3. Read the main entry points (public functions, traits, structs/classes, or binaries) for responsibilities and inputs/outputs.
 4. Identify key collaborators: dependencies, interfaces, or major subsystems it connects to.
 5. Trace minimal, representative call paths only if needed to clarify behavior.
 6. Double-check the most important claims by re-reading the relevant code regions.
-7. Summarize purpose, responsibilities, data flow, and boundaries with file references and clear confidence levels.
+7. Select the explanation view above; summarize the core mechanism and consequence with file references and material uncertainty.
+
+### PR / change workflow
+
+1. Verify head/base revisions and changed files; obtain permission before network/auth operations. Read implementation and necessary unchanged callers/consumers at those revisions, not today's checkout. Use PR prose for intent, not proof; distinguish this PR from stack context or future work.
+2. Default to explicit before/after when both revisions are available and the contrast explains the change. Have the selected specialists generate the code or structural comparison. One comparison is enough; do not force paired views in both formats. Preserve actual old/new symbol names.
+3. Verify each side independently. If source is missing, ask for it or disclose the limitation; never invent the missing side. Use an after-only view for conceptual questions or an explicit after-only request.
+4. Check that the reader can identify the old behavior, new behavior, and consequential difference—not only the final design.
 
 ### Error-message workflow (use when input is an error/log/stack trace)
 
@@ -64,7 +85,7 @@ Do not propose a broad redesign. The goal is a compact map and safe-change guida
 
 ## Search strategy
 
-Prefer Pi's `grep`, `find`, and `read` tools and open only the minimal set of files. Avoid speculation; label inferred links as "likely."
+Use the available file search and read tools and open only the relevant files. Avoid speculation; label inferred links as "likely."
 
 Common patterns:
 - Rust: `fn name`, `impl Type { fn name`, `trait .*fn name`, calls: `name(`, `Type::name(`, `self.name(`.
@@ -115,9 +136,4 @@ Stop expanding when:
 
 ## Output format
 
-Start with the direct answer and precise file evidence. For a simple question, stop there. When a structural view is clearer than prose, choose the smallest useful view:
-- Call tree for execution order or data flow.
-- Shallow file tree for ownership and module boundaries.
-- Before/after structural diff for changes to calls or file layout.
-
-Show only relevant nodes, cite the source, and label inferred links. Otherwise use prose. Do not repeat the view in a paragraph or require a diagram for every answer. Add boundaries or safe edit locations only when needed. Define essential technical terms plainly; avoid a fixed section template. Include uncertainty and the next decisive check only when material.
+Start with the direct answer or conceptual change and precise source evidence. Use the selected specialist's format; for a simple question, stop at the direct answer. Avoid a fixed report template and do not repeat snippets or diagrams in prose. Define essential terms plainly. Include boundaries, safe edit locations, uncertainty, or the next decisive check only when relevant.
