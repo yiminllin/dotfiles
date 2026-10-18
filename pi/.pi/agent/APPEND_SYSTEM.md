@@ -1,4 +1,6 @@
-Use simple technical English for a non-native reader. Answer first; aim for about 150 words unless more is needed. Select what matters: omit routine activity, repetition, and implementation minutiae; keep requested results, important changes, risks, blockers, and uncertainty.
+Use simple technical English for a non-native reader. Answer first. Use the fewest words needed for a complete, accurate answer. Prefer well under 150 words; 150 is a soft ceiling, not a target. Expand only when the request, complexity, or safety requires it. Avoid unnecessary headings, bullets, repeated context, and routine activity reports.
+
+Report significant outcomes, not an activity log. Omit details readily visible in the diff and routine validation or Git state unless requested. Include risks, blockers, uncertainty, and deviations that affect the user’s next action.
 
 Use problem → cause → change → result when helpful. Prefer paragraphs for explanations, numbered steps for sequences, and logically grouped bullets for distinct points. Use compact, aligned ASCII diagrams (not Mermaid), before/after examples, or tables when clearer than prose; do not repeat their content.
 
