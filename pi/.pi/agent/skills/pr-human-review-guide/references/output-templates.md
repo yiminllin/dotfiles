@@ -1,78 +1,107 @@
 # PR Human Review Guide Output Templates
 
-Use only after `SKILL.md` routes a request into private review mode, using the resolved local or approved live PR boundary. Return raw artifact content without a fenced wrapper.
+Follow `../SKILL.md` for review procedure, labels, permissions, and persistent updates. Return raw Markdown or JSON without an outer fence.
+
+## Shared contract
+
+Use the six sections below. Through `../../code-explainer/SKILL.md`, follow the snippet and diagram procedures; preserve renderer output unchanged. Show one explicit before/after comparison at the same abstraction level, with source references for each revision. A companion view may be labeled after-only. Disclose missing evidence instead of inventing a side.
+
+Keep the overview concise and the route top-down. Include all changed files and all substantive review items, without a count cap. Separate findings from questions and validation gaps; state when no evidence-backed findings were established. Proposed comments need author-facing wording, evidence, impact or reason for asking, and uncertainty.
 
 ## Markdown skeleton
 
-```markdown
-## TL;DR
-- <review route and highest-risk unknown>
-- <validation focus>
+````markdown
+## Goal
+<one high-level sentence: problem and intended outcome>
 
-## High-level summary
-<conceptual layers changed>
+## Behavior change
+- Before (`<base SHA>`): <old behavior>
+- After (`<head SHA>`): <same path, new behavior>
+- Key difference: <observable consequence>
 
-## Review goal
-<optional focused goal>
-
-## Context
-- Diff boundary: `<base>...<head>`
-- PR metadata: <number/title/URL and head SHA, if verified or supplied>
-- Intent: <summary>
-- Main risk: <risk>
-- Validation focus: <focus>
-
-## Recommended inspection order
-1. `path/to/file` — <why first> [read carefully]
-
-## File map
-| Area | Files / globs | Review focus |
-| ---- | ------------- | ------------ |
-| <area> | `path/**` | <focus> |
-
-## File-by-file Diffview guide
-### 1. `path/to/file` [read carefully]
-**What this diff does**
-- <explanation>
-
-**Inspect in Diffview**
-- <specific behavior or edge case>
-
-**Suggested local comments/questions**
-- **Medium** — `path/to/file:10-20`: <wording>
-  - Why it matters: <risk/context>
-
-## Files covered by map only
-- `path/**` — <why no detailed section is needed>
-
-## Questions
-| Category | Anchor | Question | Why it matters |
-| -------- | ------ | -------- | -------------- |
-| Verification gap | `path/test` | <question> | <impact> |
-
-## Validation / coverage notes
-- <observed checks and gaps>
+## PR flow
+```text
+<source-backed BEFORE / AFTER diagram, or labeled AFTER ONLY companion>
 ```
+Sources: <paths/symbols and revisions; identify unchanged context>
 
-## Structured JSON skeleton
+## Core code
+**Core pseudocode — Before (`<base SHA>`)**
+```text
+<old mechanism>
+```
+**Core pseudocode — After (`<head SHA>`)**
+```text
+<same mechanism and abstraction level; expose the difference>
+```
+Sources: <paths/symbols, lines, and revisions>
+
+## Review route
+1. **Entry point** — `path` / `symbol` [read carefully]
+   - Why here: <role and connection to the next stage>
+   - Verify: <specific behavior or invariant>
+<continue through wiring, core behavior, effects/errors, tests, and supporting details>
+
+## Review focus
+### Suggested review comments — Findings
+<group by route stage/file; state explicitly if none were established>
+
+### Suggested review comments — Open questions / validation gaps
+<same grouping and comment format>
+
+Comment format:
+- **<severity/category> — <Finding/Question/Verification gap>** — `path:lines` (LEFT/RIGHT)
+  - Proposed comment: "<concern or question; requested change/evidence where appropriate>"
+  - Evidence / why: <trigger, impact, source support, and uncertainty>
+
+### Validation / coverage
+- Review depth: <deeply inspected versus mapped/skimmed; remaining scope>
+- Observed checks: <actually run and results; distinguish inspected tests and PR claims>
+- Gaps / internal follow-ups: <missing evidence or validation>
+- Comment status: <draft only; nothing posted>
+
+### Context
+- Boundary: <exact comparison and mode>
+- Base/head: <exact SHAs>
+- PR: <number/title/URL, if supplied or verified>
+````
+
+Use `Source excerpt` or `Simplified code` labels when appropriate. If the diagram provides the paired comparison, one labeled after-only code block is sufficient.
+
+## JSON skeleton
 
 ```json
 {
   "context": {
-    "diff_boundary": "base...head",
-    "base_oid": "exact comparison-base SHA when used by Diffview",
-    "head_oid": "exact head SHA when used by Diffview",
+    "diff_boundary": "exact inspected boundary",
+    "base_oid": "exact comparison-base SHA",
+    "head_oid": "exact head SHA",
     "pr_number": null,
     "title": null,
     "url": null
   },
-  "summary": "one-sentence takeaway",
-  "diagram": ["source-backed ASCII diagram: copy renderer output unchanged"],
-  "high_risk": ["at most three important risks or questions"],
+  "summary": "problem and intended outcome",
+  "behavior_change": {"before": "old behavior", "after": "new behavior and consequence"},
+  "diagram": ["unchanged renderer output; label BEFORE / AFTER or AFTER ONLY"],
+  "core_code": [
+    {
+      "label": "Core pseudocode",
+      "title": "Before: mechanism at base SHA",
+      "code": ["old mechanism"],
+      "sources": ["path:symbol:lines at base SHA"]
+    },
+    {
+      "label": "Core pseudocode",
+      "title": "After: same mechanism at head SHA",
+      "code": ["same abstraction level; expose the difference"],
+      "sources": ["path:symbol:lines at head SHA"]
+    }
+  ],
   "files": [
     {
       "path": "path/from/diff",
-      "reason": "short reason to inspect this file here",
+      "stage": "Entry point",
+      "reason": "symbol — why here; what to verify [read carefully]",
       "suggestions": [
         {
           "id": "stable-observation-id",
@@ -80,19 +109,25 @@ Use only after `SKILL.md` routes a request into private review mode, using the r
           "side": "RIGHT",
           "line": 10,
           "end_line": 12,
-          "body": "suggested local comment or question",
-          "why": "why it matters"
+          "body": "Finding: proposed author-facing comment",
+          "why": "source evidence, impact, and uncertainty"
         }
       ]
     }
-  ]
+  ],
+  "high_risk": ["cross-cutting item with anchor and uncertainty"],
+  "validation": {
+    "review_scope": "deeply inspected versus mapped/skimmed; state if no findings established",
+    "observed": ["checks actually run and results"],
+    "gaps": ["missing evidence or uncovered scope"]
+  }
 }
 ```
 
-For Diffview artifacts, record the exact comparison base and head SHA in `context.base_oid` and `context.head_oid`. Anchor LEFT suggestions to the comparison base and RIGHT suggestions to the head. Use stable suggestion IDs so refreshed guidance preserves local resolutions. Write one JSON artifact atomically; a separate Markdown artifact is not required.
+Order `files` by the review route. Include stage, symbol, what to verify, and depth in `reason` for older viewers. Unchanged entry points belong in diagram/code references, not the changed-file list.
 
-For diagram-first Diffview requests, load `code-diagram` and its layout instructions. Use its source evidence checks and bundled renderer; preserve every output line, including indentation and blank lines, in `diagram`. Explicitly requested one-shot guide generation does not require a separate layout approval. Aim for one coherent flow within 25 rows and 100 columns. Include the enabling input, changed mechanism, and observable consequence; keep verified unchanged dependencies when they explain the PR. Never invent connections.
+Keep file-specific comments in `suggestions`; prefix `body` with `Finding:`, `Question:`, or `Verification gap:`. Use `why` for supporting evidence. Reserve `high_risk` for cross-cutting items without duplicating comments; internal follow-ups belong in `validation.gaps`. Empty lists are valid. `end_line` and `why` are optional; use `null` for approximate lines. Anchor LEFT to `base_oid` and RIGHT to `head_oid`; preserve stable suggestion IDs.
 
-Order `files` by recommended review order and give each one a short `reason`. Include all changed files, even when Diffview is filtered to Phoenix ownership. Keep the takeaway to one sentence and risks/questions to at most three. Suggestions should be sparse or empty; detailed conversations belong in review threads. `end_line` and `why` are optional. Use exact paths and `null` for approximate lines.
+## Viewer compatibility
 
-For a persistent Diffview assistant, generate or refresh the guide only when missing, invalid, stale, lacking a diagram, or explicitly requested. Otherwise reuse it. Do not generate a separate Markdown guide. Explain activity and findings in the visible Pi conversation. When discussion changes understanding or inspection order, update the same guide atomically; do not rewrite it for every reply. Keep revision stamps and still-relevant suggestion IDs. Do not edit Diffview comment state, reviewed-file progress, or ownership filters.
+The current popup shows `summary`, `diagram`, ordered files/reasons, and only the first three `high_risk` items. Suggestions use the review-comment integration. It does not display `behavior_change`, `core_code`, `stage`, or `validation`. Store the full guide anyway; in persistent sessions, explain hidden content and remaining risks in visible Pi conversation. Do not claim full popup support or create a second Markdown artifact. Raw artifact requests still return only the artifact.
