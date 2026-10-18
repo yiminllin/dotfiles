@@ -59,6 +59,7 @@ struct App {
     filter: String,
     input: String,
     form: Form,
+    initial_form: Form,
     mode: Mode,
 }
 
@@ -105,7 +106,7 @@ fn project_row_style(project: &str) -> Style {
     Style::default().bg(background).fg(Color::Rgb(76, 91, 98))
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Form {
     values: [String; 4],
     blocked: bool,
@@ -115,6 +116,10 @@ struct Form {
 }
 
 impl Form {
+    fn has_changes(&self, initial: &Self) -> bool {
+        self.values != initial.values || self.blocked != initial.blocked
+    }
+
     fn options(&self) -> &[&str] {
         match self.active {
             1 => PROJECTS,
@@ -244,6 +249,7 @@ enum Mode {
     Normal,
     Form(Option<Uuid>),
     Command(Option<Uuid>),
+    ConfirmDiscard(Option<Uuid>),
     Search,
 }
 
@@ -262,6 +268,7 @@ impl App {
             filter: String::new(),
             input: String::new(),
             form: Form::default(),
+            initial_form: Form::default(),
             mode: Mode::Normal,
         };
         app.reload()?;
@@ -394,7 +401,13 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     app.form.insert = false;
                     app.form.cursor = previous(&app.form.values[0], app.form.cursor);
                 }
-                KeyCode::Esc => app.mode = Mode::Normal,
+                KeyCode::Esc => {
+                    app.mode = if app.form.has_changes(&app.initial_form) {
+                        Mode::ConfirmDiscard(id)
+                    } else {
+                        Mode::Normal
+                    };
+                }
                 KeyCode::Tab | KeyCode::Enter | KeyCode::BackTab => {
                     app.form.active =
                         (app.form.active + if key == KeyCode::BackTab { 4 } else { 1 }) % 5;
@@ -443,9 +456,20 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             match key {
                 KeyCode::Esc => app.mode = Mode::Form(id),
                 KeyCode::Enter if app.input == ":wq" => save_form(app, id)?,
+                KeyCode::Enter if app.input == ":q!" => app.mode = Mode::Normal,
                 KeyCode::Char(ch) => app.input.push(ch),
                 KeyCode::Backspace if app.input.len() > 1 => {
                     app.input.pop();
+                }
+                _ => {}
+            }
+            return Ok(false);
+        }
+        Mode::ConfirmDiscard(id) => {
+            match key {
+                KeyCode::Char('y' | 'Y') => app.mode = Mode::Normal,
+                KeyCode::Char('n' | 'N') | KeyCode::Esc | KeyCode::Enter => {
+                    app.mode = Mode::Form(id);
                 }
                 _ => {}
             }
@@ -516,6 +540,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                 insert: true,
                 ..Form::default()
             };
+            app.initial_form = app.form.clone();
             app.mode = Mode::Form(None);
         }
         KeyCode::Char('e') => {
@@ -532,6 +557,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     blocked: task.blocked,
                     ..Form::default()
                 };
+                app.initial_form = app.form.clone();
                 app.mode = Mode::Form(Some(id));
             }
         }
@@ -644,13 +670,17 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 "h/l 0/$ w/b move  i/a I/A insert  x delete  Enter/Tab next  :wq save  Esc cancel"
             },
         ),
+        Mode::ConfirmDiscard(_) => (
+            "DISCARD CHANGES?",
+            "Discard unsaved changes? y discard  n / Esc / Enter keep editing",
+        ),
         Mode::Command(id) => (
             if id.is_some() {
                 "EDIT TASK"
             } else {
                 "ADD TASK"
             },
-            "Enter runs :wq to save and close the form  Esc returns to the form",
+            "Enter runs :wq save or :q! discard  Esc returns to the form",
         ),
         Mode::Search => ("FILTER", "Enter apply  Esc cancel"),
     };
@@ -675,11 +705,15 @@ fn draw(frame: &mut Frame, app: &mut App) {
         chunks[0],
     );
     frame.render_widget(
-        Paragraph::new(help).style(Style::default().add_modifier(Modifier::DIM)),
+        Paragraph::new(help).style(if matches!(app.mode, Mode::ConfirmDiscard(_)) {
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().add_modifier(Modifier::DIM)
+        }),
         chunks[2],
     );
     match app.mode {
-        Mode::Form(_) => draw_form(frame, &app.form, chunks[1]),
+        Mode::Form(_) | Mode::ConfirmDiscard(_) => draw_form(frame, &app.form, chunks[1]),
         Mode::Search => draw_input(frame, "Filter", &app.input, app.input.len(), chunks[1]),
         Mode::Command(_) => draw_input(frame, "Command", &app.input, app.input.len(), chunks[1]),
         Mode::Normal => {
@@ -996,8 +1030,84 @@ mod tests {
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(!app.form.insert);
         handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::ConfirmDiscard(None)));
+        handle_key(&mut app, KeyCode::Char('y')).unwrap();
         assert!(matches!(app.mode, Mode::Normal));
         assert!(!app.path.exists());
+    }
+
+    #[test]
+    fn discard_confirmation_keeps_drafts_unless_explicitly_confirmed() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        for ch in "draft".chars() {
+            handle_key(&mut app, KeyCode::Char(ch)).unwrap();
+        }
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::Form(None)));
+        for cancel in [KeyCode::Char('n'), KeyCode::Esc, KeyCode::Enter] {
+            handle_key(&mut app, KeyCode::Esc).unwrap();
+            assert!(matches!(app.mode, Mode::ConfirmDiscard(None)));
+            let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let screen = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            assert!(screen.contains("Discard unsaved changes?"));
+            handle_key(&mut app, KeyCode::Char('x')).unwrap();
+            assert!(matches!(app.mode, Mode::ConfirmDiscard(None)));
+            handle_key(&mut app, cancel).unwrap();
+            assert!(matches!(app.mode, Mode::Form(None)));
+            assert_eq!(app.form.values[0], "draft");
+            assert!(!app.path.exists());
+        }
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        handle_key(&mut app, KeyCode::Char('y')).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
+        assert!(!app.path.exists());
+    }
+
+    #[test]
+    fn force_quit_discards_new_and_edited_forms_without_writing() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        for ch in "new".chars() {
+            handle_key(&mut app, KeyCode::Char(ch)).unwrap();
+        }
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        for ch in ":q!".chars() {
+            handle_key(&mut app, KeyCode::Char(ch)).unwrap();
+        }
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
+        assert!(!app.path.exists());
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        for ch in "saved".chars() {
+            handle_key(&mut app, KeyCode::Char(ch)).unwrap();
+        }
+        write_and_quit(&mut app);
+        let before = std::fs::read_to_string(&app.path).unwrap();
+        handle_key(&mut app, KeyCode::Char('e')).unwrap();
+        handle_key(&mut app, KeyCode::Char('x')).unwrap();
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::ConfirmDiscard(Some(_))));
+        handle_key(&mut app, KeyCode::Char('n')).unwrap();
+        for ch in ":q!".chars() {
+            handle_key(&mut app, KeyCode::Char(ch)).unwrap();
+        }
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
+        assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
+        handle_key(&mut app, KeyCode::Char('e')).unwrap();
+        assert_eq!(app.form.values[0], "saved");
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
     }
 
     #[test]

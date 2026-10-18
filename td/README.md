@@ -118,9 +118,14 @@ In the add/edit form:
 - Enter or Tab: move to the next field (wraps after blocked)
 - Shift-Tab: move to the previous field
 - `:wq` then Enter: save all fields and return to the task list
-- Esc: leave insert mode; press again to cancel from description normal mode
+- `:q!` then Enter: discard the form immediately, without confirmation
+- Esc: leave text insert mode; from normal mode or a choice field, request cancellation
 
-Use `:wq` from description normal mode or any choice field. In description
+If the form has unsaved changes, cancellation asks for confirmation: `y` discards;
+`n`, Esc, or Enter keeps editing. An unchanged form closes without a prompt.
+Opening a form or moving between fields does not count as a change.
+
+Use `:wq` or `:q!` from text normal mode or any choice field. In text
 insert mode, press Esc first; `:` remains ordinary text while inserting.
 Esc from the command prompt returns to the form without saving.
 
@@ -137,7 +142,7 @@ Project, priority, and estimate are choice fields. Use left/right arrows or Spac
 to cycle. Backspace/Delete selects unset (`-`). Project first letters select
 directly; `h`/`l` also cycle projects. Priority and estimate letters work in either
 case (`h` selects H, `l` selects L for priority, `q` selects Q for estimate).
-Esc cancels from any choice field. For blocked, `y` selects yes and `n` selects no;
+Esc requests cancellation from any choice field. For blocked, `y` selects yes and `n` selects no;
 Space or left/right still toggles it.
 
 - Projects: improve, work, code, note, read, opensource
