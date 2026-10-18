@@ -1,29 +1,42 @@
-# Compaction file inventories
+# Pi compaction
 
-Keeps large historical file inventories out of Pi's model context. Inventories below
-4,000 JSON characters use normal compaction. Once a session externalizes an inventory,
-later compactions carry it forward through compaction metadata, not inline file lists.
+## Automatic trigger
 
-- Writes JSON snapshots to `<project>/.pi/compaction-inventories/<uuid>.json`.
-- Stores paths and provenance only; does not copy referenced files or write to `~/notes`.
-- Replaces file-list tags and old inventory references with one absolute-path reference.
-- Keeps exact paths needed for current work in the generated summary.
-- Uses Pi's `compact()` with the same model, thinking level, split-turn handling, and
-  retained-message boundary. Summaries remain lossy; this does not validate their facts.
-- Leaves virtual-model selections on Pi's default compaction path.
-- Uses Pi's effective retry settings and normal retryable-error classification, including
-  default limits and backoff. Reports scheduled retries and honors cancellation.
-- Cancels after retries are exhausted, on non-retryable generation failures, or on storage
-  failure, without starting an extra default compaction or saving a broken reference.
-- Keeps the full inventory in session metadata as well as the JSON snapshot. Snapshots
-  are local session artifacts, not durable notes, and are not automatically deleted.
-  If an inventory file is removed, the next successful compaction recreates the cumulative
-  inventory from metadata. A summary reference alone does not load the file into context.
+Pi's native automatic compaction triggers just above 60% for the two enabled models:
 
-Load through the normal stowed user extensions directory, then run `/reload` in existing
-Pi sessions. For a one-off test, use `pi --extension <path-to-this-directory>`.
+| Model | Context window | Trigger |
+|---|---:|---:|
+| `openai-codex/gpt-6.1-sol` | 500,000 | 300,000 |
+| `openai-codex/gpt-6-luna` | 272,000 | 163,200 |
 
-Offline verification (no provider calls):
+Per-model `compaction.modelOverrides` reserves set the trigger. The extension uses the
+ordinary `compaction.reserveTokens` (16,384) for summary generation, so earlier triggers
+do not increase summary limits. Recent-message retention and configured retries are unchanged.
+Native compaction hooks, including memory flushing, still run. `compaction.enabled: false`
+still disables automatic compaction. Other models retain native fallback thresholds.
+
+A large tool batch can overshoot the trigger. Recalculate the absolute reserves if model
+windows change. The 60% threshold is an experiment, not a proven quality boundary.
+
+## File inventories
+
+- Inventories below 4,000 JSON characters stay inline. Larger inventories move to
+  `<project>/.pi/compaction-inventories/<uuid>.json`, with one reference in the summary.
+- Cumulative paths remain in session metadata. Once externalized, later compactions
+  keep using a snapshot. A later successful compaction recreates a deleted snapshot.
+- Snapshots contain historical paths and provenance, not current Git status or copies
+  of source files. They are not automatically deleted and never go into `~/notes`.
+- Essential current paths stay in the summary. The assistant must explicitly read an
+  inventory when needed; references do not load automatically.
+- Summary generation keeps Pi's model, thinking level, recent-message boundary, and
+  retry policy. Virtual selections use Pi's default path. Summaries remain lossy.
+- Exhausted retries, permanent errors, cancellation, or storage failure leave no new
+  checkpoint; the extension does not start an extra default compaction.
+
+Load through the stowed user extensions directory. Run `/reload` in existing Pi sessions
+to reload settings and the extension. For a one-off load: `pi --extension <directory>`.
+
+Offline tests (no provider calls):
 
 ```sh
 node --test pi/.pi/agent/extensions/compaction-inventory/test.mjs

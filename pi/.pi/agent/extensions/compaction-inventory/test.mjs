@@ -12,6 +12,8 @@ while (!existsSync(join(sdk, "dist/core/extensions/loader.js"))) {
   sdk = dirname(sdk);
 }
 const { loadExtensions } = await import(pathToFileURL(join(sdk, "dist/core/extensions/loader.js")));
+const { SettingsManager } = await import(pathToFileURL(join(sdk, "dist/core/settings-manager.js")));
+const { shouldCompact } = await import(pathToFileURL(join(sdk, "dist/core/compaction/compaction.js")));
 const source = fileURLToPath(new URL("index.ts", import.meta.url));
 const usage = { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 const manyPaths = Array.from({ length: 130 }, (_, i) => `src/historical-subsystem/file-${i}.rs`);
@@ -109,15 +111,61 @@ test("split turns use both normal summaries without summarizing retained message
   assert.equal(result.usage.output, usage.output * 2);
 });
 
-test("small inventories and virtual models use the default path", async (t) => {
+test("small inventories stay inline and virtual models use the default path", async (t) => {
   const f = await fixture(t);
   f.event.preparation.fileOps.read.clear();
-  assert.equal(await f.call(), undefined);
-  f.event.preparation.fileOps.read = new Set(manyPaths);
+  const { compaction } = await f.call();
+  assert.equal(compaction.details.inventory, undefined);
+  assert.match(compaction.summary, /<modified-files>/);
+  assert.deepEqual(await readdir(f.ctx.cwd), []);
   f.ctx.model.api = "pi-virtual";
   assert.equal(await f.call(), undefined);
-  assert.equal(f.requests.length, 0);
-  assert.deepEqual(await readdir(f.ctx.cwd), []);
+  assert.equal(f.requests.length, 1);
+});
+
+test("native settings trigger at 60% for both enabled models without increasing summary budgets", async (t) => {
+  const config = JSON.parse(await readFile(new URL("../../settings.json", import.meta.url), "utf8"));
+  const settings = SettingsManager.inMemory(config);
+  for (const [id, contextWindow, threshold] of [
+    ["gpt-6.1-sol", 500000, 300000],
+    ["gpt-6-luna", 272000, 163200],
+  ]) {
+    for (const large of [false, true]) {
+      const f = await fixture(t);
+      f.ctx.model = { ...f.ctx.model, id, provider: "openai-codex", contextWindow };
+      f.settings.compaction = config.compaction;
+      const effective = settings.getCompactionSettings(f.ctx.model);
+      assert.equal(contextWindow - effective.reserveTokens, threshold);
+      assert.equal(shouldCompact(threshold, contextWindow, effective), false);
+      assert.equal(shouldCompact(threshold + 1, contextWindow, effective), true);
+      assert.equal(effective.keepRecentTokens, 20000);
+      f.event.preparation.settings = effective;
+      if (!large) f.event.preparation.fileOps.read.clear();
+      const original = structuredClone(f.event.preparation);
+      const { compaction } = await f.call();
+      assert.equal(compaction.firstKeptEntryId, "retained-message");
+      assert.equal(f.requests[0].options.maxTokens, Math.floor(0.8 * 16384));
+      assert.deepEqual(f.event.preparation, original);
+      assert.equal(!!compaction.details.inventory, large);
+    }
+  }
+  assert.equal(shouldCompact(500000, 500000, { ...settings.getCompactionSettings(), enabled: false }), false);
+});
+
+test("summary reserve remains separately configurable and small inventories carry forward", async (t) => {
+  const f = await fixture(t);
+  f.settings.compaction = { reserveTokens: 8192 };
+  f.event.preparation.settings.reserveTokens = 200000;
+  f.event.preparation.fileOps.read.clear();
+  const first = (await f.call()).compaction;
+  assert.equal(f.requests[0].options.maxTokens, Math.floor(0.8 * 8192));
+  assert.equal(first.details.inventory, undefined);
+  f.event.branchEntries = [{ type: "compaction", fromHook: true, details: first.details }];
+  f.event.preparation.previousSummary = first.summary;
+  f.event.preparation.fileOps = { read: new Set(manyPaths), written: new Set(), edited: new Set() };
+  const second = (await f.call()).compaction;
+  assert.ok(second.details.modifiedFiles.includes("src/current.rs"));
+  assert.ok(second.details.inventory.path);
 });
 
 function failResponses(f, failures, errorMessage = "terminated") {

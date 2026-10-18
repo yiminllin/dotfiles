@@ -3,6 +3,13 @@
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-6.1-sol",
   "defaultThinkingLevel": "medium",
+  "compaction": {
+    "reserveTokens": 16384,
+    "modelOverrides": {
+      "openai-codex/gpt-6.1-sol": { "reserveTokens": 200000 },
+      "openai-codex/gpt-6-luna": { "reserveTokens": 108800 }
+    }
+  },
   "enabledModels": [
     "openai-codex/gpt-6.1-sol",
     "openai-codex/gpt-6-luna"

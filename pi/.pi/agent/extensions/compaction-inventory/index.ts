@@ -33,28 +33,34 @@ export default function (pi: ExtensionAPI) {
       written: new Set(event.preparation.fileOps.written),
       edited: new Set(event.preparation.fileOps.edited),
     };
-    // Pi does not carry file lists from extension-generated compactions itself.
-    if (previousDetails?.inventory?.version === 1) {
+    // Carry standard file metadata even when Pi skips extension-generated checkpoints.
+    if (Array.isArray(previousDetails?.readFiles)) {
       for (const path of previousDetails.readFiles) fileOps.read.add(path);
+    }
+    if (Array.isArray(previousDetails?.modifiedFiles)) {
       for (const path of previousDetails.modifiedFiles) fileOps.written.add(path);
     }
     const modified = new Set([...fileOps.written, ...fileOps.edited]);
     const readFiles = [...fileOps.read].filter((path) => !modified.has(path)).sort();
     const modifiedFiles = [...modified].sort();
-    if (!previousDetails?.inventory && JSON.stringify({ readFiles, modifiedFiles }).length < 4000) return;
+    const externalize = !!previousDetails?.inventory || JSON.stringify({ readFiles, modifiedFiles }).length >= 4000;
+    // Model-specific reserves set native trigger thresholds, not summary output budgets.
+    const settings = SettingsManager.inMemory(pi.getSettings());
+    const summaryReserve = settings.getCompactionSettings().reserveTokens;
 
-    const path = join(ctx.cwd, ".pi", "compaction-inventories", `${randomUUID()}.json`);
-    const reference = inventoryReference(path);
+    const path = externalize ? join(ctx.cwd, ".pi", "compaction-inventories", `${randomUUID()}.json`) : undefined;
+    const reference = path ? inventoryReference(path) : undefined;
     const preparation = {
       ...event.preparation,
       fileOps,
-      previousSummary: event.preparation.previousSummary
+      settings: { ...event.preparation.settings, reserveTokens: summaryReserve },
+      previousSummary: externalize && event.preparation.previousSummary
         ? `${withoutInventories(event.preparation.previousSummary)}\n\n${reference}`
-        : undefined,
+        : event.preparation.previousSummary,
     };
     const instructions = [
       event.customInstructions,
-      "Do not enumerate historical file inventories. Keep exact paths needed for current work; the full historical inventory is referenced separately.",
+      externalize && "Do not enumerate historical file inventories. Keep exact paths needed for current work; the full historical inventory is referenced separately.",
     ].filter(Boolean).join("\n\n");
 
     try {
@@ -70,7 +76,7 @@ export default function (pi: ExtensionAPI) {
           sessionId: options?.sessionId,
         }),
         undefined,
-        SettingsManager.inMemory(pi.getSettings()).getRetrySettings(),
+        settings.getRetrySettings(),
         {
           onRetryScheduled: (attempt, maxRetries, delayMs) => {
             ctx.ui.notify(`Compaction retry ${attempt}/${maxRetries} in ${Math.round(delayMs / 1000)}s`, "warning");
@@ -78,29 +84,28 @@ export default function (pi: ExtensionAPI) {
         },
       );
       if (event.signal.aborted) return { cancel: true };
-      const inventory = {
-        version: 1,
-        kind: "historical-file-inventory",
-        sessionId: ctx.sessionManager.getSessionId(),
-        createdAt: new Date().toISOString(),
-        cwd: ctx.cwd,
-        note: "Historical tool-access inventory, not current Git status. Relative paths are relative to cwd. Files may no longer exist. No source files or evidence were copied.",
-        readFiles,
-        modifiedFiles,
-      };
-      await mkdir(join(ctx.cwd, ".pi", "compaction-inventories"), { recursive: true });
-      await writeFile(path, `${JSON.stringify(inventory, null, 2)}\n`, { flag: "wx", mode: 0o600 });
-      return {
-        compaction: {
-          ...result,
-          summary: `${withoutInventories(result.summary)}\n\n${reference}`,
-          details: { readFiles, modifiedFiles, inventory: { version: 1, path } },
-        },
-      };
+      const details: InventoryDetails = { readFiles, modifiedFiles };
+      if (path) {
+        const inventory = {
+          version: 1,
+          kind: "historical-file-inventory",
+          sessionId: ctx.sessionManager.getSessionId(),
+          createdAt: new Date().toISOString(),
+          cwd: ctx.cwd,
+          note: "Historical tool-access inventory, not current Git status. Relative paths are relative to cwd. Files may no longer exist. No source files or evidence were copied.",
+          readFiles,
+          modifiedFiles,
+        };
+        await mkdir(join(ctx.cwd, ".pi", "compaction-inventories"), { recursive: true });
+        await writeFile(path, `${JSON.stringify(inventory, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+        result.summary = `${withoutInventories(result.summary)}\n\n${reference}`;
+        details.inventory = { version: 1, path };
+      }
+      return { compaction: { ...result, details } };
     } catch (error) {
       // After normal retries, do not fall through to a second compaction attempt.
       if (!event.signal.aborted) {
-        ctx.ui.notify(`Compaction inventory failed; compaction cancelled: ${error instanceof Error ? error.message : String(error)}`, "error");
+        ctx.ui.notify(`Compaction failed; no checkpoint saved: ${error instanceof Error ? error.message : String(error)}`, "error");
       }
       return { cancel: true };
     }
