@@ -16,10 +16,13 @@ Confirm the exact label from its `BUILD.bazel`. Repeats such as `--runs_per_test
 ```sh
 fetch-hil-logs <sha>
 hil-tools-cli fetch_hil_logs <sha> --local-directory ~/.hil
-gh workflow run p2-zip-system-hil-build.yml --ref <branch> --field dispatch_option=PHOENIX_ZIP_DELIVERY
+gh workflow run p2-zip-system-hil-build.yml --ref <branch> \
+  --field 'dispatch_option=ZIP_DELIVERY -> [PR GATING] flies a phoenix delivery mission w/ zip+droid in the loop'
 ```
 
 Fetches use `s3://platform2-testing-logs/p2-zip-system-hil/<sha>` and normally land under `~/.hil/<sha>/...`. Each fetch or dispatch requires explicit active-prompt network/auth approval. Suite/all-HIL options, runner overrides, stale-branch overrides, and hardware actions require exact separate approval.
+
+Read the selected ref’s workflow choices before dispatching. Copy the complete choice text, including its description. Never add `--unsafe-allow-old-branches` without separate explicit approval. Report dispatch or stale-code rejection separately from scenario failure.
 
 ## Local claimed HIL
 
