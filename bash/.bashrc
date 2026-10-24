@@ -89,12 +89,11 @@ if [ -z "$TMUX" ] && [ "$TERM" = "xterm" ]; then
     export TERM=xterm-256color
 fi
 
-# Execute fish shell, before loading bash related config
-if [ -z "$STARTEDFISH" ];
-then
-    export STARTEDFISH=1;
-    exec fish;
-    exit;
+# Keep Bash available when Fish is missing or cannot be executed.
+if [ -z "${STARTEDFISH:-}" ] && command -v fish >/dev/null 2>&1; then
+    export STARTEDFISH=1
+    exec fish
+    unset STARTEDFISH
 fi
 
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
