@@ -200,20 +200,6 @@ npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
 echo "Stowing configurations"
 
-# Cleanups
-if [ -e ~/.bash_profile ]; then
-    mv ~/.bash_profile ~/.bash_profile.backup
-fi
-if [ -e ~/.bashrc ]; then
-    mv ~/.bashrc ~/.bashrc.backup
-fi
-rm -rf ~/.config/fish
-
-# Clean up auto-generated lines from installers that don't support suppression flags
-if [ -e ~/.bashrc ]; then
-    sed -i '/source.*bazel-complete\.bash/d' ~/.bashrc
-fi
-
 CONFIGS=(
     bash
     bat
@@ -230,7 +216,7 @@ CONFIGS=(
 # Stow has no built-in backup-and-replace mode. Back up conflicting files first
 # so the repository remains authoritative, while preserving existing files for
 # recovery. Symlinks already pointing into this repository can be replaced.
-BACKUP_DIR="$HOME/.dotfiles-backups/$(date +%Y%m%d-%H%M%S)"
+BACKUP_DIR="$HOME/.dotfiles-backups/$(date +%Y%m%d-%H%M%S)-$$"
 REPO_REALPATH="$(cd "$SCRIPT_DIR" && pwd -P)"
 
 is_repo_symlink() {
