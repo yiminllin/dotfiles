@@ -67,18 +67,15 @@ function parse_git_dirty {
 source $HOME/.cargo/env
 export PATH="$HOME/.juliaup/bin:$PATH"
 export PATH="$HOME/.local/share/fnm:$PATH"
-eval "$(fnm env --use-on-cd)"
+if command -v fnm >/dev/null 2>&1; then
+    eval "$(fnm env --use-on-cd --shell bash)"
+fi
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="/opt/nvim-linux-x86_64/bin:$PATH"
 export PATH="$HOME/.fzf/bin:$PATH"
 export PATH="$HOME/go/bin:$PATH"
 export PATH="/usr/local/go/bin:$PATH"
 export PATH="/Library/TeX/texbin/:$PATH"
-FNM_PATH="/home/ubuntu/.local/share/fnm"
-if [ -d "$FNM_PATH" ]; then
-  export PATH="$FNM_PATH:$PATH"
-  eval "`fnm env`"
-fi
 export PS1="\[\e[30;47m\]\u\[\e[m\]\[\e[30;47m\]<\[\e[m\]\[\e[32;47m\]\w\[\e[m\]\[\e[30;47m\]>\[\e[m\]\[\e[33;47m\]\`parse_git_branch\`\[\e[m\] "
 export VISUAL="nvim"
 export EDITOR="nvim"
@@ -91,8 +88,6 @@ export PHOENIX_LOG_UPLOAD_S3_PREFIX="s3://developers-local-sim-logs/yimin.lin"
 if [ -z "$TMUX" ] && [ "$TERM" = "xterm" ]; then
     export TERM=xterm-256color
 fi
-
-. "$HOME/.local/bin/env"
 
 # Execute fish shell, before loading bash related config
 if [ -z "$STARTEDFISH" ];

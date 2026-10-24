@@ -127,10 +127,10 @@ export PATH="$HOME/.fzf/bin:$PATH"
 echo "Installing languages"
 # Install rustup without modifying shell configs
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
-curl -fsSL https://install.julialang.org | sh -s -- --yes
+curl -fsSL https://install.julialang.org | sh -s -- --yes --add-to-path=no
 # Install fnm without modifying shell configs
 curl -fsSL https://fnm.vercel.app/install | bash -s -- --skip-shell
-curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh
 if is_debian; then
     curl -fLO https://go.dev/dl/go1.25.5.linux-amd64.tar.gz && rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.25.5.linux-amd64.tar.gz && rm -rf go1.25.5.linux-amd64.tar.gz
     export PATH="/usr/local/go/bin:$PATH"

@@ -12,3 +12,4 @@ Personal dotfiles for macOS, Debian/Ubuntu, and Fedora. Main languages: Lua and 
 - Keep Markdown concise: simple technical English, short active sentences, and no repeated context. Preserve commands, behavior, requirements, and uncertainty. Link detailed guides instead of repeating them.
 - Update `PLUGINS.md` when installed tools or plugins change.
 - When removing, replacing, deprecating, or making a dependency optional, add it to `GONE_BUT_NOT_FORGOTTEN.md`: one table with linked names and short technical descriptions. Avoid duplicates; exclude version, install-method, and file-location changes.
+- Keep shell setup in tracked config. Disable installer profile edits and leave generated plugin files ignored.
