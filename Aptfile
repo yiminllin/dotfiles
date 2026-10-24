@@ -24,7 +24,6 @@ gh
 clangd
 clang-format
 lua5.4
-luarocks
 
 # Dependencies
 pkg-config

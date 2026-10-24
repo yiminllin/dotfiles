@@ -54,3 +54,6 @@
 | [Pi Lens](https://www.npmjs.com/package/pi-lens) | Adds language-server, lint, format, and type-check feedback to Pi workflows. |
 | [RPIV Todo](https://www.npmjs.com/package/@juicesharp/rpiv-todo) | Tracks a task list during Pi coding sessions. |
 | [nvim-dap](https://github.com/mfussenegger/nvim-dap) | Connects Neovim to debug adapters for breakpoints, stepping, and variable inspection. |
+| [LuaRocks](https://github.com/luarocks/luarocks) | Installs Lua libraries and builds native Lua modules. |
+| [luarocks.nvim](https://github.com/vhyrro/luarocks.nvim) | Creates a local LuaRocks environment and loads its libraries into Neovim. |
+| [hererocks](https://github.com/luarocks/hererocks) | Builds isolated Lua and LuaRocks environments. |

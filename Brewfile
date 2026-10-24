@@ -22,7 +22,6 @@ brew "llvm"          # clangd, clang-format are part of llvm/clang on macOS
 brew "clang-format"
 brew "python@3.12"
 brew "lua"
-brew "luarocks"
 brew "go"
 
 # Dependencies

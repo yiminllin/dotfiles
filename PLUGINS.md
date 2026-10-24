@@ -24,7 +24,6 @@
 | Essential/Core | aerial.nvim | Code outline/symbol navigator | [aerial.lua](nvim/.config/nvim/lua/plugins/essential/aerial.lua) |
 | Essential/Core | plenary.nvim | Lua utility library | [gitlinker.lua](nvim/.config/nvim/lua/plugins/git/gitlinker.lua), [todo-comments.lua](nvim/.config/nvim/lua/plugins/editing/todo-comments.lua) |
 | Essential/Core | nvim-web-devicons | File icons | Multiple plugins |
-| Essential/Core | luarocks.nvim | Lua package manager integration | [luarocks.lua](nvim/.config/nvim/lua/plugins/essential/luarocks.lua) |
 | Essential/Core | wilder.nvim | Enhanced command/search UI | [wilder.lua](nvim/.config/nvim/lua/plugins/essential/wilder.lua) |
 | Essential/Core | vim-tmux-navigator | Seamless tmux/vim navigation | [vim-tmux-navigator.lua](nvim/.config/nvim/lua/plugins/essential/vim-tmux-navigator.lua) |
 | Essential/Core | persistence.nvim | Session management | [persistence.lua](nvim/.config/nvim/lua/plugins/essential/persistence.lua) |
@@ -142,12 +141,6 @@
 | llvm/clang | C/C++ compiler | [Brewfile](Brewfile), [Dnffile](Dnffile) |
 | gcc/gcc-c++ | C/C++ compiler | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | make | Build automation | [Aptfile](Aptfile), [Dnffile](Dnffile) |
-
-### Package Managers
-
-| Tool | Purpose | Install Method |
-|------|---------|----------------|
-| luarocks | Lua package manager | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 
 ### Dependencies
 
