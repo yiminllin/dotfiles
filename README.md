@@ -1,5 +1,12 @@
 **Minimal install** (fish, nvim, tmux, fzf, rg only): `./install_minimal.sh`
 
+**Optional TeX installation:** The default installer skips MacTeX/TeX Live.
+For a full TeX distribution on macOS, Debian/Ubuntu, or Fedora, run:
+
+```bash
+bash scripts/install_tex.sh
+```
+
 **Fast local validation** (no sudo/network by default):
 
 ```bash

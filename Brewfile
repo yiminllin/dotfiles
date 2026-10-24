@@ -24,7 +24,6 @@ brew "python@3.12"
 brew "lua"
 brew "luarocks"
 brew "go"
-cask "mactex"
 
 # Dependencies
 brew "imagemagick"

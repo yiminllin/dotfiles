@@ -163,6 +163,12 @@
 | libfontconfig1-dev/fontconfig-devel | Fontconfig development files | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | uuid-dev/libuuid-devel | UUID development files | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 
+### Optional Document Tools
+
+| Tool | Purpose | Install Method |
+|------|---------|----------------|
+| MacTeX / TeX Live | Full TeX distribution; excluded from the default installation | Run `bash scripts/install_tex.sh` ([script](scripts/install_tex.sh)) |
+
 ### Fonts
 
 | Font | Purpose | Install Method |

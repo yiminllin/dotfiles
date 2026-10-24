@@ -25,7 +25,6 @@ clangd
 clang-format
 lua5.4
 luarocks
-texlive-full
 
 # Dependencies
 pkg-config
