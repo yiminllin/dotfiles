@@ -14,13 +14,6 @@ if test -d ~/dotfiles
             nvim --headless "+Lazy! sync" +qa >/dev/null 2>&1
         end
 
-        # Update Fish plugins
-        if test -x $run_onchange
-            $run_onchange fish-plugins fish/.config/fish/fish_plugins -- bash -c 'fish -c "fisher update" >/dev/null 2>&1'
-        else
-            fish -c "fisher update" >/dev/null 2>&1
-        end
-
         # Update Tmux plugins
         if test -f ~/.tmux/plugins/tpm/bin/update_plugins
             if test -x $run_onchange

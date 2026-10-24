@@ -38,11 +38,9 @@ type -q eza && abbr -a ls eza -lah --git
 type -q bat && abbr -a cat bat
 
 ################################################################################
-# FZF: one binding source (fzf.fish from fisher, or stock fzf --fish)
+# FZF built-in key bindings
 ################################################################################
-if functions -q fzf_configure_bindings
-    fzf_configure_bindings
-else if type -q fzf
+if type -q fzf
     fzf --fish | source
 end
 

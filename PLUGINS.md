@@ -176,14 +176,6 @@
 
 ---
 
-## Fish Plugins
-
-| Plugin | Purpose | Config File |
-|--------|---------|-------------|
-| fzf.fish | FZF integration for Fish | [fish_plugins](fish/.config/fish/fish_plugins) |
-
----
-
 ## Additional Tools
 
 | Tool | Purpose | Install Method |

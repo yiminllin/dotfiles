@@ -136,12 +136,4 @@ if command -v delta &>/dev/null; then
   git config --global core.pager delta
 fi
 
-################################################################################
-# Fish fzf plugin (optional: keybindings in fish)
-################################################################################
-if command -v fish &>/dev/null; then
-  echo "[minimal] Installing fish fzf plugin (fisher + fzf.fish)..."
-  fish -c "curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish -o /tmp/fisher.fish && source /tmp/fisher.fish && fisher install patrickf1/fzf.fish" 2>/dev/null || true
-fi
-
 echo "[minimal] Done. Start fish and run: nvim, tmux; use <leader>sf / <leader>sg in nvim for search."

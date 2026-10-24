@@ -303,11 +303,6 @@ if is_fedora; then
 fi
 
 ################################################################################
-# Install Fish Plugins
-################################################################################
-fish -c "curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish -o /tmp/fisher.fish && source /tmp/fisher.fish && fisher install patrickf1/fzf.fish"
-
-################################################################################
 # Install Tmux Packages
 ################################################################################
 if [ ! -d ~/.tmux/plugins/tpm ]; then

@@ -59,3 +59,4 @@
 | [hererocks](https://github.com/luarocks/hererocks) | Builds isolated Lua and LuaRocks environments. |
 | [Lua (standalone)](https://www.lua.org/) | Runs Lua scripts outside applications that embed a Lua runtime. |
 | [bazel.nvim](https://github.com/alexander-born/bazel.nvim) | Navigates Bazel definitions and BUILD files and retrieves target labels in Neovim. |
+| [fzf.fish](https://github.com/PatrickF1/fzf.fish) | Adds Fish shortcuts to search files, history, Git changes, processes, and variables. |
