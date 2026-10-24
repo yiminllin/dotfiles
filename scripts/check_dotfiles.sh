@@ -90,7 +90,7 @@ check_stow_dry_run() {
 
 check_pi_install_sources() {
   grep -q '^npm install -g --ignore-scripts @earendil-works/pi-coding-agent$' install.sh || return 1
-  grep -q '^npm install -g --ignore-scripts @earendil-works/pi-coding-agent >/dev/null 2>&1$' scripts/system_update.fish || return 1
+  grep -q '^run_update Pi npm install -g --ignore-scripts @earendil-works/pi-coding-agent$' scripts/system_update.fish || return 1
 }
 
 check_pi_config() {

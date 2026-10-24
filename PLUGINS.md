@@ -88,8 +88,8 @@
 | Essential | tldr | Command documentation | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Utilities | ncdu | Disk usage analyzer (TUI) | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Utilities | btop | System monitor | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
-| Utilities | nvtop | GPU monitor | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
-| Utilities | lazygit | Git TUI | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
+| Utilities | nvtop | GPU monitor | [Brewfile](Brewfile), [Dnffile](Dnffile) |
+| Utilities | lazygit | Git TUI | [Brewfile](Brewfile), [install.sh](install.sh) (Debian/Ubuntu), [Dnffile](Dnffile) |
 | Utilities | gh | GitHub CLI | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Clipboard | xsel | X11 clipboard (Linux) | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Clipboard | xclip | X11 clipboard (Linux) | [Aptfile](Aptfile), [Dnffile](Dnffile) |
@@ -107,7 +107,7 @@
 | Julia | juliaup | [install.sh](install.sh) |
 | Node.js | fnm (Fast Node Manager) | [install.sh](install.sh) |
 | Python | uv | [install.sh](install.sh) |
-| Python | python@3.12 | [Brewfile](Brewfile), [Aptfile](Aptfile) |
+| Python | python@3.12 | [Brewfile](Brewfile) |
 
 ### Language Servers (via Mason)
 

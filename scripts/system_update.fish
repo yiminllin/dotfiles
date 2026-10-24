@@ -5,38 +5,52 @@ function is_debian; test -f /etc/os-release && grep -Eiq "debian|ubuntu" /etc/os
 function is_fedora; test -f /etc/os-release && grep -Eiq "fedora" /etc/os-release; end
 function is_macos; test (uname -s) = "Darwin"; end
 
+# Keep successful updates quiet and show errors before stopping.
+function run_update
+    set -l label $argv[1]
+    set -e argv[1]
+    $argv >/dev/null
+    set -l update_status $status
+    if test $update_status -ne 0
+        echo "Failed: $label (exit $update_status)" >&2
+        exit $update_status
+    end
+    echo "Updated $label"
+end
+
 echo "Starting system update..."
 
 # OS Package Updates
 if is_debian
-    sudo apt-get update >/dev/null 2>&1 && sudo apt-get upgrade -y >/dev/null 2>&1
-    echo "Updated Debian packages"
+    run_update "APT package index" sudo apt-get update
+    run_update "Debian packages" sudo apt-get upgrade -y
 else if is_fedora
-    sudo dnf upgrade -y >/dev/null 2>&1
-    echo "Updated Fedora packages"
+    run_update "Fedora packages" sudo dnf upgrade -y
 else if is_macos
-    brew update >/dev/null 2>&1 && brew upgrade >/dev/null 2>&1
-    brew cleanup >/dev/null 2>&1
-    echo "Updated Homebrew packages"
+    run_update "Homebrew package index" brew update
+    run_update "Homebrew packages" brew upgrade
+    run_update "Homebrew cleanup" brew cleanup
 end
 
 # Rust & Cargo Tools
-rustup update >/dev/null 2>&1
+run_update Rust rustup update
 if test -f ~/dotfiles/Cargofile
-    cat ~/dotfiles/Cargofile | sed 's/#.*//;/^$/d' | xargs -n1 cargo install >/dev/null 2>&1
+    while read -l package
+        set package (string replace -r '#.*$' '' -- "$package" | string trim)
+        if test -n "$package"
+            run_update "Cargo tool $package" cargo install "$package"
+        end
+    end < ~/dotfiles/Cargofile
 end
-echo "Updated Rust/Cargo tools"
 
 # UV Tools
 if type -q uv
-    uv tool upgrade --all >/dev/null 2>&1
-    echo "Updated UV tools"
+    run_update "UV tools" uv tool upgrade --all
 end
 
 # Node/FNM
 if type -q fnm
-    fnm install --lts >/dev/null 2>&1
-    echo "Updated Node LTS"
+    run_update "Node LTS" fnm install --lts
 end
 
 # Pi
@@ -44,12 +58,6 @@ if not type -q npm
     echo "npm is required to update Pi" >&2
     exit 1
 end
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent >/dev/null 2>&1
-if test $status -eq 0
-    echo "Updated Pi"
-else
-    echo "Failed to update Pi" >&2
-    exit 1
-end
+run_update Pi npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
 echo "System update complete"

@@ -64,7 +64,9 @@ function parse_git_dirty {
   fi
 }
 
-source $HOME/.cargo/env
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env"
+fi
 export PATH="$HOME/.juliaup/bin:$PATH"
 export PATH="$HOME/.local/share/fnm:$PATH"
 if command -v fnm >/dev/null 2>&1; then
@@ -79,7 +81,9 @@ export PATH="/Library/TeX/texbin/:$PATH"
 export PS1="\[\e[30;47m\]\u\[\e[m\]\[\e[30;47m\]<\[\e[m\]\[\e[32;47m\]\w\[\e[m\]\[\e[30;47m\]>\[\e[m\]\[\e[33;47m\]\`parse_git_branch\`\[\e[m\] "
 export VISUAL="nvim"
 export EDITOR="nvim"
-export LS_COLORS=$(vivid generate solarized-light)
+if command -v vivid >/dev/null 2>&1; then
+    export LS_COLORS="$(vivid generate solarized-light)"
+fi
 export SHELL_PATH=$(which fish)
 export EDITOR_PATH=$(which nvim)
 export XDG_CONFIG_HOME="$HOME/.config"
