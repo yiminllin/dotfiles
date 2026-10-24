@@ -99,7 +99,6 @@
 | Utilities | nvtop | GPU monitor | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Utilities | lazygit | Git TUI | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Utilities | gh | GitHub CLI | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
-| Utilities | tmuxinator | Tmux session manager | [Brewfile](Brewfile), [Aptfile](Aptfile) |
 | Clipboard | xsel | X11 clipboard (Linux) | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Clipboard | xclip | X11 clipboard (Linux) | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | Clipboard | wl-clipboard | Wayland clipboard (Fedora) | [Dnffile](Dnffile) |
@@ -118,7 +117,6 @@
 | Python | uv | [install.sh](install.sh) |
 | Python | python@3.12 | [Brewfile](Brewfile), [Aptfile](Aptfile) |
 | Lua | lua/lua5.4 | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
-| Ruby | ruby | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 
 ### Language Servers (via Mason)
 

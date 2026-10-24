@@ -39,11 +39,9 @@ nvim
 :checkhealth
 ```
 
-For the first time starting tmux, use tmuxinator:
-
-```bash
-tmuxinator start home
-```
+Start tmux with `tmux`, then use prefix + f to open the session picker.
+Choose `~` for a home-directory workspace or select a discovered Git repository.
+The home entry is always available, even when no repositories are found.
 
 Tasks are managed by [td](td/README.md), a local CLI/TUI. Open it with prefix + T
 in tmux, or run `td`. See its README for Taskwarrior migration instructions.

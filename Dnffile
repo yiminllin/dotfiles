@@ -36,5 +36,4 @@ clang
 clang-format
 lua
 luarocks
-ruby
 golang

@@ -28,18 +28,24 @@ discover_repos() {
 }
 
 main() {
-    local repos workspace
+    local workspaces workspace
     local -a fzf_args=(--cycle --border=bold --footer "Session Finder")
 
-    repos=$(discover_repos)
-    [[ -n $repos ]] || exit 0
+    workspaces=$(
+        printf '%s\n' '~'
+        discover_repos
+    )
 
     if supports_fzf_tmux; then
         fzf_args+=(--tmux)
     fi
 
-    workspace=$(printf '%s\n' "$repos" | fzf "${fzf_args[@]}" || true)
+    workspace=$(printf '%s\n' "$workspaces" | fzf "${fzf_args[@]}" || true)
     [[ -n $workspace ]] || exit 0
+
+    if [[ $workspace == '~' ]]; then
+        workspace=$HOME
+    fi
 
     exec "$script_dir/tmux-sessionizer" "$workspace"
 }
