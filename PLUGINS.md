@@ -17,16 +17,12 @@
 | Essential/Core | cmp-path | Path completion source | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
 | Essential/Core | lspkind.nvim | Completion icons | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
 | Essential/Core | mini.hipatterns | Highlight patterns in text | [debugprint.lua](nvim/.config/nvim/lua/plugins/editing/debugprint.lua) |
-| Essential/Core | nui.nvim | UI components library | [leetcode.lua](nvim/.config/nvim/lua/plugins/misc/leetcode.lua) |
 | Essential/Core | nvim-treesitter | Syntax highlighting & parsing | [treesitter.lua](nvim/.config/nvim/lua/plugins/essential/treesitter.lua) |
 | Essential/Core | nvim-treesitter-context | Show code context | [treesitter-context.lua](nvim/.config/nvim/lua/plugins/essential/treesitter-context.lua) |
-| Essential/Core | telescope.nvim | Fuzzy finder | [telescope.lua](nvim/.config/nvim/lua/plugins/essential/telescope.lua) |
-| Essential/Core | telescope-fzf-native.nvim | FZF integration | [telescope.lua](nvim/.config/nvim/lua/plugins/essential/telescope.lua) |
-| Essential/Core | telescope-ui-select.nvim | UI improvements | [telescope.lua](nvim/.config/nvim/lua/plugins/essential/telescope.lua) |
 | Essential/Core | snacks.nvim | Modern picker/explorer/UI utilities | [snacks.lua](nvim/.config/nvim/lua/plugins/essential/snacks.lua) |
 | Essential/Core | trouble.nvim | Diagnostics & quickfix list | [trouble.lua](nvim/.config/nvim/lua/plugins/essential/trouble.lua) |
 | Essential/Core | aerial.nvim | Code outline/symbol navigator | [aerial.lua](nvim/.config/nvim/lua/plugins/essential/aerial.lua) |
-| Essential/Core | plenary.nvim | Lua utility library | [telescope.lua](nvim/.config/nvim/lua/plugins/essential/telescope.lua) |
+| Essential/Core | plenary.nvim | Lua utility library | [gitlinker.lua](nvim/.config/nvim/lua/plugins/git/gitlinker.lua), [todo-comments.lua](nvim/.config/nvim/lua/plugins/editing/todo-comments.lua) |
 | Essential/Core | nvim-web-devicons | File icons | Multiple plugins |
 | Essential/Core | luarocks.nvim | Lua package manager integration | [luarocks.lua](nvim/.config/nvim/lua/plugins/essential/luarocks.lua) |
 | Essential/Core | wilder.nvim | Enhanced command/search UI | [wilder.lua](nvim/.config/nvim/lua/plugins/essential/wilder.lua) |
@@ -54,7 +50,6 @@
 | UI/Visual | zen-mode.nvim | Distraction-free mode | [zenmode.lua](nvim/.config/nvim/lua/plugins/ui/zenmode.lua) |
 | Languages | godbolt.nvim | Compiler explorer integration | [godbolt.lua](nvim/.config/nvim/lua/plugins/languages/godbolt.lua) |
 | Languages | bazel.nvim | Bazel build system support | [bazel.lua](nvim/.config/nvim/lua/plugins/languages/bazel.lua) |
-| Misc | leetcode.nvim | LeetCode integration | [leetcode.lua](nvim/.config/nvim/lua/plugins/misc/leetcode.lua) |
 
 ---
 

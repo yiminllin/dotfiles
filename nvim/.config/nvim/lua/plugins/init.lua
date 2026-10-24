@@ -4,5 +4,4 @@ return {
 	{ import = "plugins.git" },
 	{ import = "plugins.languages" },
 	{ import = "plugins.ui" },
-	{ import = "plugins.misc" },
 }

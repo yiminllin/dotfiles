@@ -195,3 +195,9 @@ Install and auto-update flows use `scripts/run_onchange.sh` for selected
 manifest-driven steps. Checksums are stored under `~/.cache/dotfiles/`; set
 `DOTFILES_RUN_ONCHANGE_FORCE=1` or remove the matching cache stamp to force a
 skipped step to run again.
+
+## In-house replacement backlog
+
+- [ ] Replace LeetCode.nvim with a focused in-house coding-practice workflow.
+  The plugin has been removed; existing solutions under `~/interviews/leetcode`
+  remain available for the replacement to use.
