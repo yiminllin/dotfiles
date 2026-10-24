@@ -154,11 +154,6 @@ go install go.abhg.dev/gs@v0.30.1
 go install github.com/ankitpokhrel/jira-cli/cmd/jira@latest
 
 ################################################################################
-# Install TDF
-################################################################################
-cargo install --git https://github.com/itsjunetime/tdf.git
-
-################################################################################
 # Setup python venv for neovim
 ################################################################################
 uv venv ~/.venv/neovim

@@ -71,22 +71,16 @@
 | git-delta | Better git diff | [Cargofile](Cargofile) |
 | du-dust | Disk usage analyzer | [Cargofile](Cargofile) |
 | tokei | Line counter | [Cargofile](Cargofile) |
-| zoxide | Smart cd replacement | [Cargofile](Cargofile) |
 | vivid | LS_COLORS generator | [Cargofile](Cargofile) |
 | td | Local JSONL task CLI/TUI | [install.sh](install.sh), [td/README.md](td/README.md) |
 
-### Python Tools (via UV)
+### Python Tools
 
 | Tool | Purpose | Install File |
 | ------ | --------- | -------------- |
-| ipython | Enhanced Python REPL | [Uvfile](Uvfile) |
 | rexi | Interactive regex testing | [Uvfile](Uvfile) |
 | visidata | CSV/data visualization & editing | [Uvfile](Uvfile) |
-| pynvim | Python client for Neovim | [Uvfile](Uvfile) |
-| black | Python formatter | [Uvfile](Uvfile) |
-| isort | Python import sorter | [Uvfile](Uvfile) |
-| jupytext | Jupyter notebook text format | [Uvfile](Uvfile) |
-| jupyter-client | Jupyter kernel client | [Uvfile](Uvfile) |
+| pynvim | Python client for Neovim, installed in its dedicated venv | [install.sh](install.sh) |
 
 ### System Packages
 
@@ -143,8 +137,6 @@
 | ------ | --------- | ---------------- |
 | stylua | Lua formatter | Via Mason |
 | clang-format | C/C++ formatter | Via Mason, [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
-| black | Python formatter | Via Mason, [Uvfile](Uvfile) |
-| isort | Python import sorter | Via Mason, [Uvfile](Uvfile) |
 | rustfmt | Rust formatter | Via rustup ([install.sh](install.sh)) |
 | prettier | Multi-language formatter | Via Mason |
 
@@ -168,7 +160,6 @@
 | Tool | Purpose | Install Method |
 |------|---------|----------------|
 | imagemagick | Image processing (for image.nvim) | [Brewfile](Brewfile), [Aptfile](Aptfile) |
-| libmagickwand-dev | ImageMagick development files | [Aptfile](Aptfile) |
 | pkg-config/pkgconf-pkg-config | Build dependency metadata lookup | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | libfontconfig1-dev/fontconfig-devel | Fontconfig development files | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | uuid-dev/libuuid-devel | UUID development files | [Aptfile](Aptfile), [Dnffile](Dnffile) |

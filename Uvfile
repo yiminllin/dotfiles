@@ -1,14 +1,5 @@
 # CLI improvement
-ipython       # python
 rexi          # Interactive CLI for regex testing
 
 # Tools
-jiratui       # Terminal UI for Jira
 visidata      # Visualizing & Editing CSVs
-
-# Languages
-pynvim
-black
-isort
-jupytext
-jupyter-client
