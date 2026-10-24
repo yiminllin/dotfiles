@@ -57,5 +57,6 @@ vim.opt.inccommand = "split" -- Preview substitutions live
 vim.opt.ignorecase = true -- Case-insensitive searching UNLESS \C or capital in search
 vim.opt.smartcase = true
 
--- Language
-vim.g.python3_host_prog = "~/.venv/neovim/bin/python3"
+-- No configured plugin requires Neovim's Python providers.
+vim.g.loaded_python3_provider = 0
+vim.g.loaded_python_provider = 0

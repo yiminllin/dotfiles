@@ -154,13 +154,6 @@ go install go.abhg.dev/gs@v0.30.1
 go install github.com/ankitpokhrel/jira-cli/cmd/jira@latest
 
 ################################################################################
-# Setup python venv for neovim
-################################################################################
-uv venv ~/.venv/neovim
-~/.venv/neovim/bin/python3 -m ensurepip --upgrade
-~/.venv/neovim/bin/python3 -m pip install pynvim
-
-################################################################################
 # Install Cargo and UV Packages
 ################################################################################
 

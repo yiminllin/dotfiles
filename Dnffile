@@ -30,7 +30,6 @@ lazygit
 gh
 
 # Languages / tooling
-python3-neovim
 clang
 clang-format
 golang

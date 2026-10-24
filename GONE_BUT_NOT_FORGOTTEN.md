@@ -5,7 +5,7 @@
 | [zoxide](https://github.com/ajeetdsouza/zoxide) | Tracks visited directories and jumps to them by partial name. |
 | [Jupytext](https://github.com/mwouts/jupytext) | Converts Jupyter notebooks to text files and keeps the formats in sync. |
 | [jupyter-client](https://github.com/jupyter/jupyter_client) | Provides Python APIs to start Jupyter kernels and exchange messages with them. |
-| [pynvim](https://github.com/neovim/pynvim) | Lets Python plugins and programs control Neovim through its RPC API. |
+| [pynvim / python3-neovim](https://github.com/neovim/pynvim) | Lets Python plugins and programs control Neovim through its RPC API. |
 | [MagickWand](https://imagemagick.org/script/magick-wand.php) | Provides a C API for reading, converting, and editing images with ImageMagick. |
 | [Pandoc](https://github.com/jgm/pandoc) | Converts documents between Markdown, HTML, Word, LaTeX, and other formats. |
 | [tdf](https://github.com/itsjunetime/tdf) | Displays PDF documents in the terminal with search and asynchronous rendering. |
@@ -58,3 +58,4 @@
 | [luarocks.nvim](https://github.com/vhyrro/luarocks.nvim) | Creates a local LuaRocks environment and loads its libraries into Neovim. |
 | [hererocks](https://github.com/luarocks/hererocks) | Builds isolated Lua and LuaRocks environments. |
 | [Lua (standalone)](https://www.lua.org/) | Runs Lua scripts outside applications that embed a Lua runtime. |
+| [bazel.nvim](https://github.com/alexander-born/bazel.nvim) | Navigates Bazel definitions and BUILD files and retrieves target labels in Neovim. |

@@ -48,7 +48,6 @@
 | UI/Visual | oil.nvim | File browser | [oil.lua](nvim/.config/nvim/lua/plugins/ui/oil.lua) |
 | UI/Visual | zen-mode.nvim | Distraction-free mode | [zenmode.lua](nvim/.config/nvim/lua/plugins/ui/zenmode.lua) |
 | Languages | godbolt.nvim | Compiler explorer integration | [godbolt.lua](nvim/.config/nvim/lua/plugins/languages/godbolt.lua) |
-| Languages | bazel.nvim | Bazel build system support | [bazel.lua](nvim/.config/nvim/lua/plugins/languages/bazel.lua) |
 
 ---
 
@@ -74,7 +73,6 @@
 | ------ | --------- | -------------- |
 | rexi | Interactive regex testing | [Uvfile](Uvfile) |
 | visidata | CSV/data visualization & editing | [Uvfile](Uvfile) |
-| pynvim | Python client for Neovim, installed in its dedicated venv | [install.sh](install.sh) |
 
 ### System Packages
 
