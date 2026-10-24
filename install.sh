@@ -115,8 +115,14 @@ fi
 ################################################################################
 
 echo "Installing Fzf"
-rm -rf ~/.fzf/
-git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+if [ -d "$HOME/.fzf/.git" ]; then
+    git -C "$HOME/.fzf" pull --ff-only
+elif [ -e "$HOME/.fzf" ] || [ -L "$HOME/.fzf" ]; then
+    echo "Existing ~/.fzf is not a Git checkout. Move it aside and rerun." >&2
+    exit 1
+else
+    git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf"
+fi
 ~/.fzf/install --all --no-update-rc
 export PATH="$HOME/.fzf/bin:$PATH"
 

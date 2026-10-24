@@ -246,7 +246,10 @@ set -gx PHOENIX_LOG_UPLOAD_S3_PREFIX "s3://developers-local-sim-logs/yimin.lin"
 ################################################################################
 # FZF
 ################################################################################
-fzf --fish | source
+fish_add_path -p $HOME/.fzf/bin
+if type -q fzf
+    fzf --fish | source
+end
 
 ################################################################################
 # Vi-Mode System Clipboard
@@ -305,9 +308,6 @@ function pi --description "Run Pi and name its tmux Agent Board entry"
 
     return $pi_status
 end
-
-# fzf
-fish_add_path -p $HOME/.fzf/bin
 
 # direnv hook
 direnv hook fish | source
