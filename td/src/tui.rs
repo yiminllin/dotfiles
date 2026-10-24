@@ -1492,15 +1492,7 @@ mod tests {
     }
 
     #[test]
-    fn choices_wrap_and_match_taskwarrior_projects() {
-        let projects: Vec<_> = include_str!("../../task/.taskrc")
-            .lines()
-            .filter_map(|line| {
-                line.strip_prefix("urgency.uda.project.")
-                    .and_then(|line| line.split_once(".coefficient").map(|(project, _)| project))
-            })
-            .collect();
-        assert_eq!(&PROJECTS[1..], projects);
+    fn choices_wrap_for_all_fields() {
         let mut form = Form {
             active: 1,
             ..Form::default()

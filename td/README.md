@@ -17,7 +17,7 @@ Default canonical data lives at:
 ~/notes/todo/events.jsonl
 ```
 
-For tests or migration checks, avoid the canonical file and override the path:
+For tests, use a temporary event log:
 
 ```bash
 TD_EVENTS_PATH=/tmp/td-events.jsonl td list
@@ -46,23 +46,17 @@ Use empty values to clear project, priority, or estimate. Descriptions cannot be
 Loading rejects malformed logs, unsupported schemas, duplicate events or task
 creations, and updates without a preceding task creation.
 
-Taskwarrior Fish abbreviations are no longer configured. In existing Fish
-sessions, erase legacy abbreviations or restart the shell. In particular, an old
-`td` abbreviation may still need `abbr --erase td` before using this tool.
 `install.sh` builds this repository's `td/` crate and installs it into
 `~/.cargo/bin` with `cargo install --path "$SCRIPT_DIR/td" --root "$HOME/.cargo" --locked`.
 It does not use sudo or install a crates.io package named `td`.
-The legacy `task/` configuration is retained as a migration/scoring reference,
-but `install.sh` no longer installs or stows Taskwarrior.
 
 ## Urgency and ordering
 
-CLI lists and the TUI Pending view use descending urgency (higher scores first). This deliberately differs
-from `report.list.sort = urgency+` in `task/.taskrc`, while keeping the same scoring.
+CLI lists and the TUI Pending view use descending urgency (higher scores first).
 Ties use older creation time, then UUID. The TUI Done view instead sorts by
 completion time, newest first, with UUID as the tie-breaker. Tasks without a valid
 completion time appear last. The TUI has only Pending and Done views; the CLI
-still supports all statuses and keeps urgency ordering. Scoring matches the current Taskwarrior configuration for supported fields:
+still supports all statuses and keeps urgency ordering. Urgency uses these weights:
 
 - Priority A/H/M/L: 100/10/5/1; unset: 0
 - Estimate Q/H/D/W/M: 8/5/2/0.5/0.1; unset: 0
@@ -70,31 +64,8 @@ still supports all statuses and keeps urgency ordering. Scoring matches the curr
 - Blocked: -100
 - Age: 2 × whole days / 365, capped at 2; future or missing dates contribute 0
 
-This scorer does not implement Taskwarrior fields absent from td, such as due dates,
-tags, annotations, or dependencies. It does not read Taskwarrior configuration at
-runtime; update `src/urgency.rs` if those weights change.
-
-## Taskwarrior migration
-
-Do a dry run first against a saved export:
-
-```bash
-task export > /tmp/taskwarrior-export.json
-td --events /tmp/td-import-check.jsonl import taskwarrior /tmp/taskwarrior-export.json --dry-run
-```
-
-Validate the actual append path against a temporary event log before touching the
-canonical file:
-
-```bash
-td --events /tmp/td-import-check.jsonl import taskwarrior /tmp/taskwarrior-export.json
-td --events /tmp/td-import-check.jsonl list --status all --json
-```
-
-Actual import appends create events plus completed/deleted events as needed and
-skips Taskwarrior UUIDs already present in the target event log. When you are
-ready to migrate, intentionally rerun the import with
-`--events ~/notes/todo/events.jsonl`.
+Due dates, tags, annotations, and task dependencies are not supported.
+Update `src/urgency.rs` to change the weights.
 
 ## TUI keys
 
@@ -173,8 +144,7 @@ Space or left/right still toggles it.
 - Priorities: A, H, M, L
 - Estimates: Q, H, D, W, M
 
-These choices match `task/.taskrc`. Existing custom imported values stay unchanged
-until you select a replacement. The CLI still accepts free-form field values.
+Existing custom imported values stay unchanged until you select a replacement. The CLI still accepts free-form field values.
 Description is required. In the filter view, Enter applies the filter and Esc cancels.
 
 After changing the source, rebuild with `cargo build --manifest-path td/Cargo.toml`
