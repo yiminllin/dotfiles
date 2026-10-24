@@ -23,7 +23,6 @@ gh
 # Languages
 clangd
 clang-format
-lua5.4
 
 # Dependencies
 pkg-config

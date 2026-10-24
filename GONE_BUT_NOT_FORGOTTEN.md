@@ -57,3 +57,4 @@
 | [LuaRocks](https://github.com/luarocks/luarocks) | Installs Lua libraries and builds native Lua modules. |
 | [luarocks.nvim](https://github.com/vhyrro/luarocks.nvim) | Creates a local LuaRocks environment and loads its libraries into Neovim. |
 | [hererocks](https://github.com/luarocks/hererocks) | Builds isolated Lua and LuaRocks environments. |
+| [Lua (standalone)](https://www.lua.org/) | Runs Lua scripts outside applications that embed a Lua runtime. |

@@ -110,7 +110,6 @@
 | Node.js | fnm (Fast Node Manager) | [install.sh](install.sh) |
 | Python | uv | [install.sh](install.sh) |
 | Python | python@3.12 | [Brewfile](Brewfile), [Aptfile](Aptfile) |
-| Lua | lua/lua5.4 | [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
 
 ### Language Servers (via Mason)
 

@@ -33,5 +33,4 @@ gh
 python3-neovim
 clang
 clang-format
-lua
 golang
