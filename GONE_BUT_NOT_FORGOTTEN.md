@@ -53,3 +53,4 @@
 | [Pi MCP Adapter](https://www.npmjs.com/package/pi-mcp-adapter) | Connects Pi to tools exposed by MCP servers. |
 | [Pi Lens](https://www.npmjs.com/package/pi-lens) | Adds language-server, lint, format, and type-check feedback to Pi workflows. |
 | [RPIV Todo](https://www.npmjs.com/package/@juicesharp/rpiv-todo) | Tracks a task list during Pi coding sessions. |
+| [nvim-dap](https://github.com/mfussenegger/nvim-dap) | Connects Neovim to debug adapters for breakpoints, stepping, and variable inspection. |
