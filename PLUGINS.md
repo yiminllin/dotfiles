@@ -160,7 +160,7 @@
 
 | Tool | Purpose | Install Method |
 |------|---------|----------------|
-| imagemagick | Image processing (for image.nvim) | [Brewfile](Brewfile), [Aptfile](Aptfile) |
+| imagemagick | Image conversion for Snacks picker previews | [Brewfile](Brewfile), [Aptfile](Aptfile) |
 | pkg-config/pkgconf-pkg-config | Build dependency metadata lookup | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | libfontconfig1-dev/fontconfig-devel | Fontconfig development files | [Aptfile](Aptfile), [Dnffile](Dnffile) |
 | uuid-dev/libuuid-devel | UUID development files | [Aptfile](Aptfile), [Dnffile](Dnffile) |
@@ -203,17 +203,14 @@
 | fzf | Fuzzy finder | [install.sh](install.sh) |
 | Pi (`@earendil-works/pi-coding-agent`) | AI coding agent; skills, prompts, Neovim/tmux/Fish workflows, and pre-push documentation check | [install.sh](install.sh), [pi/.pi/agent](pi/.pi/agent) |
 | Pi BTW | Ephemeral side questions without interrupting the main session | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
-| Pi Tool Display | Compact tool output and richer edit/write diffs | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
+| Pi Quiet Tools (`pi-quiet-tools`) | Compact tool output and richer edit/write diffs | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi Web Access | Web search, content extraction, GitHub cloning, and video understanding | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
-| Pi Background Tasks | Durable background shell tasks and delegated investigations | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi Permission System | Permission gates for files, Bash, MCP, and extensions | [pi/.pi/agent/extensions/pi-permission-system/config.json](pi/.pi/agent/extensions/pi-permission-system/config.json) |
-| Pi Subagents | Scout, research, implementation, review, and second-opinion agents | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
-| Pi MCP Adapter | MCP server integration | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi Hermes Memory | Persistent memory, session search, and reusable skills | [pi/.pi/agent/hermes-memory-config.json](pi/.pi/agent/hermes-memory-config.json) |
-| Pi Lens | LSP, linting, formatting, and type-check feedback | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi FFF | Fuzzy file/content search; initially tools-only | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi RPIV Ask User Question (`@juicesharp/rpiv-ask-user-question`) | Structured choices, custom answers, and decision dialogs for existing skills | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi Progress (local extension) | Compact current-goal roadmap, phase updates, and blockers; replaces the session-long todo list | [pi/.pi/agent/extensions/progress](pi/.pi/agent/extensions/progress) |
+| Pi Compaction Inventory (local extension) | Externalize large file inventories during compaction and apply configured per-model compaction reserves | [pi/.pi/agent/extensions/compaction-inventory](pi/.pi/agent/extensions/compaction-inventory) |
 | keyd | Key remapping (Linux) | [install.sh](install.sh) (Fedora) |
 
 ---
