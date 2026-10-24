@@ -4,8 +4,6 @@
 # Personal API keys and tokens
 pi/.pi/agent/auth.json
 pi/.pi/agent/sessions/
-# Cursor agent
-cursor-agent/
 # SSH and private authentication keys
 **/id_*
 # Cryptographic key files

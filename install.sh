@@ -161,13 +161,12 @@ uv venv ~/.venv/neovim
 ~/.venv/neovim/bin/python3 -m pip install pynvim
 
 ################################################################################
-# Install Cargo, UV, Luarocks Packages
+# Install Cargo and UV Packages
 ################################################################################
 
 echo "Installing Cargo and UV packages"
 run_manifest_step cargo-tools Cargofile bash -c "sed 's/#.*//;/^$/d' Cargofile | xargs -n1 cargo install"
 run_manifest_step uv-tools Uvfile bash -c "sed 's/#.*//;/^$/d' Uvfile | xargs -n1 uv tool install"
-# sed 's/#.*//;/^$/d' Luarocksfile | xargs -n1 luarocks install
 
 ################################################################################
 # Install Keymapping Packages

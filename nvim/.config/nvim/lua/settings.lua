@@ -41,7 +41,6 @@ vim.opt.cursorline = true -- Highlight cursor line number
 vim.opt.signcolumn = "yes" -- Keep signcolumn on
 vim.opt.scrolloff = 10 -- Minimal number of screen lines to keep above and below the cursor
 vim.opt.termguicolors = true -- Enable 24 bit colors
-vim.g.gitblame_display_virtual_text = 0 -- Disable gitblame virtual text
 vim.opt.showbreak = "↪ " -- Showbreak symbol
 
 -- Indentation
@@ -57,9 +56,6 @@ vim.opt.incsearch = true -- Preview search live
 vim.opt.inccommand = "split" -- Preview substitutions live
 vim.opt.ignorecase = true -- Case-insensitive searching UNLESS \C or capital in search
 vim.opt.smartcase = true
-
--- Disable copilot autocomplete
-vim.g.copilot_enabled = false
 
 -- Language
 vim.g.python3_host_prog = "~/.venv/neovim/bin/python3"
