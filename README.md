@@ -3,6 +3,9 @@
 Neovim, Fish, tmux, and Kitty configuration for macOS, Debian/Ubuntu, and Fedora.
 See [installed tools](PLUGINS.md) and [past tools](GONE_BUT_NOT_FORGOTTEN.md).
 
+Original code and configuration use the [MIT license](LICENSE).
+Third-party material retains its own license and notices.
+
 ## Install
 
 Add your SSH key to GitHub, then:

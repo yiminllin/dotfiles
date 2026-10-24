@@ -9,6 +9,7 @@ Personal dotfiles for macOS, Debian/Ubuntu, and Fedora. Main languages: Lua and 
 - Lua: use 2-space indentation, local variables, descriptive names, `vim.opt`/`vim.g`, and `pcall()` for error handling. Format with Stylua.
 - Run `scripts/check_dotfiles.sh` and test affected workflows, plugin interactions, and macOS compatibility. No global formatter is prescribed for other languages.
 - Keep commits small and descriptive. Never commit secrets.
+- License new in-house code under the repository's MIT license; preserve third-party licenses and attribution when adapting code.
 - Keep Markdown concise: simple technical English, short active sentences, and no repeated context. Preserve commands, behavior, requirements, and uncertainty. Link detailed guides instead of repeating them.
 - Update `PLUGINS.md` when installed tools or plugins change.
 - When removing, replacing, deprecating, or making a dependency optional, add it to `GONE_BUT_NOT_FORGOTTEN.md`: one table with linked names and short technical descriptions. Avoid duplicates; exclude version, install-method, and file-location changes.
