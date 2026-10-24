@@ -28,14 +28,11 @@ On mac, set the bash as the default shell
 chsh -s /bin/bash
 ```
 
-Run
+The installer backs up conflicting configuration files under
+`~/.dotfiles-backups/<timestamp>/` before linking the repository with Stow.
+It does not use `--adopt`. The tmux layout script is already executable.
 
-```bash
-chmod -x ~/.tmux/cycle-layouts.sh
-```
-
-Stowing have `--adopt` flag enabled, where `dotfiles/` contents are overwritten with local's contents. We need to manually run `git --reset HARD` to use the most updated change.
-Then
+Check Neovim after installation:
 
 ```bash
 nvim

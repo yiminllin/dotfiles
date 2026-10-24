@@ -137,6 +137,7 @@
 | ------ | --------- | ---------------- |
 | stylua | Lua formatter | Via Mason |
 | clang-format | C/C++ formatter | Via Mason, [Brewfile](Brewfile), [Aptfile](Aptfile), [Dnffile](Dnffile) |
+| ruff | Python formatter | Via Mason |
 | rustfmt | Rust formatter | Via rustup ([install.sh](install.sh)) |
 | prettier | Multi-language formatter | Via Mason |
 

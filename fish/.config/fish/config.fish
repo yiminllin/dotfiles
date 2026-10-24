@@ -251,13 +251,6 @@ fzf --fish | source
 ################################################################################
 # Vi-Mode System Clipboard
 ################################################################################
-function fish_user_key_bindings
-    fish_vi_key_bindings
-    
-    # Copy to system clipboard, only works for visual mode. yy does not work.
-    bind -M visual y "fish_clipboard_copy"
-end
-
 # Cursor shape always block - For kitty cursor tail
 set -g fish_cursor_insert block
 set -g fish_cursor_visual block

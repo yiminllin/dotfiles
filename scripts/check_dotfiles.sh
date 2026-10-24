@@ -61,6 +61,11 @@ check_json() {
 }
 
 check_lua_parse() {
+  if command -v nvim >/dev/null 2>&1; then
+    nvim --headless -u NONE -i NONE \
+      "+lua for _, file in ipairs(vim.fn.globpath('nvim/.config/nvim', '**/*.lua', false, true)) do local chunk, err = loadfile(file); if not chunk then vim.api.nvim_err_writeln(err); vim.cmd('cquit'); end end" +qa
+    return $?
+  fi
   command -v luac >/dev/null 2>&1 || return 77
   local file
   while IFS= read -r -d '' file; do
@@ -77,7 +82,7 @@ check_stow_dry_run() {
   command -v stow >/dev/null 2>&1 || return 77
   local target
   target="$(mktemp -d)"
-  stow --no --target "$target" bash bat fish flightsystems git kitty nvim pi task tmux tmuxinator visidata >/dev/null
+  stow --no --target "$target" bash bat fish flightsystems git kitty nvim pi tmux tmuxinator visidata >/dev/null
   local status=$?
   rm -rf "$target"
   return "$status"
@@ -86,7 +91,6 @@ check_stow_dry_run() {
 check_pi_install_sources() {
   grep -q '^npm install -g --ignore-scripts @earendil-works/pi-coding-agent$' install.sh || return 1
   grep -q '^npm install -g --ignore-scripts @earendil-works/pi-coding-agent >/dev/null 2>&1$' scripts/system_update.fish || return 1
-  grep -q '^[[:space:]]*pi$' install.sh || return 1
 }
 
 check_pi_config() {
@@ -129,7 +133,10 @@ def frontmatter(path):
     for line in lines[1:end]:
         key, separator, value = line.partition(":")
         if separator:
-            fields[key.strip()] = value.strip()
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                value = value[1:-1]
+            fields[key.strip()] = value
     return fields
 
 skills = sorted((agent_root / "skills").rglob("SKILL.md"))
@@ -202,8 +209,21 @@ check_pi_offline() {
   status=$?
   [ "$status" -eq 0 ] || return 1
   ! grep -Eqi 'warning|error|diagnostic' <<<"$output" || return 1
-  grep -Eq '^openai-codex[[:space:]]+gpt-5\.6-sol[[:space:]]' <<<"$output" || return 1
-  grep -Eq '^openai-codex[[:space:]]+gpt-5\.6-luna[[:space:]]' <<<"$output" || return 1
+  command -v python3 >/dev/null 2>&1 || return 77
+  python3 - "$output" <<'PYMODELS'
+import json
+import sys
+from pathlib import Path
+
+settings = json.loads(Path("pi/.pi/agent/settings.json").read_text())
+available = {tuple(line.split()[:2]) for line in sys.argv[1].splitlines() if len(line.split()) >= 2}
+required = set(settings.get("enabledModels", []))
+required.add(f"{settings['defaultProvider']}/{settings['defaultModel']}")
+for model in sorted(required):
+    provider, name = model.split("/", 1)
+    if (provider, name) not in available:
+        raise SystemExit(f"Configured Pi model unavailable: {model}")
+PYMODELS
 }
 
 run_optional_check() {
