@@ -298,9 +298,24 @@ function pi --description "Run Pi and name its tmux Agent Board entry"
         end
     end
 
+    set -l status_reader "$HOME/.tmux/pi-agent-status"
+    set -l status_token
+    if set -q TMUX_PANE; and test -n "$TMUX_PANE"; and command -q tmux; and command -q python3; and test -f "$status_reader"
+        set status_token (command python3 "$status_reader" start "$TMUX_PANE" 2>/dev/null)
+    end
+
     set -lx PI_FFF_MODE tools-only
-    command pi $argv
+    if test -n "$status_token"
+        set -lx PI_PROGRAM_STATUS 1
+        command pi $argv
+    else
+        command pi $argv
+    end
     set -l pi_status $status
+
+    if test -n "$status_token"
+        command python3 "$status_reader" stop "$TMUX_PANE" "$status_token" 2>/dev/null
+    end
 
     if status is-interactive; and set -q TMUX_PANE; and test -n "$TMUX_PANE"; and command -q tmux
         command tmux set-option -pt "$TMUX_PANE" -u @pi_agent_name >/dev/null 2>/dev/null
