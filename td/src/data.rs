@@ -40,6 +40,8 @@ pub enum Event {
         priority: Option<String>,
         estimate: Option<String>,
         blocked: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        work: Option<crate::work::WorkDetails>,
     },
     TaskCompleted,
     TaskDeleted,
@@ -79,6 +81,7 @@ pub struct Task {
     pub deleted_at: Option<String>,
     pub imported_uuid: Option<String>,
     pub event_count: usize,
+    pub work: crate::work::WorkDetails,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -282,6 +285,7 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
                     deleted_at: None,
                     imported_uuid: imported_uuid.clone(),
                     event_count: 1,
+                    work: crate::work::WorkDetails::default(),
                 },
             );
         }
@@ -291,6 +295,7 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
             priority,
             estimate,
             blocked,
+            work,
         } => {
             if let Some(task) = tasks.get_mut(&envelope.task_id) {
                 if let Some(description) = description {
@@ -304,6 +309,9 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
                     if let Some(value) = update {
                         *field = (!value.is_empty()).then(|| value.clone());
                     }
+                }
+                if let Some(work) = work {
+                    task.work.clone_from(work);
                 }
                 if let Some(blocked) = blocked {
                     task.blocked = *blocked;

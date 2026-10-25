@@ -169,6 +169,7 @@ pub fn run() -> Result<()> {
                     priority: trim(fields.priority),
                     estimate: trim(fields.estimate),
                     blocked: fields.blocked,
+                    work: None,
                 },
             )
         }

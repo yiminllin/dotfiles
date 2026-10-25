@@ -69,7 +69,10 @@ Update `src/urgency.rs` to change the weights.
 
 ## TUI keys
 
-- Tab / Shift-Tab: toggle between Pending and Done
+- Tab / Shift-Tab: toggle between Pending and Done within the current project view
+- `p` then project initial: switch project view (`i` improve, `w` work, `c` code,
+  `n` note, `r` read, `o` opensource); `-` selects No project, `a` selects All projects
+- Esc in the project picker: cancel without changing the current view
 - `j`/`k` or arrows: move
 - `gg` / `G`: first / last task in the current view
 - Ctrl-U / Ctrl-D: move up / down half a page (based on the visible table height)
@@ -80,7 +83,118 @@ Update `src/urgency.rs` to change the weights.
 - `x`: delete
 - `b`: toggle blocked
 - `/`: filter tasks in the current view
-- `q`/Esc: quit from the task list
+- Esc from a project view: return to All projects; Esc from All projects: quit
+- `q`: quit from any task list
+
+The table title shows the current project view. Each project view matches the
+project field exactly, not words in the description. Pending/Done and `/` text
+filtering work within that view. Switching projects keeps the status and text
+filter. New tasks default to the current project; you can change it in the form.
+Project views are session-only; starting `td` opens All projects.
+
+### Work dashboard (draft)
+
+Use `p`, then `w` to open Work. Other project views keep the original table.
+
+- `0` / `1` / `2` / `3` / `4` / `5`: All / Features / Reviews / Design and learning / Administrative / Uncategorized
+- Enter: open details; `j` / `k` scroll details; Esc returns to the dashboard
+- `s`: choose a workflow state by number; Esc cancels
+- `a` / `e`: add / edit; every new Work task starts as Uncategorized / Active
+- Tab: Pending / Done within the selected category
+- `/`: search descriptions and Work details
+- Esc from the dashboard: All projects; `q`: quit
+
+Work items remain regular tasks. Workflow state is separate from completion:
+Review → Waiting stays Pending. Choosing Waiting records the review-round time;
+Follow-up makes it actionable again. All shows one continuous list without category
+headers: Pending uses descending urgency across all categories, and Done uses newest
+completion first. Waiting/Paused items are dimmed. In a focused category's Pending
+view, they follow active items; urgency ordering applies within each state group.
+Use `d` only when the whole task is done; `u` still reopens it.
+Administrative covers Jira housekeeping, replying to messages, and similar work;
+its states are Active, Waiting, and Paused. Uncategorized uses these states too.
+Task rows have no blank separators.
+
+The Work table has Priority, Estimate, Jira, PRs, State, and Task columns. Narrow
+windows shorten the first two headers to Pri/Est or P/E. Task descriptions wrap;
+Jira/PR columns show short IDs or counts for multiple references. Empty values
+show `-`. These columns use saved Work metadata, not links in descriptions.
+Full links, PR outlines, next action, review time, and notes stay in details
+(Enter), without extra metadata rows in the task list.
+
+Selecting project `work` in the form reveals Category, State, Jira, PRs / tree,
+Next action, and Notes. Category always has a value and defaults to Uncategorized,
+even when adding from a focused category view. Links and notes are optional.
+Use arrows/Space for category/state, or `f` / `r` / `d` / `a` / `u` for category. Enter/Tab
+moves between fields. Work text fields start in insert mode. Press Esc, then
+`:wq` and Enter to save. Text fields use the same Vim editing keys as Description.
+
+Jira and PR references are manual text, with no network sync. In PRs / tree,
+`#100 > #101 > #102; #200` displays a chain plus a separate PR. You can use full
+URLs instead of numbers. This outline does not infer Git branches or track PR
+status. Notes and links are entered on one line and wrap in details.
+
+#### Keyboard hyperlinks over SSH
+
+Jira and PR cells with a single recognized reference emit OSC 8 hyperlinks while
+keeping short labels in the table. Counts such as `3 PRs` are not links to an
+arbitrary PR: press Enter to select individual links in details. Wrapped detail
+links keep their target. Unknown reference text remains plain text.
+
+Bare Jira IDs resolve to `https://flyzipline.atlassian.net/browse/<ID>`; bare
+`#123` references resolve to `https://github.com/ZiplineTeam/FlightSystems/pull/123`.
+For another site/repository, enter its full Jira `/browse/` or GitHub `/pull/` URL;
+that URL is preserved. Only HTTP(S) targets without control characters are emitted.
+This uses saved Work metadata; it does not import links from task descriptions.
+
+The local Kitty binding in `kitty/.config/kitty/kitty.conf` is:
+
+```conf
+map kitty_mod+j kitten hints --type hyperlink
+```
+
+Load that binding in the Kitty running on your own computer. Press Ctrl+Shift+J,
+then type a hint label to open its target through Kitty's local URL handler. No
+remote browser command runs. Ctrl+L redraws td if the terminal needs refreshing.
+
+Inside tmux, use a server with native hyperlinks (tmux 3.4+). The repository tmux
+config enables `hyperlinks` for xterm-family clients, including Kitty. tmux 3.3a
+strips these links; passthrough alone is not a substitute for native support.
+A newer client attached to an old server is insufficient. Nested sessions also
+need hyperlink support in the outer tmux.
+
+A user-local tmux 3.8 is available on this development machine as
+`~/.local/bin/tmux-3.8`; the existing default server was not stopped or replaced.
+To try a separate newer server, run this from a fresh SSH shell **outside tmux**:
+
+```bash
+env PATH="$HOME/.local/opt/tmux-3.8/bin:$PATH" \
+  "$HOME/.local/bin/tmux-3.8" -L td-links -f /dev/null -T hyperlinks \
+  new-session -s work "$HOME/.cargo/bin/td"
+```
+
+This launches td directly with a minimal tmux configuration. Quitting td ends the
+trial session. It deliberately skips the usual config and plugins, so Continuum
+does not restore or overwrite saved sessions while the old server is still active.
+The PATH selects the matching tmux executable. Existing sessions stay on their
+current server; switching the usual server is a separate action.
+
+Work tasks without category metadata appear as Uncategorized / Active. Explicitly
+saved categories are preserved. Old event logs need no migration. Saving a new
+Work task from a focused category view opens its saved category, so the new task
+stays visible. Work metadata is an optional field on update events; ordinary edits
+preserve it, including edits made with the previously installed binary.
+
+For an isolated trial, use the locally prepared sample log (edits persist there):
+
+```bash
+~/dotfiles/td/target/debug/td --events ~/dotfiles/td/target/work-demo/events.jsonl
+```
+
+Then press `p`, `w`. The sample references are fictional. This does not use
+`~/notes/todo/events.jsonl` and does not replace the installed binary.
+
+### General task behavior
 
 The Pending table also keeps tasks completed within the last 24 hours in their
 usual urgency order. Completed rows are dimmed, with a ✓ marker and strikethrough

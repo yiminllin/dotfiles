@@ -18,8 +18,16 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::data::{
-    append_event, load_tasks, new_envelope, sorted_task_views, Event, TaskStatus, TaskView,
+    append_event, append_events, load_tasks, new_envelope, sorted_task_views, Event, TaskStatus,
+    TaskView,
 };
+
+use crate::work::{WorkCategory, WorkDetails, WorkState};
+
+mod hyperlinks;
+mod work_view;
+use hyperlinks::{jira_links, pr_links, Hyperlink, Reference};
+use work_view::{draw_work_dashboard, draw_work_detail};
 
 pub fn run(path: PathBuf) -> Result<()> {
     let app = App::new(path)?;
@@ -57,9 +65,13 @@ struct App {
     table_state: TableState,
     status: TaskStatus,
     filter: String,
+    project: Option<&'static str>,
+    work_category: Option<WorkCategory>,
+    detail_scroll: u16,
     input: String,
     form: Form,
     initial_form: Form,
+    hyperlinks: Vec<Hyperlink>,
     mode: Mode,
 }
 
@@ -113,11 +125,14 @@ struct Form {
     active: usize,
     cursor: usize,
     insert: bool,
+    work: WorkDetails,
 }
 
 impl Form {
     fn has_changes(&self, initial: &Self) -> bool {
-        self.values != initial.values || self.blocked != initial.blocked
+        self.values != initial.values
+            || self.blocked != initial.blocked
+            || (self.values[1] == "work" && self.work != initial.work)
     }
 
     fn options(&self) -> &[&str] {
@@ -129,7 +144,50 @@ impl Form {
         }
     }
 
+    fn field_count(&self) -> usize {
+        if self.values[1] == "work" {
+            11
+        } else {
+            5
+        }
+    }
+
+    fn is_text(&self) -> bool {
+        self.active == 0 || self.active >= 7
+    }
+
+    fn text(&self) -> &str {
+        match self.active {
+            7 => &self.work.jira,
+            8 => &self.work.prs,
+            9 => &self.work.next_action,
+            10 => &self.work.notes,
+            _ => &self.values[0],
+        }
+    }
+
     fn choose(&mut self, forward: bool) {
+        if self.active == 5 {
+            let options = WorkCategory::ALL;
+            let index = options
+                .iter()
+                .position(|value| *value == self.work.category)
+                .unwrap();
+            self.work.set_category(
+                options[(index + if forward { 1 } else { options.len() - 1 }) % options.len()],
+            );
+            return;
+        }
+        if self.active == 6 {
+            let options = self.work.category.states();
+            let index = options
+                .iter()
+                .position(|value| *value == self.work.state)
+                .unwrap_or(0);
+            self.work.state =
+                options[(index + if forward { 1 } else { options.len() - 1 }) % options.len()];
+            return;
+        }
         if self.active == 4 {
             self.blocked = !self.blocked;
             return;
@@ -144,7 +202,13 @@ impl Form {
     }
 
     fn edit_description(&mut self, key: KeyCode) {
-        let text = &mut self.values[0];
+        let text = match self.active {
+            7 => &mut self.work.jira,
+            8 => &mut self.work.prs,
+            9 => &mut self.work.next_action,
+            10 => &mut self.work.notes,
+            _ => &mut self.values[0],
+        };
         if self.insert {
             match key {
                 KeyCode::Char(ch) => {
@@ -251,6 +315,9 @@ enum Mode {
     Command(Option<Uuid>),
     ConfirmDiscard(Option<Uuid>),
     Search,
+    Project,
+    Detail,
+    State(bool),
 }
 
 impl App {
@@ -266,9 +333,13 @@ impl App {
             table_state: TableState::default(),
             status: TaskStatus::Pending,
             filter: String::new(),
+            project: None,
+            work_category: None,
+            detail_scroll: 0,
             input: String::new(),
             form: Form::default(),
             initial_form: Form::default(),
+            hyperlinks: Vec::new(),
             mode: Mode::Normal,
         };
         app.reload()?;
@@ -299,7 +370,23 @@ impl App {
                                 OffsetDateTime::parse(at, &Rfc3339)
                                     .is_ok_and(|at| at > cutoff && at <= now)
                             })))
+                        && self.project.is_none_or(|project| {
+                            view.task.project.as_deref().unwrap_or_default() == project
+                        })
+                        && (self.project != Some("work")
+                            || self
+                                .work_category
+                                .is_none_or(|category| view.task.work.category == category))
                         && (view.task.description.to_ascii_lowercase().contains(&filter)
+                            || (self.project == Some("work")
+                                && [
+                                    &view.task.work.jira,
+                                    &view.task.work.prs,
+                                    &view.task.work.next_action,
+                                    &view.task.work.notes,
+                                ]
+                                .iter()
+                                .any(|value| value.to_ascii_lowercase().contains(&filter)))
                             || view.task.project.as_deref().is_some_and(|project| {
                                 project.to_ascii_lowercase().contains(&filter)
                             }))
@@ -315,7 +402,23 @@ impl App {
                 (std::cmp::Reverse(completed), view.task.id)
             });
         }
+        if self.project == Some("work")
+            && self.work_category.is_some()
+            && self.status == TaskStatus::Pending
+        {
+            tasks.sort_by_key(|view| view.task.work.state.is_waiting());
+        }
         tasks
+    }
+
+    fn select_project(&mut self, project: Option<&'static str>) {
+        self.project = project;
+        self.work_category = None;
+        self.selected = 0;
+        self.selected_line = 0;
+        self.row_heights.clear();
+        self.table_state = TableState::default();
+        self.mode = Mode::Normal;
     }
 
     fn status_name(&self) -> &str {
@@ -368,11 +471,21 @@ impl App {
 }
 
 fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) -> Result<()> {
+    use io::Write;
+    let mut linked_rows = Vec::new();
     loop {
-        terminal.draw(|frame| draw(frame, &mut app))?;
+        let painted = terminal.draw(|frame| draw(frame, &mut app))?;
+        let output = hyperlinks::encode(painted.buffer, &linked_rows, &app.hyperlinks)?;
+        linked_rows = app.hyperlinks.iter().map(|link| link.area.y).collect();
+        terminal.backend_mut().write_all(&output)?;
+        io::Write::flush(terminal.backend_mut())?;
         if let TerminalEvent::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press && handle_key_event(&mut app, key)? {
-                return Ok(());
+            if key.kind == KeyEventKind::Press {
+                if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('l') {
+                    terminal.clear()?;
+                } else if handle_key_event(&mut app, key)? {
+                    return Ok(());
+                }
             }
         }
     }
@@ -397,9 +510,9 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
     match app.mode {
         Mode::Form(id) => {
             match key {
-                KeyCode::Esc if app.form.active == 0 && app.form.insert => {
+                KeyCode::Esc if app.form.is_text() && app.form.insert => {
                     app.form.insert = false;
-                    app.form.cursor = previous(&app.form.values[0], app.form.cursor);
+                    app.form.cursor = previous(app.form.text(), app.form.cursor);
                 }
                 KeyCode::Esc => {
                     app.mode = if app.form.has_changes(&app.initial_form) {
@@ -409,19 +522,36 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     };
                 }
                 KeyCode::Tab | KeyCode::Enter | KeyCode::BackTab => {
-                    app.form.active =
-                        (app.form.active + if key == KeyCode::BackTab { 4 } else { 1 }) % 5;
-                    app.form.insert = false;
-                    app.form.cursor = app
-                        .form
-                        .cursor
-                        .min(previous(&app.form.values[0], app.form.values[0].len()));
+                    let count = app.form.field_count();
+                    app.form.active = (app.form.active
+                        + if key == KeyCode::BackTab {
+                            count - 1
+                        } else {
+                            1
+                        })
+                        % count;
+                    app.form.insert = app.form.active >= 7;
+                    app.form.cursor = if app.form.insert {
+                        app.form.text().len()
+                    } else {
+                        0
+                    };
                 }
-                KeyCode::Char(':') if app.form.active > 0 || !app.form.insert => {
+                KeyCode::Char(':') if !app.form.is_text() || !app.form.insert => {
                     app.input = ":".to_string();
                     app.mode = Mode::Command(id);
                 }
-                _ if app.form.active == 0 => app.form.edit_description(key),
+                _ if app.form.is_text() => app.form.edit_description(key),
+                KeyCode::Char('f' | 'r' | 'd' | 'a' | 'u') if app.form.active == 5 => {
+                    let category = match key {
+                        KeyCode::Char('r') => WorkCategory::Review,
+                        KeyCode::Char('d') => WorkCategory::Design,
+                        KeyCode::Char('a') => WorkCategory::Administrative,
+                        KeyCode::Char('u') => WorkCategory::Uncategorized,
+                        _ => WorkCategory::Feature,
+                    };
+                    app.form.work.set_category(category);
+                }
                 KeyCode::Right | KeyCode::Char(' ') => app.form.choose(true),
                 KeyCode::Left => app.form.choose(false),
                 KeyCode::Backspace | KeyCode::Delete if app.form.active < 4 => {
@@ -492,6 +622,69 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             }
             return Ok(false);
         }
+        Mode::Project => {
+            match key {
+                KeyCode::Esc => app.mode = Mode::Normal,
+                KeyCode::Char('a') => app.select_project(None),
+                KeyCode::Char('-') => app.select_project(Some("")),
+                KeyCode::Char(ch) => {
+                    if let Some(project) = PROJECTS
+                        .iter()
+                        .find(|project| !project.is_empty() && project.starts_with(ch))
+                    {
+                        app.select_project(Some(project));
+                    }
+                }
+                _ => {}
+            }
+            return Ok(false);
+        }
+        Mode::Detail => {
+            match key {
+                KeyCode::Esc | KeyCode::Enter => app.mode = Mode::Normal,
+                KeyCode::Char('q') => return Ok(true),
+                KeyCode::Down | KeyCode::Char('j') => {
+                    app.detail_scroll = app.detail_scroll.saturating_add(1)
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    app.detail_scroll = app.detail_scroll.saturating_sub(1)
+                }
+                KeyCode::Char('e') => open_edit_form(app),
+                KeyCode::Char('s') => app.mode = Mode::State(true),
+                _ => {}
+            }
+            return Ok(false);
+        }
+        Mode::State(detail) => {
+            match key {
+                KeyCode::Esc => app.mode = if detail { Mode::Detail } else { Mode::Normal },
+                KeyCode::Char(ch @ '1'..='4') => {
+                    if let Some(view) = app.selected_task() {
+                        let mut work = view.task.work.clone();
+                        if let Some(state) = work.category.states().get((ch as u8 - b'1') as usize)
+                        {
+                            work.state = *state;
+                            if work.category == WorkCategory::Review
+                                && work.state == WorkState::Waiting
+                            {
+                                work.reviewed_at = Some(crate::data::now_string()?);
+                            }
+                            let id = view.task.id;
+                            append_event(&app.path, &new_envelope(id, "tui", work_update(work))?)?;
+                            app.reload()?;
+                            app.selected = app
+                                .visible_tasks()
+                                .iter()
+                                .position(|view| view.task.id == id)
+                                .unwrap_or(0);
+                            app.mode = if detail { Mode::Detail } else { Mode::Normal };
+                        }
+                    }
+                }
+                _ => {}
+            }
+            return Ok(false);
+        }
         Mode::Normal => {}
     }
     let double_g = app.g_pressed && key == KeyCode::Char('g');
@@ -509,6 +702,26 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         app.selected_line = 0;
     }
     match key {
+        KeyCode::Char(ch @ '0'..='5') if app.project == Some("work") => {
+            app.work_category = match ch {
+                '1' => Some(WorkCategory::Feature),
+                '2' => Some(WorkCategory::Review),
+                '3' => Some(WorkCategory::Design),
+                '4' => Some(WorkCategory::Administrative),
+                '5' => Some(WorkCategory::Uncategorized),
+                _ => None,
+            };
+            app.selected = 0;
+            app.selected_line = 0;
+            app.table_state = TableState::default();
+        }
+        KeyCode::Enter if app.project == Some("work") && app.selected_task().is_some() => {
+            app.detail_scroll = 0;
+            app.mode = Mode::Detail;
+        }
+        KeyCode::Char('s') if app.project == Some("work") && app.selected_task().is_some() => {
+            app.mode = Mode::State(false)
+        }
         KeyCode::Char('g') if double_g => app.selected = 0,
         KeyCode::Char('G') => {
             app.selected = app.visible_tasks().len().saturating_sub(1);
@@ -519,6 +732,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                 .unwrap_or(1)
                 .saturating_sub(1);
         }
+        KeyCode::Esc if app.project.is_some() => app.select_project(None),
         KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
         KeyCode::Tab | KeyCode::BackTab => {
             app.status = if app.status == TaskStatus::Pending {
@@ -540,27 +754,12 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                 insert: true,
                 ..Form::default()
             };
+            app.form.values[1] = app.project.unwrap_or_default().to_string();
             app.initial_form = app.form.clone();
             app.mode = Mode::Form(None);
         }
-        KeyCode::Char('e') => {
-            if let Some(view) = app.selected_task() {
-                let task = &view.task;
-                let id = task.id;
-                app.form = Form {
-                    values: [
-                        task.description.clone(),
-                        task.project.clone().unwrap_or_default(),
-                        task.priority.clone().unwrap_or_default(),
-                        task.estimate.clone().unwrap_or_default(),
-                    ],
-                    blocked: task.blocked,
-                    ..Form::default()
-                };
-                app.initial_form = app.form.clone();
-                app.mode = Mode::Form(Some(id));
-            }
-        }
+        KeyCode::Char('e') => open_edit_form(app),
+        KeyCode::Char('p') => app.mode = Mode::Project,
         KeyCode::Char('/') => {
             app.input = app.filter.clone();
             app.mode = Mode::Search;
@@ -576,6 +775,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     priority: None,
                     estimate: None,
                     blocked: Some(!task.task.blocked),
+                    work: None,
                 };
                 append_selected(app, event)?;
             }
@@ -583,6 +783,37 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         _ => {}
     }
     Ok(false)
+}
+
+fn open_edit_form(app: &mut App) {
+    if let Some(view) = app.selected_task() {
+        let task = &view.task;
+        let id = task.id;
+        app.form = Form {
+            values: [
+                task.description.clone(),
+                task.project.clone().unwrap_or_default(),
+                task.priority.clone().unwrap_or_default(),
+                task.estimate.clone().unwrap_or_default(),
+            ],
+            blocked: task.blocked,
+            work: task.work.clone(),
+            ..Form::default()
+        };
+        app.initial_form = app.form.clone();
+        app.mode = Mode::Form(Some(id));
+    }
+}
+
+fn work_update(work: WorkDetails) -> Event {
+    Event::TaskUpdated {
+        description: None,
+        project: None,
+        priority: None,
+        estimate: None,
+        blocked: None,
+        work: Some(work),
+    }
 }
 
 fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
@@ -598,6 +829,27 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
         app.form.insert = true;
         return Ok(());
     }
+    let is_work = project == "work";
+    let mut work = app.form.work.clone();
+    for value in [
+        &mut work.jira,
+        &mut work.prs,
+        &mut work.next_action,
+        &mut work.notes,
+    ] {
+        *value = value.trim().to_string();
+    }
+    if is_work
+        && work.category == WorkCategory::Review
+        && work.state == WorkState::Waiting
+        && (work.reviewed_at.is_none()
+            || app
+                .tasks
+                .iter()
+                .any(|view| Some(view.task.id) == id && view.task.work.state != WorkState::Waiting))
+    {
+        work.reviewed_at = Some(crate::data::now_string()?);
+    }
     let event = if id.is_some() {
         Event::TaskUpdated {
             description: Some(description),
@@ -605,6 +857,7 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
             priority: Some(priority),
             estimate: Some(estimate),
             blocked: Some(app.form.blocked),
+            work: is_work.then(|| work.clone()),
         }
     } else {
         Event::TaskCreated {
@@ -616,14 +869,29 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
             imported_uuid: None,
         }
     };
-    append_event(
-        &app.path,
-        &new_envelope(id.unwrap_or_else(Uuid::now_v7), "tui", event)?,
-    )?;
+    let task_id = id.unwrap_or_else(Uuid::now_v7);
+    let mut events = vec![new_envelope(task_id, "tui", event)?];
+    if id.is_none() && is_work {
+        events.push(new_envelope(task_id, "tui", work_update(work))?);
+    }
+    append_events(&app.path, &events)?;
+    let reveal_new_category =
+        id.is_none() && is_work && app.project == Some("work") && app.work_category.is_some();
     if id.is_none() {
         app.status = TaskStatus::Pending;
     }
+    if reveal_new_category {
+        app.work_category = Some(app.form.work.category);
+        app.table_state = TableState::default();
+    }
     app.reload()?;
+    if id.is_some() || reveal_new_category {
+        app.selected = app
+            .visible_tasks()
+            .iter()
+            .position(|view| view.task.id == task_id)
+            .unwrap_or(0);
+    }
     app.mode = Mode::Normal;
     Ok(())
 }
@@ -643,6 +911,15 @@ fn append_selected(app: &mut App, event: Event) -> Result<()> {
 }
 
 fn draw(frame: &mut Frame, app: &mut App) {
+    app.hyperlinks.clear();
+    if matches!(app.mode, Mode::Detail | Mode::State(_)) {
+        draw_work_detail(frame, app);
+        return;
+    }
+    if app.project == Some("work") && matches!(app.mode, Mode::Normal) {
+        draw_work_dashboard(frame, app);
+        return;
+    }
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -654,7 +931,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
     let (mode, help) = match app.mode {
         Mode::Normal => (
             "",
-            "Tab view  j/k gg/G ^u/^d move  a add  e edit  d done  u reopen  x delete  b block  / filter  q",
+            "Tab view  j/k gg/G ^u/^d move  a add  e edit  d done  u reopen  x delete  b block  p project  / filter  Esc all  q",
         ),
         Mode::Form(id) => (
             if id.is_some() {
@@ -662,7 +939,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
             } else {
                 "ADD TASK"
             },
-            if app.form.active > 0 {
+            if !app.form.is_text() {
                 "Arrows/Space cycle  Letter select  Enter/Tab next  :wq save  Esc cancel"
             } else if app.form.insert {
                 "Arrows move  Enter/Tab next  Esc normal  :wq in normal mode saves"
@@ -682,10 +959,15 @@ fn draw(frame: &mut Frame, app: &mut App) {
             },
             "Enter runs :wq save or :q! discard  Esc returns to the form",
         ),
+        Mode::Detail | Mode::State(_) => unreachable!(),
         Mode::Search => ("FILTER", "Enter apply  Esc cancel"),
+        Mode::Project => (
+            "PROJECT VIEWS: [i]mprove [w]ork [c]ode [n]ote [r]ead [o]pensource [-] no project [a]ll",
+            "Letter selects project view  Esc cancel",
+        ),
     };
     let title = if matches!(app.mode, Mode::Form(_)) {
-        let editing = if app.form.active > 0 {
+        let editing = if !app.form.is_text() {
             "SELECT"
         } else if app.form.insert {
             "INSERT"
@@ -713,10 +995,11 @@ fn draw(frame: &mut Frame, app: &mut App) {
         chunks[2],
     );
     match app.mode {
+        Mode::Detail | Mode::State(_) => unreachable!(),
         Mode::Form(_) | Mode::ConfirmDiscard(_) => draw_form(frame, &app.form, chunks[1]),
         Mode::Search => draw_input(frame, "Filter", &app.input, app.input.len(), chunks[1]),
         Mode::Command(_) => draw_input(frame, "Command", &app.input, app.input.len(), chunks[1]),
-        Mode::Normal => {
+        Mode::Normal | Mode::Project => {
             app.half_page = (chunks[1].height.saturating_sub(4) as usize / 2).max(1);
             let widths = [
                 Constraint::Length(8),
@@ -728,6 +1011,17 @@ fn draw(frame: &mut Frame, app: &mut App) {
             let block = Block::default()
                 .title(Line::from(vec![
                     app.status_label(),
+                    Span::styled(
+                        format!(
+                            " | {} ",
+                            match app.project {
+                                None => "All projects",
+                                Some("") => "No project",
+                                Some(project) => project,
+                            }
+                        ),
+                        enum_style(1, "project").add_modifier(Modifier::BOLD),
+                    ),
                     Span::raw(format!(" | filter: {}", app.filter)),
                 ]))
                 .borders(Borders::ALL)
@@ -873,33 +1167,63 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         .border_style(Style::default().add_modifier(Modifier::DIM));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let labels = ["Description", "Project", "Priority", "Estimate", "Blocked"];
+    let labels = [
+        "Description",
+        "Project",
+        "Priority",
+        "Estimate",
+        "Blocked",
+        "Category",
+        "State",
+        "Jira",
+        "PRs / tree",
+        "Next action",
+        "Notes",
+    ];
     let start = form
         .active
         .saturating_sub(inner.height.saturating_sub(1) as usize);
     for (index, label) in labels
         .iter()
         .enumerate()
+        .take(form.field_count())
         .skip(start)
         .take(inner.height as usize)
     {
         let row = Rect::new(inner.x, inner.y + (index - start) as u16, inner.width, 1);
-        let value = if index == 4 {
-            if form.blocked {
-                "yes"
-            } else {
-                "no"
+        let value = match index {
+            4 => {
+                if form.blocked {
+                    "yes"
+                } else {
+                    "no"
+                }
             }
-        } else {
-            &form.values[index]
+            5 => form.work.category.label(),
+            6 => form.work.state.label(),
+            7 => &form.work.jira,
+            8 => &form.work.prs,
+            9 => &form.work.next_action,
+            10 => &form.work.notes,
+            _ => &form.values[index],
         };
-        if index == form.active && index == 0 {
+        if index == form.active && form.is_text() {
             draw_input(frame, label, value, form.cursor, row);
         } else if index == form.active {
-            let options = if index == 4 {
-                &["no", "yes"][..]
-            } else {
-                form.options()
+            let options: Vec<&str> = match index {
+                4 => vec!["no", "yes"],
+                5 => WorkCategory::ALL
+                    .iter()
+                    .map(|category| category.label())
+                    .collect(),
+                6 => form
+                    .work
+                    .category
+                    .states()
+                    .iter()
+                    .map(|state| state.label())
+                    .collect(),
+                _ => form.options().to_vec(),
             };
             let mut spans = vec![Span::styled(
                 format!("> {label}:"),
@@ -913,7 +1237,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
             }
             for option in options {
                 let display = if option.is_empty() { "-" } else { option };
-                let selected = *option == value;
+                let selected = option == value;
                 let text = if selected {
                     format!(" [{display}]")
                 } else {
@@ -967,13 +1291,120 @@ mod tests {
     use tempfile::tempdir;
 
     fn write_and_quit(app: &mut App) {
-        if app.form.active == 0 && app.form.insert {
+        if app.form.is_text() && app.form.insert {
             handle_key(app, KeyCode::Esc).unwrap();
         }
         for ch in ":wq".chars() {
             handle_key(app, KeyCode::Char(ch)).unwrap();
         }
         handle_key(app, KeyCode::Enter).unwrap();
+    }
+
+    #[test]
+    fn project_views_scope_tasks_search_and_status() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        for (description, project) in [
+            ("work task", "work"),
+            ("work in description only", "improve"),
+            ("custom project", "workshop"),
+            ("unassigned", ""),
+        ] {
+            app.form.values = [
+                description.into(),
+                project.into(),
+                String::new(),
+                String::new(),
+            ];
+            save_form(&mut app, None).unwrap();
+        }
+        let before = std::fs::read_to_string(&app.path).unwrap();
+        app.selected = 3;
+        app.selected_line = 2;
+        handle_key(&mut app, KeyCode::Char('p')).unwrap();
+        handle_key(&mut app, KeyCode::Char('w')).unwrap();
+        assert_eq!(app.project, Some("work"));
+        assert_eq!((app.selected, app.selected_line), (0, 0));
+        assert_eq!(app.visible_tasks().len(), 1);
+        assert_eq!(app.selected_task().unwrap().task.description, "work task");
+        app.filter = "missing".into();
+        assert!(app.visible_tasks().is_empty());
+        app.filter.clear();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        assert_eq!(app.project, Some("work"));
+        assert!(app.visible_tasks().is_empty());
+        handle_key(&mut app, KeyCode::BackTab).unwrap();
+        assert_eq!(app.visible_tasks().len(), 1);
+        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        assert_eq!(app.visible_tasks().len(), 1);
+        assert_eq!(
+            app.selected_task().unwrap().task.project.as_deref(),
+            Some("work")
+        );
+        handle_key(&mut app, KeyCode::BackTab).unwrap();
+        let after_completion = std::fs::read_to_string(&app.path).unwrap();
+        assert_ne!(before, after_completion);
+        assert!(!handle_key(&mut app, KeyCode::Esc).unwrap());
+        assert_eq!(app.project, None);
+        assert_eq!(app.visible_tasks().len(), 4);
+        handle_key(&mut app, KeyCode::Char('p')).unwrap();
+        handle_key(&mut app, KeyCode::Char('-')).unwrap();
+        assert_eq!(app.visible_tasks().len(), 1);
+        assert_eq!(app.selected_task().unwrap().task.description, "unassigned");
+        handle_key(&mut app, KeyCode::Char('p')).unwrap();
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        assert_eq!(app.project, None);
+        assert_eq!(
+            std::fs::read_to_string(&app.path).unwrap(),
+            after_completion
+        );
+        assert!(handle_key(&mut app, KeyCode::Esc).unwrap());
+    }
+
+    #[test]
+    fn project_picker_cancels_and_new_tasks_use_current_project() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        for project in PROJECTS.iter().filter(|project| !project.is_empty()) {
+            handle_key(&mut app, KeyCode::Char('p')).unwrap();
+            handle_key(&mut app, KeyCode::Char(project.chars().next().unwrap())).unwrap();
+            assert_eq!(app.project, Some(*project));
+            handle_key(&mut app, KeyCode::Char('p')).unwrap();
+            handle_key(&mut app, KeyCode::Char('z')).unwrap();
+            assert!(matches!(app.mode, Mode::Project));
+            assert!(!handle_key(&mut app, KeyCode::Esc).unwrap());
+            assert_eq!(app.project, Some(*project));
+            handle_key(&mut app, KeyCode::Char('a')).unwrap();
+            assert_eq!(app.form.values[1], *project);
+            app.form.values[0] = format!("new {project} task");
+            save_form(&mut app, None).unwrap();
+            assert_eq!(app.visible_tasks().len(), 1);
+            assert_eq!(
+                app.selected_task().unwrap().task.project.as_deref(),
+                Some(*project)
+            );
+        }
+        let mut terminal = Terminal::new(TestBackend::new(120, 12)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let screen = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(screen.contains("opensource"));
+        handle_key(&mut app, KeyCode::Char('p')).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let screen = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(screen.contains("[w]ork"));
     }
 
     #[test]
@@ -1108,6 +1539,31 @@ mod tests {
         assert_eq!(app.form.values[0], "saved");
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(matches!(app.mode, Mode::Normal));
+    }
+
+    #[test]
+    fn discard_detection_ignores_focus_but_includes_work_details() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        app.select_project(Some("work"));
+        handle_key(&mut app, KeyCode::Char('2')).unwrap();
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        app.form.active = 10;
+        app.form.insert = true;
+        handle_key(&mut app, KeyCode::Char('λ')).unwrap();
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::ConfirmDiscard(None)));
+        handle_key(&mut app, KeyCode::Char('n')).unwrap();
+        assert_eq!(app.form.work.notes, "λ");
+        handle_key(&mut app, KeyCode::Char('x')).unwrap();
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
+        assert!(!app.path.exists());
     }
 
     #[test]
