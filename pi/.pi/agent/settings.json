@@ -6,8 +6,12 @@
   "compaction": {
     "reserveTokens": 16384,
     "modelOverrides": {
-      "openai-codex/gpt-6.1-sol": { "reserveTokens": 200000 },
-      "openai-codex/gpt-6-luna": { "reserveTokens": 108800 }
+      "openai-codex/gpt-6.1-sol": {
+        "reserveTokens": 200000
+      },
+      "openai-codex/gpt-6-luna": {
+        "reserveTokens": 108800
+      }
     }
   },
   "enabledModels": [
@@ -23,7 +27,7 @@
     "npm:@ff-labs/pi-fff",
     "npm:@juicesharp/rpiv-ask-user-question"
   ],
-  "lastChangelogVersion": "1.1.0",
+  "lastChangelogVersion": "1.4.0",
   "hideThinkingBlock": true,
   "quietStartup": "header",
   "defaultTools": [
