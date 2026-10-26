@@ -110,7 +110,7 @@ abbr -a jc --set-cursor 'set f (mktemp); nvim $f; and jira issue comment add % -
 abbr -a jn --set-cursor 'jira_create_phoenix %'
 
 function to_dev_container_flight_software
-    set -l secrets_file (path resolve ~/.config/dev-secrets/flightsystems.fish)
+    set -l secrets_file "$HOME/.config/dev-secrets/flightsystems.fish"
     if not test -f "$secrets_file"
         echo "Missing $secrets_file" >&2
         return 1
