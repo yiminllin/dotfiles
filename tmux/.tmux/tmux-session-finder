@@ -19,11 +19,11 @@ discover_repos() {
     {
         while IFS= read -r git_path; do
             dirname "$git_path"
-        done < <(fd '^\.git$' "$HOME" / --min-depth 2 --max-depth 3 --type f --hidden 2>/dev/null)
+        done < <(fd '^\.git$' "$HOME" / --min-depth 2 --max-depth 3 --type f --hidden --follow 2>/dev/null)
 
         while IFS= read -r git_path; do
             dirname "$git_path"
-        done < <(fd '^\.git$' "$HOME" / --min-depth 2 --max-depth 3 --type d --hidden 2>/dev/null)
+        done < <(fd '^\.git$' "$HOME" / --min-depth 2 --max-depth 3 --type d --hidden --follow 2>/dev/null)
     } | awk '!/\/\./ && $0 !~ /^\/tmp(\/|$)/' | sort -u
 }
 
