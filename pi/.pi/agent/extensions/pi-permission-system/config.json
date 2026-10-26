@@ -7,6 +7,8 @@
       "/tmp/**": "allow",
       "/private/tmp": "allow",
       "/private/tmp/**": "allow",
+      "/home/vscode": "allow",
+      "/home/vscode/**": "allow",
       "/Users/yiminlin/notes/**": "allow",
       "/Users/yiminlin/dotfiles/**": "allow",
       "/Users/yiminlin/.tmux/**": "allow",

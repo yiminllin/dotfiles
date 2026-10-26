@@ -7,7 +7,7 @@ description: Review or refresh a private human-review guide from a PR URL/number
 
 ## Purpose and boundary
 
-Produce a private guide that helps a human inspect a change efficiently. Accept local Git evidence by default. For a PR URL or number, read current PR metadata and fetch/query the exact PR refs after explicit network/auth approval; do not require the user to fetch them. Online reads do not authorize GitHub writes, checkout, or source changes.
+Produce a private guide that helps a human inspect a change efficiently. Accept local Git evidence by default. A request to generate or refresh a guide authorizes read-only GitHub queries and fetching the needed PR/base refs for the named review in its repository, using existing authentication, without another approval prompt. For a PR URL or number, read current PR metadata and fetch/query the exact PR refs; do not require the user to fetch them. Online reads do not authorize GitHub writes, checkout, or source changes.
 
 Default to private Markdown. Emit structured JSON only when requested or required by a local Diffview/prdv workflow. Read `references/output-templates.md` when exact artifact structure is needed.
 
@@ -15,12 +15,12 @@ Use the same six-part structure for Markdown and Diffview guides: goal, behavior
 
 ## Inputs
 
-Accept a PR number/URL, local branch, commit range, current-worktree diff boundary, Diffview/prdv context, or existing guide. For a bare PR number, establish the repo from the checkout or ask if ambiguous. If the local boundary is ambiguous, ask one short question rather than guessing. When remote access is unavailable or not approved, use a known local boundary if one exists; otherwise name the missing evidence and ask for network approval or a local ref. Do not initiate authentication.
+Accept a PR number/URL, local branch, commit range, current-worktree diff boundary, Diffview/prdv context, or existing guide. For a bare PR number, establish the repo from the checkout or ask if ambiguous. If the local boundary is ambiguous, ask one short question rather than guessing. When remote access or existing authentication is unavailable, use a known local boundary if one exists; otherwise name the missing evidence and ask for a local ref or user-managed authentication. Do not initiate authentication.
 
 ## Workflow
 
 1. If refreshing a guide, read it as prior context, not truth.
-2. Resolve the exact boundary. For online PRs, first obtain network/auth approval; read the live PR body, head/base, and fetch only the needed refs if local objects are missing or stale. Keep the review limited to the named PR; parent PRs provide context, not additional review scope. Do not checkout, reset, clean, or alter the working tree. Record head SHA and the boundary inspected; local refs alone do not prove current remote state.
+2. Resolve the exact boundary. For online PRs, use the scoped permission above to read the live PR body, head/base, and fetch only the needed refs if local objects are missing or stale. If Diffview supplied immutable revisions, preserve that boundary; report remote drift rather than silently switching revisions. Keep the review limited to the named PR; parent PRs provide context, not additional review scope. Do not checkout, reset, clean, or alter the working tree. Record head SHA and the boundary inspected; local refs alone do not prove current remote state.
 3. Inspect the diff, changed-file list, relevant surrounding code, tests, and repository guidance. Do not modify source files.
 4. Build a private context packet: PR metadata and body claims, exact diff boundary, intent, touched subsystems, file list, mechanical/generated churn, observed validation, and gaps. Check stated PR intent against code.
 5. State the PR goal in plain language: the problem it addresses and intended outcome, not a file inventory. Explain the verified before/after behavior and observable consequence. If requested, offer three alternative one-line goal summaries before expanding the chosen framing; do not make this a startup checkpoint.
@@ -53,7 +53,7 @@ Outside raw artifact mode, report `draft only` and state that no GitHub review o
 
 ## Guardrails
 
-- Local reads are the default. Online PR reads or Git fetch require network/auth approval for the exact scope. Never initiate login or read credentials.
+- Local reads are the default. Requested guide generation or refresh includes scoped read-only GitHub queries and needed PR/base-ref fetches using existing authentication; do not ask again. Unrelated network access still requires approval. Never initiate login or read credentials.
 - Do not post, approve, request changes, resolve threads, or edit PR bodies from this skill; route separately requested GitHub writes to their owning workflow.
 - Treat uncertain intent as a question, not a defect. Include every substantive, actionable review item with evidence and uncertainty; do not impose an arbitrary count cap or pad the guide with speculative comments.
 - If the change is too large for confident review, say so and provide a phased order.

@@ -21,4 +21,6 @@ For non-trivial changes, make the smallest coherent maintainable change; preserv
 
 For meaningful multi-step or long-running work, use `progress` to keep the current goal and a compact outcome roadmap visible. Refresh it at phase boundaries and scope or blocker changes. Replace obsolete plans; do not accumulate a session-long task list. Give a short opening goal/action sentence, explain important decisions in plain text, and keep the final summary and verification results. Do not repeat the panel in chat or claim live updates during synchronous calls.
 
-Stop and ask before any destructive, privileged or sudo, network, authentication, credential or secret, or external-directory write action.
+Stop and ask before any destructive, privileged or sudo, network, authentication, credential or secret, or external-directory write action, except for the scoped review-guide permission below.
+
+When the user requests generating or refreshing a human review guide, allow read-only GitHub queries and fetching the needed PR/base refs for the named review in its repository without another approval prompt. Use existing authentication only. This permission does not authorize login, credential inspection, GitHub writes, checkout, working-tree changes, unrelated network access, or changing a Diffview guide's pinned review boundary.

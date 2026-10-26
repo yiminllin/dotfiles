@@ -26,7 +26,7 @@ function __review_open_pi_pane --argument-names repo_root title bootstrap_path b
     end
 
     set -l guide_path (path dirname "$bootstrap_path")/guide.json
-    set -l prompt "/skill:pr-human-review-guide The user explicitly authorizes creating and updating $guide_path and $guide_path.tmp, including outside $repo_root, for this review session. This is prior permission for those two files only; do not request it again. It does not authorize other writes, network access, authentication, or source/GitHub changes. Read and execute this review bootstrap, then stay in review assistant mode: $bootstrap_path"
+    set -l prompt "/skill:pr-human-review-guide The user explicitly authorizes creating and updating $guide_path and $guide_path.tmp, including outside $repo_root, for this review session. This is prior permission for those two files only; do not request it again. The requested guide also authorizes read-only GitHub queries and needed PR/base-ref fetches for this review in its repository using existing authentication, without another approval prompt. It does not authorize other writes, login, credential inspection, unrelated network access, or source/GitHub changes. Read and execute this review bootstrap, then stay in review assistant mode: $bootstrap_path"
     set -l panes (command tmux list-panes -s -t "$caller" -F '#{pane_id}|#{@pi_agent_name}|#{@pi_review_repo}|#{pane_current_command}|#{pane_start_command}|#{pane_current_path}')
     for pane in $panes
         set -l fields (string split '|' -- "$pane")
@@ -204,7 +204,7 @@ Refresh requested: $refresh
 Guide: $guide
 Local comments: $guide_dir/diffview-review.json
 
-Read the pr-human-review-guide skill and its output templates. Review only git diff $boundary with the same path exclusions as Diffview: $diff_json. Use the supplied PR body as claims to verify against code. Keep source inspection within $root; do not use network, authentication, or mutate GitHub or source files.
+Read the pr-human-review-guide skill and its output templates. Review only git diff $boundary with the same path exclusions as Diffview: $diff_json. Use the supplied PR body as claims to verify against code. Keep source inspection within $root. Read-only GitHub queries and needed PR/base-ref fetches for this review in its repository are authorized using existing authentication; do not ask again. Preserve the exact review boundary above; report remote drift rather than switching revisions. Do not initiate login, inspect credentials, use unrelated network access, or mutate GitHub or source files.
 
 Artifact write permission: the user invoked review and explicitly authorizes creating and updating $guide and $guide.tmp throughout this review session, even though their directory may be outside $root. This is the approved exception to the source-directory boundary, not permission for arbitrary external writes. Use $guide.tmp for atomic replacement of $guide. Do not ask for this permission again. Never edit $guide_dir/diffview-review.json.
 
