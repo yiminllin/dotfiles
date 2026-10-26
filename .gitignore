@@ -4,6 +4,9 @@
 # Personal API keys and tokens
 pi/.pi/agent/auth.json
 pi/.pi/agent/sessions/
+# Local memory link and migration backups
+pi/.pi/agent/projects-memory
+pi/.pi/agent/.projects-memory-before-notes-*
 # SSH and private authentication keys
 **/id_*
 # Cryptographic key files

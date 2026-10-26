@@ -199,6 +199,7 @@ if ! command -v npm >/dev/null 2>&1; then
     exit 1
 fi
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+bash "$SCRIPT_DIR/scripts/setup_pi_project_memory.sh" || exit 1
 
 ################################################################################
 # Stow Configs

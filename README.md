@@ -47,7 +47,11 @@ Start `tmux`. Prefix is Ctrl-Space.
 | Review a branch or PR                | `review [PR-number-or-URL]`                |
 
 Pi configuration lives in `pi/.pi/agent/`, linked to `~/.pi/agent/`; credentials and sessions stay private.
-For Pi-only setup: `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`, then `stow pi`.
+For Pi-only setup: `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`,
+then `stow pi` and `bash scripts/setup_pi_project_memory.sh`.
+The installer links project memory to `~/notes/pi-memory/projects`; missing notes only warns.
+Conflicting stores stop setup. Close all Pi sessions before [manual migration](https://github.com/yiminllin/notes#pi-memory).
+Notes restores saved memory and skills, not conversation history.
 Check Pi offline with `pi --offline --version`.
 The pre-push hook requires Pi and blocks if inventory verification fails or `PLUGINS.md` needs a commit.
 
