@@ -116,7 +116,7 @@ function to_dev_container_flight_software
         return 1
     end
     source "$secrets_file"
-    cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems-systems -- env JIRA_API_TOKEN="$JIRA_API_TOKEN" BUILDKITE_API_TOKEN="$BUILDKITE_API_TOKEN" JIRA_API_USERNAME='yimin.lin@flyzipline.com' JIRA_API_BASE_URL='https://flyzipline.atlassian.net/' bash -il
+    cd ~/github/FlightSystems && direnv exec . devcontainer-fs --flightsystems -- env JIRA_API_TOKEN="$JIRA_API_TOKEN" BUILDKITE_API_TOKEN="$BUILDKITE_API_TOKEN" JIRA_API_USERNAME='yimin.lin@flyzipline.com' JIRA_API_BASE_URL='https://flyzipline.atlassian.net/' bash -il
 end
 abbr -a fs to_dev_container_flight_software 
 

@@ -306,7 +306,7 @@ def add_output_args(parser: argparse.ArgumentParser) -> None:
 
 def add_backend_common(parser: argparse.ArgumentParser, suppress: bool = False) -> None:
   parser.add_argument("--backend", choices=zml.BACKEND_CHOICES, default="auto", help=argparse.SUPPRESS if suppress else "ZML backend (default: auto)")
-  parser.add_argument("--systems-root", default=zml.default_systems_root(), help=argparse.SUPPRESS if suppress else "Systems checkout root for Phoenix-aware backends (default: /Systems when present)")
+  parser.add_argument("--systems-root", default=zml.default_systems_root(), help=argparse.SUPPRESS if suppress else "FlightSystems checkout root for Phoenix-aware backends (default: detected checkout)")
 
 
 def add_window_args(parser: argparse.ArgumentParser) -> None:

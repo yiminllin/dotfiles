@@ -281,6 +281,10 @@ backup_stow_conflicts() {
 
         [ -e "$target" ] || [ -L "$target" ] || continue
 
+        if [ "$target" = "$HOME/.gitconfig" ] && command -v mountpoint >/dev/null 2>&1 && mountpoint -q "$target"; then
+            continue
+        fi
+
         # A package may already be exposed through a repo-owned directory link.
         # Do not move files through that link into the backup directory.
         if has_repo_symlink_ancestor "$target" && ! is_repo_symlink "$target"; then
@@ -302,7 +306,11 @@ backup_stow_conflicts() {
 
 for config in "${CONFIGS[@]}"; do
     backup_stow_conflicts "$config"
-    stow "$config"
+    if [ "$config" = git ] && command -v mountpoint >/dev/null 2>&1 && mountpoint -q "$HOME/.gitconfig"; then
+        stow --ignore='^\.gitconfig$' "$config"
+    else
+        stow "$config"
+    fi
 done
 
 if is_fedora; then

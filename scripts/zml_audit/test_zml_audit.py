@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from zml_audit.backends import BACKEND_CHOICES, AutoBackend, BackendResult, ZmlCliBackend, ZmlConvBackend, build_zml_conv_command, select_backend
+from zml_audit.backends import BACKEND_CHOICES, AutoBackend, BackendResult, ZmlCliBackend, ZmlConvBackend, build_zml_conv_command, default_systems_root, select_backend
 from zml_audit.compare import compare_runs
 from zml_audit.extract import filter_samples, parse_samples, parse_time_arg
 from zml_audit.fields import flatten_field_paths
@@ -92,6 +92,32 @@ class FakeSchemaDiscoveryZml:
 
 
 class ZmlAuditPureTests(unittest.TestCase):
+  def test_default_systems_root_finds_checkout_without_legacy_path(self) -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+      base = Path(temp_dir)
+      checkout = base / "FlightSystems"
+      (checkout / "ash/phoenix").mkdir(parents=True)
+      outside = base / "outside"
+      outside.mkdir()
+      for cwd, workspaces, legacy in (
+          (checkout / "ash", [], base / "missing"),
+          (outside, [checkout], base / "missing"),
+          (outside, [], checkout),
+      ):
+        with self.subTest(cwd=cwd, workspaces=workspaces, legacy=legacy):
+          with (
+              patch("zml_audit.backends.Path.cwd", return_value=cwd),
+              patch("zml_audit.backends.Path.glob", return_value=iter(workspaces)),
+              patch("zml_audit.backends.DEFAULT_SYSTEMS_ROOT", legacy),
+          ):
+            self.assertEqual(default_systems_root(), str(checkout))
+      with (
+          patch("zml_audit.backends.Path.cwd", return_value=outside),
+          patch("zml_audit.backends.Path.glob", return_value=iter([])),
+          patch("zml_audit.backends.DEFAULT_SYSTEMS_ROOT", base / "missing"),
+      ):
+        self.assertIsNone(default_systems_root())
+
   def test_source_resolution_enumerates_only_provided_directory(self) -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
       root = Path(temp_dir)

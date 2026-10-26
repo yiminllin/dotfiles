@@ -188,7 +188,7 @@ print(json.dumps(dict(repo=root,repo_key=key,context_kind=kind,pr_number=p.get("
     or return 1
 
     set -l diff_args "$boundary"
-    if string match -qr '/Systems[^/]*(/|$)' -- "$root"
+    if string match -q '*FlightSystems*' -- "$remote"
         set -a diff_args -- . ':!notes' ':!.pi/skills'
     end
     set -l diff_json (command python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' $diff_args)

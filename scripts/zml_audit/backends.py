@@ -16,7 +16,12 @@ DEFAULT_SYSTEMS_ROOT = Path("/Systems")
 
 
 def default_systems_root() -> str | None:
-  return str(DEFAULT_SYSTEMS_ROOT) if DEFAULT_SYSTEMS_ROOT.exists() else None
+  cwd = Path.cwd()
+  roots = (cwd, *cwd.parents, *Path("/workspaces").glob("*"), DEFAULT_SYSTEMS_ROOT)
+  for root in roots:
+    if (root / "ash/phoenix").is_dir():
+      return str(root)
+  return None
 
 
 def resolve_systems_root(systems_root: str | None = None) -> str | None:

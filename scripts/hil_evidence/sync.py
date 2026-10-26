@@ -37,7 +37,7 @@ class ExtractedTest:
         }
 
 
-def build_sync_check(systems_root: str = "/Systems") -> JsonDict:
+def build_sync_check(systems_root: str) -> JsonDict:
     root = Path(systems_root)
     source_paths = {relative: root / relative for relative in SOURCE_RELATIVE_PATHS}
     blockers: list[JsonDict] = []

@@ -103,9 +103,9 @@ def parse_args() -> argparse.Namespace:
     sync_check = subparsers.add_parser(
         "sync-check",
         aliases=["check-presets"],
-        help="Compare local HIL presets with statically parsed /Systems HIL defaults.",
+        help="Compare local HIL presets with statically parsed FlightSystems HIL defaults.",
     )
-    sync_check.add_argument("--systems-root", default="/Systems", help="Systems checkout root (default: /Systems)")
+    sync_check.add_argument("--systems-root", required=True, help="FlightSystems checkout root")
     sync_check.add_argument("--format", choices=("json", "text", "markdown"), default="text")
     return parser.parse_args()
 

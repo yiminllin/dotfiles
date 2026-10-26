@@ -698,7 +698,7 @@ def add_field_args(parser: argparse.ArgumentParser) -> None:
 
 def add_backend_args(parser: argparse.ArgumentParser) -> None:
   parser.add_argument("--backend", choices=BACKEND_CHOICES, default="auto", help="ZML reader backend (default: auto)")
-  parser.add_argument("--systems-root", default=resolve_systems_root(), help="Systems checkout root for Phoenix-aware backends (default: /Systems when present)")
+  parser.add_argument("--systems-root", default=resolve_systems_root(), help="FlightSystems checkout root for Phoenix-aware backends (default: detected checkout)")
   parser.add_argument("--timeout", type=positive_float, default=60.0, help="Per-backend command timeout in seconds (default: 60)")
 
 
