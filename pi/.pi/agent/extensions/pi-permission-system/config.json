@@ -9,6 +9,8 @@
       "/private/tmp/**": "allow",
       "/home/vscode": "allow",
       "/home/vscode/**": "allow",
+      "/workspaces/FlightSystems": "allow",
+      "/workspaces/FlightSystems/**": "allow",
       "/Users/yiminlin/notes/**": "allow",
       "/Users/yiminlin/dotfiles/**": "allow",
       "/Users/yiminlin/.tmux/**": "allow",

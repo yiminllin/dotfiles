@@ -186,7 +186,7 @@
 | Pi BTW | Ephemeral side questions without interrupting the main session | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi Quiet Tools (`pi-quiet-tools`) | Compact tool output and richer edit/write diffs | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi Web Access | Web search, content extraction, GitHub cloning, and video understanding | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
-| Pi Permission System | Permission gates for files, Bash, MCP, and extensions | [pi/.pi/agent/extensions/pi-permission-system/config.json](pi/.pi/agent/extensions/pi-permission-system/config.json) |
+| Pi Permission System (disabled) | Permission gates; temporarily disabled due to false path prompts | [pi/.pi/agent/extensions/pi-permission-system/config.json](pi/.pi/agent/extensions/pi-permission-system/config.json) |
 | Pi Hermes Memory | Persistent memory, session search, and reusable skills | [pi/.pi/agent/hermes-memory-config.json](pi/.pi/agent/hermes-memory-config.json) |
 | Pi FFF | Fuzzy file/content search; initially tools-only | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi RPIV Ask User Question (`@juicesharp/rpiv-ask-user-question`) | Structured choices, custom answers, and decision dialogs for existing skills | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |

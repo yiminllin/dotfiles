@@ -1,5 +1,6 @@
 | Name | Description |
 |---|---|
+| [Pi Permission System](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-permission-system) | Permission gates; temporarily disabled because Bazel labels and API routes trigger false external-path prompts. |
 | [Black](https://github.com/psf/black) | Formats Python code with a consistent style. |
 | [isort](https://github.com/PyCQA/isort) | Sorts and groups Python import statements. |
 | [zoxide](https://github.com/ajeetdsouza/zoxide) | Tracks visited directories and jumps to them by partial name. |
