@@ -68,6 +68,7 @@ struct App {
     project: Option<&'static str>,
     work_category: Option<WorkCategory>,
     detail_scroll: u16,
+    state_selected: usize,
     input: String,
     form: Form,
     initial_form: Form,
@@ -173,13 +174,12 @@ impl Form {
                 .iter()
                 .position(|value| *value == self.work.category)
                 .unwrap();
-            self.work.set_category(
-                options[(index + if forward { 1 } else { options.len() - 1 }) % options.len()],
-            );
+            self.work.category =
+                options[(index + if forward { 1 } else { options.len() - 1 }) % options.len()];
             return;
         }
         if self.active == 6 {
-            let options = self.work.category.states();
+            let options = WorkState::ALL;
             let index = options
                 .iter()
                 .position(|value| *value == self.work.state)
@@ -336,6 +336,7 @@ impl App {
             project: None,
             work_category: None,
             detail_scroll: 0,
+            state_selected: 0,
             input: String::new(),
             form: Form::default(),
             initial_form: Form::default(),
@@ -379,14 +380,17 @@ impl App {
                                 .is_none_or(|category| view.task.work.category == category))
                         && (view.task.description.to_ascii_lowercase().contains(&filter)
                             || (self.project == Some("work")
-                                && [
+                                && ([
                                     &view.task.work.jira,
                                     &view.task.work.prs,
                                     &view.task.work.next_action,
                                     &view.task.work.notes,
                                 ]
                                 .iter()
-                                .any(|value| value.to_ascii_lowercase().contains(&filter)))
+                                .any(|value| value.to_ascii_lowercase().contains(&filter))
+                                    || pr_links(&view.task.work.prs)
+                                        .iter()
+                                        .any(|reference| reference.label.contains(&filter))))
                             || view.task.project.as_deref().is_some_and(|project| {
                                 project.to_ascii_lowercase().contains(&filter)
                             }))
@@ -550,7 +554,16 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                         KeyCode::Char('u') => WorkCategory::Uncategorized,
                         _ => WorkCategory::Feature,
                     };
-                    app.form.work.set_category(category);
+                    app.form.work.category = category;
+                }
+                KeyCode::Char(ch @ '1'..='4') if app.form.active == 6 => {
+                    app.form.work.state = WorkState::ALL[(ch as u8 - b'1') as usize];
+                }
+                KeyCode::Down | KeyCode::Char('j') if matches!(app.form.active, 5 | 6) => {
+                    app.form.choose(true);
+                }
+                KeyCode::Up | KeyCode::Char('k') if matches!(app.form.active, 5 | 6) => {
+                    app.form.choose(false);
                 }
                 KeyCode::Right | KeyCode::Char(' ') => app.form.choose(true),
                 KeyCode::Left => app.form.choose(false),
@@ -650,7 +663,8 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     app.detail_scroll = app.detail_scroll.saturating_sub(1)
                 }
                 KeyCode::Char('e') => open_edit_form(app),
-                KeyCode::Char('s') => app.mode = Mode::State(true),
+                KeyCode::Char('s') => open_state_picker(app, true),
+                KeyCode::Char('S') => cycle_work_state(app)?,
                 _ => {}
             }
             return Ok(false);
@@ -658,27 +672,23 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         Mode::State(detail) => {
             match key {
                 KeyCode::Esc => app.mode = if detail { Mode::Detail } else { Mode::Normal },
-                KeyCode::Char(ch @ '1'..='4') => {
-                    if let Some(view) = app.selected_task() {
-                        let mut work = view.task.work.clone();
-                        if let Some(state) = work.category.states().get((ch as u8 - b'1') as usize)
-                        {
-                            work.state = *state;
-                            if work.category == WorkCategory::Review
-                                && work.state == WorkState::Waiting
-                            {
-                                work.reviewed_at = Some(crate::data::now_string()?);
-                            }
-                            let id = view.task.id;
-                            append_event(&app.path, &new_envelope(id, "tui", work_update(work))?)?;
-                            app.reload()?;
-                            app.selected = app
-                                .visible_tasks()
-                                .iter()
-                                .position(|view| view.task.id == id)
-                                .unwrap_or(0);
-                            app.mode = if detail { Mode::Detail } else { Mode::Normal };
-                        }
+                KeyCode::Down | KeyCode::Char('j') | KeyCode::Up | KeyCode::Char('k') => {
+                    let count = WorkState::ALL.len();
+                    let step = if matches!(key, KeyCode::Down | KeyCode::Char('j')) {
+                        1
+                    } else {
+                        count - 1
+                    };
+                    app.state_selected = (app.state_selected + step) % count;
+                }
+                KeyCode::Enter | KeyCode::Char('1'..='4') => {
+                    let index = match key {
+                        KeyCode::Char(ch) => (ch as u8 - b'1') as usize,
+                        _ => app.state_selected,
+                    };
+                    if let Some(state) = WorkState::ALL.get(index) {
+                        set_selected_work_state(app, *state)?;
+                        app.mode = if detail { Mode::Detail } else { Mode::Normal };
                     }
                 }
                 _ => {}
@@ -720,8 +730,9 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             app.mode = Mode::Detail;
         }
         KeyCode::Char('s') if app.project == Some("work") && app.selected_task().is_some() => {
-            app.mode = Mode::State(false)
+            open_state_picker(app, false)
         }
+        KeyCode::Char('S') if app.project == Some("work") => cycle_work_state(app)?,
         KeyCode::Char('g') if double_g => app.selected = 0,
         KeyCode::Char('G') => {
             app.selected = app.visible_tasks().len().saturating_sub(1);
@@ -839,6 +850,10 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
     ] {
         *value = value.trim().to_string();
     }
+    if is_work {
+        work.jira = hyperlinks::normalize_jira(&work.jira);
+        work.prs = hyperlinks::normalize_prs(&work.prs);
+    }
     if is_work
         && work.category == WorkCategory::Review
         && work.state == WorkState::Waiting
@@ -910,9 +925,61 @@ fn append_selected(app: &mut App, event: Event) -> Result<()> {
     Ok(())
 }
 
+fn set_selected_work_state(app: &mut App, state: WorkState) -> Result<()> {
+    if let Some(view) = app.selected_task() {
+        let id = view.task.id;
+        let mut work = view.task.work.clone();
+        work.state = state;
+        if work.category == WorkCategory::Review && state == WorkState::Waiting {
+            work.reviewed_at = Some(crate::data::now_string()?);
+        }
+        append_event(&app.path, &new_envelope(id, "tui", work_update(work))?)?;
+        app.reload()?;
+        app.selected = app
+            .visible_tasks()
+            .iter()
+            .position(|view| view.task.id == id)
+            .unwrap_or(0);
+    }
+    Ok(())
+}
+
+fn cycle_work_state(app: &mut App) -> Result<()> {
+    if let Some(view) = app.selected_task() {
+        if view.task.status == TaskStatus::Pending {
+            let index = WorkState::ALL
+                .iter()
+                .position(|state| *state == view.task.work.state)
+                .unwrap_or(0);
+            set_selected_work_state(app, WorkState::ALL[(index + 1) % WorkState::ALL.len()])?;
+        }
+    }
+    Ok(())
+}
+
+fn open_state_picker(app: &mut App, detail: bool) {
+    if let Some(view) = app.selected_task() {
+        app.state_selected = WorkState::ALL
+            .iter()
+            .position(|state| *state == view.task.work.state)
+            .unwrap_or(0);
+        app.mode = Mode::State(detail);
+    }
+}
+
 fn draw(frame: &mut Frame, app: &mut App) {
     app.hyperlinks.clear();
-    if matches!(app.mode, Mode::Detail | Mode::State(_)) {
+    if let Mode::State(detail) = app.mode {
+        if detail {
+            draw_work_detail(frame, app);
+        } else {
+            draw_work_dashboard(frame, app);
+        }
+        app.hyperlinks.clear();
+        work_view::draw_state_picker(frame, app);
+        return;
+    }
+    if matches!(app.mode, Mode::Detail) {
         draw_work_detail(frame, app);
         return;
     }
@@ -1161,8 +1228,16 @@ fn wrap_description(description: &str, width: usize) -> Text<'static> {
 }
 
 fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
+    let hint = match form.active {
+        5 => "Category: f/r/d/a/u or arrows; Enter continues",
+        6 => "State: 1-4 or arrows; Enter continues",
+        7 => "Jira (optional): FSW-12345 or ticket URL",
+        8 => "PRs (optional): #123, 123 or URL; > chain; ; separate",
+        9 => "Next action (optional): e.g. Address review comments",
+        _ => "Description required | - means unset",
+    };
     let block = Block::default()
-        .title("Description required | - means unset")
+        .title(hint)
         .borders(Borders::ALL)
         .border_style(Style::default().add_modifier(Modifier::DIM));
     let inner = block.inner(area);
@@ -1180,17 +1255,95 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         "Next action",
         "Notes",
     ];
-    let start = form
-        .active
-        .saturating_sub(inner.height.saturating_sub(1) as usize);
-    for (index, label) in labels
+    let mut fields = Vec::new();
+    for index in 0..form.field_count() {
+        fields.push((index, None));
+        let count = match index {
+            5 => WorkCategory::ALL.len(),
+            6 => WorkState::ALL.len(),
+            _ => 0,
+        };
+        fields.extend((0..count).map(|choice| (index, Some(choice))));
+    }
+    let (selected_choice, choice_count) = match form.active {
+        5 => (
+            WorkCategory::ALL
+                .iter()
+                .position(|value| *value == form.work.category),
+            WorkCategory::ALL.len(),
+        ),
+        6 => (
+            WorkState::ALL
+                .iter()
+                .position(|value| *value == form.work.state),
+            WorkState::ALL.len(),
+        ),
+        _ => (None, 0),
+    };
+    let focus = fields
         .iter()
+        .rposition(|(index, choice)| {
+            *index == form.active
+                && (choice.is_none()
+                    || inner.height as usize > choice_count
+                    || *choice == selected_choice)
+        })
+        .unwrap_or(0);
+    let start = focus.saturating_sub(inner.height.saturating_sub(1) as usize);
+    for (line, (index, choice)) in fields
+        .into_iter()
         .enumerate()
-        .take(form.field_count())
         .skip(start)
         .take(inner.height as usize)
     {
-        let row = Rect::new(inner.x, inner.y + (index - start) as u16, inner.width, 1);
+        let row = Rect::new(inner.x, inner.y + (line - start) as u16, inner.width, 1);
+        if let Some(choice) = choice {
+            let (shortcut, label, description, selected) = if index == 5 {
+                let category = WorkCategory::ALL[choice];
+                let (shortcut, description) = match category {
+                    WorkCategory::Feature => ('f', "Build, fix or investigate"),
+                    WorkCategory::Review => ('r', "Review a PR; track replies"),
+                    WorkCategory::Design => ('d', "Explore ideas or learn"),
+                    WorkCategory::Administrative => ('a', "Tickets, messages, housekeeping"),
+                    WorkCategory::Uncategorized => ('u', "Decide later"),
+                };
+                (
+                    shortcut,
+                    category.label(),
+                    description,
+                    category == form.work.category,
+                )
+            } else {
+                let state = WorkState::ALL[choice];
+                let description = match state {
+                    WorkState::None => "Not a current focus",
+                    WorkState::Next => "Plan to work on next",
+                    WorkState::InProgress => "Working on it",
+                    WorkState::Waiting => "Needs external action",
+                };
+                (
+                    (b'1' + choice as u8) as char,
+                    state.label(),
+                    description,
+                    state == form.work.state,
+                )
+            };
+            let marker = if selected { "●" } else { " " };
+            let style = Style::default().fg(if selected {
+                Color::Rgb(85, 100, 102)
+            } else {
+                Color::Rgb(125, 133, 135)
+            });
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(format!("    {marker} {shortcut} {label:<17} "), style),
+                    Span::styled(description, Style::default().fg(Color::Rgb(140, 145, 145))),
+                ])),
+                row,
+            );
+            continue;
+        }
+        let label = labels[index];
         let value = match index {
             4 => {
                 if form.blocked {
@@ -1212,17 +1365,8 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         } else if index == form.active {
             let options: Vec<&str> = match index {
                 4 => vec!["no", "yes"],
-                5 => WorkCategory::ALL
-                    .iter()
-                    .map(|category| category.label())
-                    .collect(),
-                6 => form
-                    .work
-                    .category
-                    .states()
-                    .iter()
-                    .map(|state| state.label())
-                    .collect(),
+                5 => vec![form.work.category.label()],
+                6 => vec![form.work.state.label()],
                 _ => form.options().to_vec(),
             };
             let mut spans = vec![Span::styled(

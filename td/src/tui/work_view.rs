@@ -37,16 +37,16 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         Paragraph::new(Line::from(spans)).wrap(ratatui::widgets::Wrap { trim: true }),
         tabs,
     );
-    frame.render_widget(Paragraph::new("j/k move  Enter details  a add  e edit  s state  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit")
+    frame.render_widget(Paragraph::new("j/k move  Enter details  a add  e edit  s state  S cycle  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit")
         .style(Style::default().add_modifier(Modifier::DIM)), help);
 
     let (priority_width, estimate_width, state_width, jira_width, prs_width) = if body.width >= 100
     {
         (8, 8, 12, 12, 12)
     } else if body.width >= 70 {
-        (3, 3, 10, 11, 9)
+        (3, 3, 11, 11, 9)
     } else {
-        (1, 1, 9, 9, 7)
+        (1, 1, 11, 9, 5)
     };
     let widths = [
         Constraint::Length(priority_width),
@@ -133,6 +133,18 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                         }
                     } else {
                         ""
+                    })
+                    .style(if index == 0 {
+                        if task.status == TaskStatus::Completed {
+                            Style::default()
+                                .fg(Color::Rgb(75, 105, 77))
+                                .bg(Color::Rgb(232, 240, 228))
+                                .remove_modifier(Modifier::DIM)
+                        } else {
+                            state_style(work.state)
+                        }
+                    } else {
+                        Style::default()
                     }),
                     Cell::from(line).style(description_style),
                 ])
@@ -210,13 +222,87 @@ fn pr_summary(value: &str) -> String {
     reference_summary(value, "PRs", pr_links(value))
 }
 
+fn state_style(state: WorkState) -> Style {
+    let (foreground, background) = match state {
+        WorkState::None => (Color::Rgb(100, 100, 96), Color::Rgb(238, 237, 233)),
+        WorkState::Next => (Color::Rgb(70, 103, 104), Color::Rgb(229, 240, 238)),
+        WorkState::InProgress => (Color::Rgb(103, 80, 115), Color::Rgb(239, 231, 242)),
+        WorkState::Waiting => (Color::Rgb(117, 100, 64), Color::Rgb(245, 238, 217)),
+    };
+    Style::default()
+        .fg(foreground)
+        .bg(background)
+        .remove_modifier(Modifier::DIM)
+}
+
+pub(super) fn draw_state_picker(frame: &mut Frame, app: &App) {
+    let Some(view) = app.selected_task() else {
+        return;
+    };
+    let work = &view.task.work;
+    let states = WorkState::ALL;
+    let area = frame.area();
+    let width = area.width.min(54);
+    let height = area.height.min(states.len() as u16 + 7);
+    let popup = Rect::new(
+        area.x + (area.width - width) / 2,
+        area.y + (area.height - height) / 2,
+        width,
+        height,
+    );
+    frame.render_widget(ratatui::widgets::Clear, popup);
+    let mut lines = vec![
+        Line::from(format!(
+            " {} · current: {}",
+            work.category.label(),
+            work.state.label()
+        )),
+        Line::default(),
+    ];
+    for (index, state) in states.iter().enumerate() {
+        let selected = index == app.state_selected;
+        lines.push(Line::from(vec![
+            Span::raw(if selected { "> " } else { "  " }),
+            Span::styled(
+                format!("{}  {:<12}", index + 1, state.label()),
+                if selected {
+                    state_style(*state).add_modifier(Modifier::BOLD)
+                } else {
+                    state_style(*state)
+                },
+            ),
+            Span::raw(if *state == work.state {
+                "  current"
+            } else {
+                ""
+            }),
+        ]));
+    }
+    lines.extend([
+        Line::default(),
+        Line::from(" j/k ↑/↓ move · Enter apply · 1–4 select"),
+        Line::from(" Esc cancel · Waiting is not Done"),
+    ]);
+    frame.render_widget(
+        Paragraph::new(lines)
+            .style(
+                Style::default()
+                    .fg(Color::Rgb(65, 70, 65))
+                    .bg(Color::Rgb(253, 246, 227)),
+            )
+            .block(
+                Block::default()
+                    .title(" Set work state ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(ACCENT)),
+            ),
+        popup,
+    );
+}
+
 pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
-    let selecting_state = matches!(app.mode, Mode::State(_));
-    let [body, help] = Layout::vertical([
-        Constraint::Min(1),
-        Constraint::Length(if selecting_state { 3 } else { 1 }),
-    ])
-    .areas(frame.area());
+    let [body, help] =
+        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(frame.area());
     let block = Block::default()
         .title(" Work details ")
         .borders(Borders::ALL)
@@ -309,19 +395,7 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
             );
         }
     }
-    let help_text = if selecting_state {
-        let choices = work
-            .category
-            .states()
-            .iter()
-            .enumerate()
-            .map(|(index, state)| format!("{} {}", index + 1, state.label()))
-            .collect::<Vec<_>>()
-            .join("   ");
-        format!("Set state: {choices}\nWaiting remains open; Done is separate.\nNumber selects  Esc cancel")
-    } else {
-        "j/k scroll  e edit  s state  Esc back  q quit".to_string()
-    };
+    let help_text = "j/k scroll  e edit  s state  S cycle  Esc back  q quit";
     let max_scroll = lines
         .len()
         .saturating_sub(inner.height as usize)
@@ -380,7 +454,7 @@ mod tests {
         }
         assert_eq!(app.form.active, 5);
         handle_key(&mut app, KeyCode::Char('r')).unwrap();
-        assert_eq!(app.form.work.state, WorkState::ToReview);
+        assert_eq!(app.form.work.state, WorkState::None);
         handle_key(&mut app, KeyCode::Tab).unwrap();
         handle_key(&mut app, KeyCode::Tab).unwrap();
         for text in [
@@ -405,10 +479,19 @@ mod tests {
             loaded.selected_task().unwrap().task.work.notes,
             "Try λ cases"
         );
-        assert_eq!(loaded.selected_task().unwrap().task.work.jira, "FSW-12345");
+        assert_eq!(
+            loaded.selected_task().unwrap().task.work.jira,
+            "https://flyzipline.atlassian.net/browse/FSW-12345"
+        );
+        assert_eq!(loaded.selected_task().unwrap().task.work.prs,
+            "https://github.com/example/repo/pull/1 > https://github.com/ZiplineTeam/FlightSystems/pull/2; https://github.com/ZiplineTeam/FlightSystems/pull/3");
+        assert_eq!(
+            loaded.selected_task().unwrap().task.work.next_action,
+            "Check ownership"
+        );
         handle_key(&mut loaded, KeyCode::Enter).unwrap();
         handle_key(&mut loaded, KeyCode::Char('s')).unwrap();
-        handle_key(&mut loaded, KeyCode::Char('3')).unwrap();
+        handle_key(&mut loaded, KeyCode::Char('4')).unwrap();
         assert!(matches!(loaded.mode, Mode::Detail));
         let task = &loaded.selected_task().unwrap().task;
         assert_eq!(task.status, TaskStatus::Pending);
@@ -417,13 +500,300 @@ mod tests {
         handle_key(&mut loaded, KeyCode::Esc).unwrap();
         assert_eq!(loaded.project, Some("work"));
         handle_key(&mut loaded, KeyCode::Char('s')).unwrap();
-        handle_key(&mut loaded, KeyCode::Char('4')).unwrap();
+        handle_key(&mut loaded, KeyCode::Char('2')).unwrap();
         assert_eq!(
             loaded.selected_task().unwrap().task.work.state,
-            WorkState::FollowUp
+            WorkState::Next
         );
         handle_key(&mut loaded, KeyCode::Tab).unwrap();
         assert!(loaded.visible_tasks().is_empty());
+    }
+
+    #[test]
+    fn work_form_categories_are_visible_and_selected_in_small_terminals() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        handle_key(&mut app, KeyCode::Char('w')).unwrap();
+        for (width, height) in [(100, 24), (45, 16)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let text = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            for category in WorkCategory::ALL {
+                assert!(
+                    text.contains(category.label()),
+                    "missing {}",
+                    category.label()
+                );
+            }
+            assert!(text.contains("Decide later"));
+        }
+        for _ in 0..4 {
+            handle_key(&mut app, KeyCode::Tab).unwrap();
+        }
+        assert_eq!(app.form.active, 5);
+        app.form.work.state = WorkState::Waiting;
+        for (shortcut, category) in [
+            ('f', WorkCategory::Feature),
+            ('r', WorkCategory::Review),
+            ('d', WorkCategory::Design),
+            ('a', WorkCategory::Administrative),
+            ('u', WorkCategory::Uncategorized),
+        ] {
+            handle_key(&mut app, KeyCode::Char(shortcut)).unwrap();
+            assert_eq!(app.form.work.category, category);
+            assert_eq!(app.form.work.state, WorkState::Waiting);
+            let mut terminal = Terminal::new(TestBackend::new(45, 8)).unwrap();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let buffer = terminal.backend().buffer();
+            let text = buffer
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            assert!(text.contains(category.label()));
+            assert!(buffer.content.iter().any(|cell| cell.symbol() == "●"
+                && cell.fg == Color::Rgb(85, 100, 102)
+                && cell.bg == Color::Reset
+                && !cell.modifier.contains(Modifier::BOLD)));
+        }
+        assert!(!app.path.exists());
+    }
+
+    #[test]
+    fn work_form_states_use_subtle_nested_choices_and_keep_selection_visible() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        app.select_project(Some("work"));
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        app.form.active = 6;
+        for (width, height) in [(100, 24), (45, 12)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let text = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            assert!(text.contains("> State: [No state]"));
+            for state in WorkState::ALL {
+                assert!(text.contains(state.label()));
+            }
+            assert!(text.contains("Not a current"));
+            assert!(text.contains("Needs external"));
+        }
+        for (index, state) in WorkState::ALL.iter().enumerate() {
+            handle_key(&mut app, KeyCode::Char((b'1' + index as u8) as char)).unwrap();
+            assert_eq!(app.form.work.state, *state);
+            let mut terminal = Terminal::new(TestBackend::new(45, 8)).unwrap();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let row = terminal
+                .backend()
+                .buffer()
+                .content
+                .chunks(45)
+                .find(|row| {
+                    row.iter().any(|cell| cell.symbol() == "●")
+                        && row
+                            .iter()
+                            .map(|cell| cell.symbol())
+                            .collect::<String>()
+                            .contains(state.label())
+                })
+                .unwrap();
+            let text = row.iter().map(|cell| cell.symbol()).collect::<String>();
+            assert!(text.contains(state.label()));
+            let marker = row.iter().position(|cell| cell.symbol() == "●").unwrap();
+            assert_eq!(marker, 5);
+            assert_eq!(row[marker].fg, Color::Rgb(85, 100, 102));
+            assert_eq!(row[marker].bg, Color::Reset);
+            assert!(!row[marker].modifier.contains(Modifier::BOLD));
+        }
+        handle_key(&mut app, KeyCode::Down).unwrap();
+        assert_eq!(app.form.work.state, WorkState::None);
+        handle_key(&mut app, KeyCode::Up).unwrap();
+        assert_eq!(app.form.work.state, WorkState::Waiting);
+        handle_key(&mut app, KeyCode::Char('j')).unwrap();
+        assert_eq!(app.form.work.state, WorkState::None);
+        handle_key(&mut app, KeyCode::Char('k')).unwrap();
+        assert_eq!(app.form.work.state, WorkState::Waiting);
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        assert_eq!(app.form.active, 7);
+        handle_key(&mut app, KeyCode::BackTab).unwrap();
+        assert_eq!(app.form.active, 6);
+        assert_eq!(app.form.work.state, WorkState::Waiting);
+        assert!(!app.path.exists());
+    }
+
+    #[test]
+    fn shift_s_cycles_work_states_and_preserves_selection_and_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        app.select_project(Some("work"));
+        handle_key(&mut app, KeyCode::Char('S')).unwrap();
+        assert!(!app.path.exists());
+        app.form.work.category = WorkCategory::Review;
+        app.form.work.jira = "FSW-12345".into();
+        app.form.work.prs = "#123".into();
+        app.form.work.next_action = "Check feedback".into();
+        app.form.work.notes = "Keep this context".into();
+        for (title, priority) in [("Other item", "M"), ("Cycle this item", "H")] {
+            app.form.values = [title.into(), "work".into(), priority.into(), "D".into()];
+            save_form(&mut app, None).unwrap();
+        }
+        app.work_category = Some(WorkCategory::Review);
+        app.selected = 0;
+        let id = app.selected_task().unwrap().task.id;
+        let mut expected = app.selected_task().unwrap().task.work.clone();
+        for state in [
+            WorkState::Next,
+            WorkState::InProgress,
+            WorkState::Waiting,
+            WorkState::None,
+        ] {
+            handle_key_event(
+                &mut app,
+                KeyEvent::new(KeyCode::Char('S'), KeyModifiers::SHIFT),
+            )
+            .unwrap();
+            assert!(matches!(app.mode, Mode::Normal));
+            let task = &app.selected_task().unwrap().task;
+            assert_eq!(task.id, id);
+            assert_eq!(task.status, TaskStatus::Pending);
+            expected.state = state;
+            if state == WorkState::Waiting {
+                assert!(task.work.reviewed_at.is_some());
+                expected.reviewed_at = task.work.reviewed_at.clone();
+            }
+            assert_eq!(task.work, expected);
+        }
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        handle_key(&mut app, KeyCode::Char('S')).unwrap();
+        assert!(matches!(app.mode, Mode::Detail));
+        assert_eq!(
+            app.selected_task().unwrap().task.work.state,
+            WorkState::Next
+        );
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        let before = std::fs::read(&app.path).unwrap();
+        handle_key(&mut app, KeyCode::Char('S')).unwrap();
+        app.select_project(None);
+        handle_key(&mut app, KeyCode::Char('S')).unwrap();
+        assert_eq!(std::fs::read(&app.path).unwrap(), before);
+    }
+
+    #[test]
+    fn state_picker_navigates_cancels_and_applies_without_leaving_dashboard() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        app.form.values = ["Review item".into(), "work".into(), "H".into(), "D".into()];
+        app.form.work.category = WorkCategory::Review;
+        save_form(&mut app, None).unwrap();
+        app.select_project(Some("work"));
+        let before = std::fs::read(&app.path).unwrap();
+        handle_key(&mut app, KeyCode::Char('s')).unwrap();
+        assert_eq!(app.state_selected, 0);
+        handle_key(&mut app, KeyCode::Up).unwrap();
+        assert_eq!(app.state_selected, 3);
+        handle_key(&mut app, KeyCode::Char('j')).unwrap();
+        assert_eq!(app.state_selected, 0);
+        for (width, height) in [(100, 30), (45, 12)] {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let buffer = terminal.backend().buffer();
+            let text = buffer
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            assert!(text.contains("Set work state"));
+            assert!(text.contains("Enter apply"));
+            assert!(text.contains("Esc cancel"));
+            assert!(buffer
+                .content
+                .iter()
+                .any(|cell| cell.bg == state_style(WorkState::None).bg.unwrap()));
+        }
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
+        assert_eq!(std::fs::read(&app.path).unwrap(), before);
+        handle_key(&mut app, KeyCode::Char('s')).unwrap();
+        handle_key(&mut app, KeyCode::Down).unwrap();
+        handle_key(&mut app, KeyCode::Char('j')).unwrap();
+        handle_key(&mut app, KeyCode::Char('j')).unwrap();
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
+        let task = &app.selected_task().unwrap().task;
+        assert_eq!(task.work.state, WorkState::Waiting);
+        assert_eq!(task.status, TaskStatus::Pending);
+        assert!(task.work.reviewed_at.is_some());
+        let mut terminal = Terminal::new(TestBackend::new(100, 16)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        assert!(terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .any(|cell| cell.symbol() == "W"
+                && cell.bg == state_style(WorkState::Waiting).bg.unwrap()));
+        assert_ne!(
+            state_style(WorkState::Waiting).bg,
+            state_style(WorkState::InProgress).bg
+        );
+    }
+
+    #[test]
+    fn done_badge_is_green_and_reopening_restores_the_workflow_badge() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        app.form.values = ["Work item".into(), "work".into(), "H".into(), "D".into()];
+        app.form.work.state = WorkState::InProgress;
+        save_form(&mut app, None).unwrap();
+        app.select_project(Some("work"));
+        let work = app.selected_task().unwrap().task.work.clone();
+        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        assert_eq!(app.status, TaskStatus::Completed);
+        assert_eq!(app.selected_task().unwrap().task.work, work);
+        let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let green = Color::Rgb(232, 240, 228);
+        assert!(terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .any(|cell| cell.symbol() == "D"
+                && cell.bg == green
+                && !cell.modifier.contains(Modifier::DIM)));
+        for (index, state) in WorkState::ALL.iter().enumerate() {
+            assert_ne!(state_style(*state).bg, Some(green));
+            for other in &WorkState::ALL[index + 1..] {
+                assert_ne!(state_style(*state).bg, state_style(*other).bg);
+            }
+        }
+        handle_key(&mut app, KeyCode::Char('u')).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        assert_eq!(app.status, TaskStatus::Pending);
+        assert_eq!(app.selected_task().unwrap().task.work, work);
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        assert!(terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .any(|cell| cell.symbol() == "I"
+                && Some(cell.bg) == state_style(WorkState::InProgress).bg));
     }
 
     #[test]
@@ -452,6 +822,7 @@ mod tests {
         app.form.work.jira = "https://example.atlassian.net/browse/FSW-12345".into();
         app.form.work.prs = "#100 > #101; #102".into();
         app.form.work.next_action = "Hidden next action".into();
+        app.form.work.state = WorkState::InProgress;
         save_form(&mut app, None).unwrap();
         app.select_project(Some("work"));
         let before = std::fs::read_to_string(&app.path).unwrap();
@@ -466,7 +837,7 @@ mod tests {
                 .map(|row| row.iter().map(|cell| cell.symbol()).collect())
                 .collect();
             let row = lines.iter().find(|line| line.contains("Item")).unwrap();
-            for expected in ["H", "D", "Active", "FSW-12345", "3 PRs"] {
+            for expected in ["H", "D", "In progress", "FSW-12345", "3 PRs"] {
                 assert!(
                     row.contains(expected),
                     "missing {expected} at width {width}: {row}"
@@ -481,7 +852,7 @@ mod tests {
                 .map(|label| header.find(label).unwrap())
                 .collect();
             assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
-            let positions: Vec<_> = ["FSW-12345", "3 PRs", "Active", "Item"]
+            let positions: Vec<_> = ["FSW-12345", "3 PRs", "In progress", "Item"]
                 .iter()
                 .map(|value| row.find(value).unwrap())
                 .collect();
@@ -594,7 +965,7 @@ mod tests {
             handle_key(&mut app, KeyCode::Char(view)).unwrap();
             handle_key(&mut app, KeyCode::Char('a')).unwrap();
             assert_eq!(app.form.work.category, WorkCategory::Uncategorized);
-            assert_eq!(app.form.work.state, WorkState::Active);
+            assert_eq!(app.form.work.state, WorkState::None);
             app.form.values[0] = format!("New task from view {view}");
             save_form(&mut app, None).unwrap();
             if view == '0' {
@@ -643,7 +1014,7 @@ mod tests {
         assert_eq!(app.visible_tasks().len(), 2);
         assert_eq!(
             app.selected_task().unwrap().task.work.state,
-            WorkState::Active
+            WorkState::None
         );
         let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
@@ -671,7 +1042,7 @@ mod tests {
             "Reply to team message"
         );
         handle_key(&mut app, KeyCode::Char('s')).unwrap();
-        handle_key(&mut app, KeyCode::Char('2')).unwrap();
+        handle_key(&mut app, KeyCode::Char('4')).unwrap();
         assert_eq!(
             app.selected_task().unwrap().task.work.state,
             WorkState::Waiting
@@ -682,7 +1053,7 @@ mod tests {
         );
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         assert_eq!(app.form.work.category, WorkCategory::Uncategorized);
-        assert_eq!(app.form.work.state, WorkState::Active);
+        assert_eq!(app.form.work.state, WorkState::None);
     }
 
     #[test]
@@ -699,7 +1070,7 @@ mod tests {
             app.form = Form::default();
             app.form.values[0] = title.into();
             app.form.values[1] = "work".into();
-            app.form.work.set_category(category);
+            app.form.work.category = category;
             app.form.values[2] = match category {
                 WorkCategory::Review => "H",
                 WorkCategory::Feature => "L",
@@ -775,7 +1146,7 @@ mod tests {
         );
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         assert_eq!(app.form.work.category, WorkCategory::Uncategorized);
-        assert_eq!(app.form.work.state, WorkState::Active);
+        assert_eq!(app.form.work.state, WorkState::None);
         app.form.active = 10;
         let mut small = Terminal::new(TestBackend::new(45, 8)).unwrap();
         small.draw(|frame| draw(frame, &mut app)).unwrap();

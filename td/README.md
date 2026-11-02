@@ -98,22 +98,35 @@ Use `p`, then `w` to open Work. Other project views keep the original table.
 
 - `0` / `1` / `2` / `3` / `4` / `5`: All / Features / Reviews / Design and learning / Administrative / Uncategorized
 - Enter: open details; `j` / `k` scroll details; Esc returns to the dashboard
-- `s`: choose a workflow state by number; Esc cancels
-- `a` / `e`: add / edit; every new Work task starts as Uncategorized / Active
+- `s`: open the state popup; `j` / `k` or arrows move, Enter applies, a number selects directly, and Esc cancels
+- `S` (Shift+s): cycle No state → Next → In progress → Waiting → No state.
+  Works on the dashboard and in details; completed tasks are unchanged.
+- `a` / `e`: add / edit; every new Work task starts as Uncategorized / No state
 - Tab: Pending / Done within the selected category
 - `/`: search descriptions and Work details
 - Esc from the dashboard: All projects; `q`: quit
 
-Work items remain regular tasks. Workflow state is separate from completion:
-Review → Waiting stays Pending. Choosing Waiting records the review-round time;
-Follow-up makes it actionable again. All shows one continuous list without category
-headers: Pending uses descending urgency across all categories, and Done uses newest
-completion first. Waiting/Paused items are dimmed. In a focused category's Pending
-view, they follow active items; urgency ordering applies within each state group.
-Use `d` only when the whole task is done; `u` still reopens it.
-Administrative covers Jira housekeeping, replying to messages, and similar work;
-its states are Active, Waiting, and Paused. Uncategorized uses these states too.
-Task rows have no blank separators.
+Every Work category uses the same states. Changing category preserves the state.
+
+| Picker key | State | Meaning | Background |
+|---|---|---|---|
+| `1` | No state | Tracked, but not a current focus | Gray |
+| `2` | Next | You intend to work on it next | Cyan |
+| `3` | In progress | You are working on it | Purple |
+| `4` | Waiting | Someone or something else must act first | Amber |
+
+Workflow state is separate from Pending / Done. A review in Waiting stays Pending;
+choosing Waiting records the review-round time. Move it to Next when it needs attention.
+Use `d` on the dashboard when the whole task is done. Tab opens the Done view;
+`u` reopens the selected task with its previous workflow state. Done is not a picker
+choice: the green Done badge overrides the workflow badge while the task is complete.
+Completed tasks also stay visible in Pending for 24 hours.
+
+All shows one continuous list without category headers: Pending uses descending
+urgency across all categories, and Done uses newest completion first. Waiting items
+are dimmed outside the state badge. In a focused category's Pending view, they follow
+other items; urgency ordering applies within each group. Administrative covers Jira
+housekeeping, messages, and similar work. Task rows have no blank separators.
 
 The Work table has Priority, Estimate, Jira, PRs, State, and Task columns. Narrow
 windows shorten the first two headers to Pri/Est or P/E. Task descriptions wrap;
@@ -124,15 +137,24 @@ Full links, PR outlines, next action, review time, and notes stay in details
 
 Selecting project `work` in the form reveals Category, State, Jira, PRs / tree,
 Next action, and Notes. Category always has a value and defaults to Uncategorized,
-even when adding from a focused category view. Links and notes are optional.
-Use arrows/Space for category/state, or `f` / `r` / `d` / `a` / `u` for category. Enter/Tab
-moves between fields. Work text fields start in insert mode. Press Esc, then
-`:wq` and Enter to save. Text fields use the same Vim editing keys as Description.
+even when adding from a focused category view. Category and State choices appear
+as indented rows with short explanations, muted text, and a dot on the selected
+choice. Choice rows have no bold text or colored backgrounds.
+Links and notes are optional. Next action is one concrete step, such as
+“Address review comments”; it does not change workflow state or create a subtask.
+Use arrows, `j` / `k`, or Space for category/state; `f` / `r` / `d` / `a` / `u`
+selects a category, and `1`–`4` selects a state. Enter/Tab moves between fields.
+Work text fields start in insert mode. Press Esc, then `:wq` and Enter to save. Text fields use the same Vim editing keys as Description.
 
-Jira and PR references are manual text, with no network sync. In PRs / tree,
-`#100 > #101 > #102; #200` displays a chain plus a separate PR. You can use full
-URLs instead of numbers. This outline does not infer Git branches or track PR
-status. Notes and links are entered on one line and wrap in details.
+Jira and PR references are manual, with no network sync. Jira accepts `FSW-12345`
+or a ticket URL. PRs accept `#123`, `123`, or a PR URL. Saving a Work form converts
+recognized references to canonical links, removing page suffixes, queries, and
+fragments while keeping the host and repository. Other text stays unchanged.
+Existing records are not rewritten until you save their Work form.
+
+In PRs / tree, `#100 > #101 > #102; #200` displays a chain plus a separate PR.
+Normalization preserves these separators. This outline does not infer Git branches
+or track PR status. Notes and links use one line and wrap in details.
 
 #### Keyboard hyperlinks over SSH
 
@@ -142,9 +164,8 @@ arbitrary PR: press Enter to select individual links in details. Wrapped detail
 links keep their target. Unknown reference text remains plain text.
 
 Bare Jira IDs resolve to `https://flyzipline.atlassian.net/browse/<ID>`; bare
-`#123` references resolve to `https://github.com/ZiplineTeam/FlightSystems/pull/123`.
-For another site/repository, enter its full Jira `/browse/` or GitHub `/pull/` URL;
-that URL is preserved. Only HTTP(S) targets without control characters are emitted.
+`#123` or `123` references resolve to `https://github.com/ZiplineTeam/FlightSystems/pull/123`.
+For another site/repository, enter its full Jira `/browse/` or GitHub `/pull/` URL. Only HTTP(S) targets without control characters are emitted.
 This uses saved Work metadata; it does not import links from task descriptions.
 
 The local Kitty binding in `kitty/.config/kitty/kitty.conf` is:
@@ -179,8 +200,10 @@ does not restore or overwrite saved sessions while the old server is still activ
 The PATH selects the matching tmux executable. Existing sessions stay on their
 current server; switching the usual server is a separate action.
 
-Work tasks without category metadata appear as Uncategorized / Active. Explicitly
-saved categories are preserved. Old event logs need no migration. Saving a new
+Work tasks without metadata appear as Uncategorized / No state. Explicitly saved
+categories are preserved. Old states load as shared states without rewriting the log:
+Active/Reviewing/Exploring → In progress; To review/Follow-up → Next;
+Idea/Paused → No state; Waiting stays Waiting. Old event logs need no migration. Saving a new
 Work task from a focused category view opens its saved category, so the new task
 stays visible. Work metadata is an optional field on update events; ordinary edits
 preserve it, including edits made with the previously installed binary.

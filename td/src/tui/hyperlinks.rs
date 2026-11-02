@@ -57,6 +57,8 @@ pub(super) fn pr_links(value: &str) -> Vec<Reference> {
     references(value, |token| {
         let number = if let Some(number) = token.strip_prefix('#') {
             number
+        } else if token.chars().all(|ch| ch.is_ascii_digit()) {
+            token
         } else {
             token
                 .split_once("/pull/")?
@@ -74,6 +76,35 @@ pub(super) fn pr_links(value: &str) -> Vec<Reference> {
         };
         Some((format!("#{number}"), url))
     })
+}
+
+pub(super) fn normalize_jira(value: &str) -> String {
+    normalize_references(value, jira_links, "/browse/")
+}
+
+pub(super) fn normalize_prs(value: &str) -> String {
+    normalize_references(value, pr_links, "/pull/")
+}
+
+fn normalize_references(value: &str, parse: fn(&str) -> Vec<Reference>, path: &str) -> String {
+    let separator = |ch: char| ch.is_whitespace() || matches!(ch, ';' | ',' | '>');
+    value
+        .split_inclusive(separator)
+        .map(|part| {
+            let token = part.trim_end_matches(separator);
+            let suffix = &part[token.len()..];
+            let links = parse(token);
+            if let Some(reference) = links.first() {
+                if let Some((base, _)) = reference.url.split_once(path) {
+                    return format!(
+                        "{base}{path}{}{suffix}",
+                        reference.label.trim_start_matches('#')
+                    );
+                }
+            }
+            part.to_string()
+        })
+        .collect()
 }
 
 fn references(value: &str, parse: impl Fn(&str) -> Option<(String, String)>) -> Vec<Reference> {
@@ -179,6 +210,33 @@ mod tests {
         );
         assert!(pr_links("https://github.com/a/b/pull/1\u{1b}bad").is_empty());
         assert!(jira_links("file:///browse/FSW-1").is_empty());
+    }
+
+    #[test]
+    fn normalization_accepts_ids_and_urls_and_preserves_tree_structure() {
+        for (input, expected) in [
+            ("FSW-65048", "https://flyzipline.atlassian.net/browse/FSW-65048"),
+            ("https://other.atlassian.net/browse/FSW-65048?focusedCommentId=1#comment", "https://other.atlassian.net/browse/FSW-65048"),
+            ("FSW-1; FSW-2", "https://flyzipline.atlassian.net/browse/FSW-1; https://flyzipline.atlassian.net/browse/FSW-2"),
+            ("", ""),
+            ("custom reference", "custom reference"),
+            ("file:///browse/FSW-1", "file:///browse/FSW-1"),
+        ] {
+            assert_eq!(normalize_jira(input), expected);
+            assert_eq!(normalize_jira(expected), expected);
+        }
+        for (input, expected) in [
+            ("#123", "https://github.com/ZiplineTeam/FlightSystems/pull/123"),
+            ("123", "https://github.com/ZiplineTeam/FlightSystems/pull/123"),
+            ("https://github.com/other/repo/pull/42/files?diff=split#discussion", "https://github.com/other/repo/pull/42"),
+            ("#1 > 2; #3, note", "https://github.com/ZiplineTeam/FlightSystems/pull/1 > https://github.com/ZiplineTeam/FlightSystems/pull/2; https://github.com/ZiplineTeam/FlightSystems/pull/3, note"),
+            ("", ""),
+            ("custom reference", "custom reference"),
+            ("file:///pull/123", "file:///pull/123"),
+        ] {
+            assert_eq!(normalize_prs(input), expected);
+            assert_eq!(normalize_prs(expected), expected);
+        }
     }
 
     #[test]

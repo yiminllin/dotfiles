@@ -29,53 +29,35 @@ impl WorkCategory {
             Self::Administrative => "Administrative",
         }
     }
-
-    pub fn states(self) -> &'static [WorkState] {
-        match self {
-            Self::Uncategorized | Self::Feature | Self::Administrative => {
-                &[WorkState::Active, WorkState::Waiting, WorkState::Paused]
-            }
-            Self::Review => &[
-                WorkState::ToReview,
-                WorkState::Reviewing,
-                WorkState::Waiting,
-                WorkState::FollowUp,
-            ],
-            Self::Design => &[WorkState::Idea, WorkState::Exploring, WorkState::Paused],
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkState {
     #[default]
-    Active,
-    ToReview,
-    Reviewing,
+    #[serde(alias = "idea", alias = "paused")]
+    None,
+    #[serde(alias = "to_review", alias = "follow_up")]
+    Next,
+    #[serde(alias = "active", alias = "reviewing", alias = "exploring")]
+    InProgress,
     Waiting,
-    FollowUp,
-    Idea,
-    Exploring,
-    Paused,
 }
 
 impl WorkState {
+    pub const ALL: [Self; 4] = [Self::None, Self::Next, Self::InProgress, Self::Waiting];
+
     pub fn label(self) -> &'static str {
         match self {
-            Self::Active => "Active",
-            Self::ToReview => "To review",
-            Self::Reviewing => "Reviewing",
+            Self::None => "No state",
+            Self::Next => "Next",
+            Self::InProgress => "In progress",
             Self::Waiting => "Waiting",
-            Self::FollowUp => "Follow-up",
-            Self::Idea => "Idea",
-            Self::Exploring => "Exploring",
-            Self::Paused => "Paused",
         }
     }
 
     pub fn is_waiting(self) -> bool {
-        matches!(self, Self::Waiting | Self::Paused)
+        self == Self::Waiting
     }
 }
 
@@ -89,13 +71,4 @@ pub struct WorkDetails {
     pub next_action: String,
     pub notes: String,
     pub reviewed_at: Option<String>,
-}
-
-impl WorkDetails {
-    pub fn set_category(&mut self, category: WorkCategory) {
-        if self.category != category {
-            self.category = category;
-            self.state = category.states()[0];
-        }
-    }
 }
