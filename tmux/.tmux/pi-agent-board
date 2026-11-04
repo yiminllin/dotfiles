@@ -135,13 +135,19 @@ agent_state() {
 }
 
 state_label() {
+  local color label
   case $1 in
-    RUN) printf '\033[31m󰐊 RUN\033[0m' ;;
-    WAIT) printf '\033[32m󰔟 WAIT\033[0m' ;;
-    BLOCKED) printf '\033[33m󰔟 BLOCKED\033[0m' ;;
-    ERR) printf '\033[31m󰅚 ERR\033[0m' ;;
-    *) printf '\033[33m? UNKNOWN\033[0m' ;;
+    RUN) color=31; label='󰐊 RUN' ;;
+    WAIT) color=32; label='󰔟 WAIT' ;;
+    BLOCKED) color=33; label='󰔟 BLOCKED' ;;
+    ERR) color=31; label='󰅚 ERR' ;;
+    *) color=33; label='? UNKNOWN' ;;
   esac
+  if [[ "${2:-}" == 1 ]]; then
+    printf '%s' "$label"
+  else
+    printf '\033[%sm%s\033[0m' "$color" "$label"
+  fi
 }
 
 is_pi_values() {
@@ -175,16 +181,16 @@ collect_agents() {
   local -a blocked=()
   local -a running=()
   local entry is_board pane_id pane_pid pane_index pane_title session_id session_name window_id window_index current_cmd start_cmd state name
-  local process_snapshot pi_pane_pids status_report status_owner has_pipe permission_pid
+  local process_snapshot pi_pane_pids status_report status_owner has_pipe permission_pid dimmed
 
   process_snapshot=$(ps -axo pid=,ppid=,comm= 2>/dev/null || true)
   pi_pane_pids=$(printf '%s\n' "$process_snapshot" | pi_process_ancestors)
-  while IFS="$separator" read -r pane_id pane_pid session_id session_name window_id window_index pane_index is_board name pane_title current_cmd start_cmd status_report status_owner has_pipe permission_pid; do
+  while IFS="$separator" read -r pane_id pane_pid session_id session_name window_id window_index pane_index is_board name pane_title current_cmd start_cmd status_report status_owner has_pipe permission_pid dimmed; do
     [[ "$is_board" == 1 ]] && continue
     is_pi_values "$current_cmd" "$start_cmd" || grep -F -x -q "$pane_pid" <<< "$pi_pane_pids" || continue
 
     state=$(agent_state "$pane_id" "$status_report" "$status_owner" "$has_pipe" "$permission_pid")
-    entry="$session_name$separator$window_index$separator$pane_index$separator$pane_id$separator$session_id$separator$window_id$separator$state$separator$(agent_name "$pane_id" "$pane_title" "$name")"
+    entry="$session_name$separator$window_index$separator$pane_index$separator$pane_id$separator$session_id$separator$window_id$separator$state$separator$dimmed$separator$(agent_name "$pane_id" "$pane_title" "$name")"
 
     case "$state" in
       BLOCKED) blocked+=("$entry") ;;
@@ -195,7 +201,7 @@ collect_agents() {
     esac
   done < <(
     tmux list-panes -a \
-      -F "#{pane_id}${separator}#{pane_pid}${separator}#{session_id}${separator}#{session_name}${separator}#{window_id}${separator}#{window_index}${separator}#{pane_index}${separator}#{@pi_agent_board}${separator}#{@pi_agent_name}${separator}#{pane_title}${separator}#{pane_current_command}${separator}#{pane_start_command}${separator}#{@pi_agent_status}${separator}#{@pi_agent_status_owner}${separator}#{pane_pipe}${separator}#{@pi_agent_input_wait}" \
+      -F "#{pane_id}${separator}#{pane_pid}${separator}#{session_id}${separator}#{session_name}${separator}#{window_id}${separator}#{window_index}${separator}#{pane_index}${separator}#{@pi_agent_board}${separator}#{@pi_agent_name}${separator}#{pane_title}${separator}#{pane_current_command}${separator}#{pane_start_command}${separator}#{@pi_agent_status}${separator}#{@pi_agent_status_owner}${separator}#{pane_pipe}${separator}#{@pi_agent_input_wait}${separator}#{@pi_agent_dimmed}" \
       | sort -t"$separator" -k3,3 -k5,5n -k6,6n
   )
 
@@ -208,14 +214,14 @@ collect_agents() {
 
 render() {
   local index=1
-  local context index_label name name_label pane_id row session_id state window_id
+  local context dimmed index_label name name_label pane_id row session_id state window_id
 
   rows=()
   target_panes=()
   target_sessions=()
   target_windows=()
 
-  while IFS="$separator" read -r _ _ _ pane_id session_id window_id state name; do
+  while IFS="$separator" read -r _ _ _ pane_id session_id window_id state dimmed name; do
     [[ -n "$pane_id" ]] || continue
 
     if [[ -n "$current_window_id" && "$window_id" == "$current_window_id" ]]; then
@@ -226,7 +232,15 @@ render() {
       name_label=$name
     fi
 
-    rows+=("$index_label $(state_label "$state") $name_label")
+    if [[ "$dimmed" == 1 ]]; then
+      if [[ "$window_id" == "$current_window_id" ]]; then
+        rows+=("$(printf '\033[2;90;4m[%s] %s %s\033[0m' "$index" "$(state_label "$state" 1)" "$name")")
+      else
+        rows+=("$(printf '\033[2;90m[%s] %s %s\033[0m' "$index" "$(state_label "$state" 1)" "$name")")
+      fi
+    else
+      rows+=("$index_label $(state_label "$state") $name_label")
+    fi
     target_panes[$index]=$pane_id
     target_sessions[$index]=$session_id
     target_windows[$index]=$window_id
@@ -292,7 +306,10 @@ while true; do
   key=""
   if read_key key; then
     case "$key" in
-      q) tmux kill-pane -t "$current_pane"; exit 0 ;;
+      A) tmux if-shell -t "$current_pane" -F '#{==:#{@pi_agent_dimmed},1}' \
+        "set-option -pt $current_pane @pi_agent_dimmed 0" \
+        "set-option -pt $current_pane @pi_agent_dimmed 1" ;;
+      q) exit 0 ;;
       [1-9]) refresh_current_context; jump_to_agent "$key"; exit 0 ;;
     esac
   fi
