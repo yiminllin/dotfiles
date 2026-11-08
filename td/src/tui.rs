@@ -58,6 +58,7 @@ struct App {
     path: PathBuf,
     tasks: Vec<TaskView>,
     selected: usize,
+    merge_ids: Vec<Uuid>,
     selected_line: usize,
     row_heights: Vec<usize>,
     half_page: usize,
@@ -314,6 +315,7 @@ enum Mode {
     Form(Option<Uuid>),
     Command(Option<Uuid>),
     ConfirmDiscard(Option<Uuid>),
+    Merge,
     Search,
     Project,
     Detail,
@@ -326,6 +328,7 @@ impl App {
             path,
             tasks: Vec::new(),
             selected: 0,
+            merge_ids: Vec::new(),
             selected_line: 0,
             row_heights: Vec::new(),
             half_page: 1,
@@ -498,7 +501,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Result<bool> {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         app.g_pressed = false;
-        if matches!(app.mode, Mode::Normal) {
+        if matches!(app.mode, Mode::Normal | Mode::Merge) {
             match key.code {
                 KeyCode::Char('u' | 'U') => app.move_half_page(false),
                 KeyCode::Char('d' | 'D') => app.move_half_page(true),
@@ -519,11 +522,12 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     app.form.cursor = previous(app.form.text(), app.form.cursor);
                 }
                 KeyCode::Esc => {
-                    app.mode = if app.form.has_changes(&app.initial_form) {
-                        Mode::ConfirmDiscard(id)
-                    } else {
-                        Mode::Normal
-                    };
+                    app.mode =
+                        if app.merge_ids.len() >= 2 || app.form.has_changes(&app.initial_form) {
+                            Mode::ConfirmDiscard(id)
+                        } else {
+                            Mode::Normal
+                        };
                 }
                 KeyCode::Tab | KeyCode::Enter | KeyCode::BackTab => {
                     let count = app.form.field_count();
@@ -599,7 +603,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             match key {
                 KeyCode::Esc => app.mode = Mode::Form(id),
                 KeyCode::Enter if app.input == ":wq" => save_form(app, id)?,
-                KeyCode::Enter if app.input == ":q!" => app.mode = Mode::Normal,
+                KeyCode::Enter if app.input == ":q!" => cancel_form(app),
                 KeyCode::Char(ch) => app.input.push(ch),
                 KeyCode::Backspace if app.input.len() > 1 => {
                     app.input.pop();
@@ -610,7 +614,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         }
         Mode::ConfirmDiscard(id) => {
             match key {
-                KeyCode::Char('y' | 'Y') => app.mode = Mode::Normal,
+                KeyCode::Char('y' | 'Y') => cancel_form(app),
                 KeyCode::Char('n' | 'N') | KeyCode::Esc | KeyCode::Enter => {
                     app.mode = Mode::Form(id);
                 }
@@ -695,6 +699,25 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             }
             return Ok(false);
         }
+        Mode::Merge => match key {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                app.merge_ids.clear();
+                app.mode = Mode::Normal;
+                return Ok(false);
+            }
+            KeyCode::Char('m') => {
+                toggle_merge_task(app);
+                return Ok(false);
+            }
+            KeyCode::Enter => {
+                if app.merge_ids.len() >= 2 {
+                    open_merge_form(app);
+                }
+                return Ok(false);
+            }
+            KeyCode::Down | KeyCode::Up | KeyCode::Char('j' | 'k' | 'g' | 'G') => {}
+            _ => return Ok(false),
+        },
         Mode::Normal => {}
     }
     let double_g = app.g_pressed && key == KeyCode::Char('g');
@@ -769,6 +792,11 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             app.initial_form = app.form.clone();
             app.mode = Mode::Form(None);
         }
+        KeyCode::Char('m') if app.status == TaskStatus::Pending => {
+            app.merge_ids.clear();
+            toggle_merge_task(app);
+            app.mode = Mode::Merge;
+        }
         KeyCode::Char('e') => open_edit_form(app),
         KeyCode::Char('p') => app.mode = Mode::Project,
         KeyCode::Char('/') => {
@@ -796,10 +824,47 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
     Ok(false)
 }
 
+fn toggle_merge_task(app: &mut App) {
+    if let Some(view) = app.selected_task() {
+        if view.task.status != TaskStatus::Pending {
+            return;
+        }
+        let id = view.task.id;
+        if let Some(index) = app.merge_ids.iter().position(|marked| *marked == id) {
+            app.merge_ids.remove(index);
+        } else {
+            app.merge_ids.push(id);
+        }
+    }
+}
+
+fn open_merge_form(app: &mut App) {
+    let id = app.merge_ids[0];
+    let description = app
+        .merge_ids
+        .iter()
+        .filter_map(|id| app.tasks.iter().find(|view| view.task.id == *id))
+        .map(|view| view.task.description.as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    open_task_form(app, id);
+    app.form.values[0] = description;
+}
+
+fn cancel_form(app: &mut App) {
+    app.merge_ids.clear();
+    app.mode = Mode::Normal;
+}
+
 fn open_edit_form(app: &mut App) {
     if let Some(view) = app.selected_task() {
+        open_task_form(app, view.task.id);
+    }
+}
+
+fn open_task_form(app: &mut App, id: Uuid) {
+    if let Some(view) = app.tasks.iter().find(|view| view.task.id == id) {
         let task = &view.task;
-        let id = task.id;
         app.form = Form {
             values: [
                 task.description.clone(),
@@ -889,7 +954,13 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
     if id.is_none() && is_work {
         events.push(new_envelope(task_id, "tui", work_update(work))?);
     }
+    if id == app.merge_ids.first().copied() {
+        for source_id in app.merge_ids.iter().skip(1) {
+            events.push(new_envelope(*source_id, "tui", Event::TaskDeleted)?);
+        }
+    }
     append_events(&app.path, &events)?;
+    app.merge_ids.clear();
     let reveal_new_category =
         id.is_none() && is_work && app.project == Some("work") && app.work_category.is_some();
     if id.is_none() {
@@ -998,10 +1069,12 @@ fn draw(frame: &mut Frame, app: &mut App) {
     let (mode, help) = match app.mode {
         Mode::Normal => (
             "",
-            "Tab view  j/k gg/G ^u/^d move  a add  e edit  d done  u reopen  x delete  b block  p project  / filter  Esc all  q",
+            "Tab view  j/k gg/G ^u/^d move  a add  e edit  m mark  d done  u reopen  x delete  b block  p project  / filter  Esc all  q",
         ),
         Mode::Form(id) => (
-            if id.is_some() {
+            if app.merge_ids.len() >= 2 {
+                "MERGE TASKS"
+            } else if id.is_some() {
                 "EDIT TASK"
             } else {
                 "ADD TASK"
@@ -1014,12 +1087,18 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 "h/l 0/$ w/b move  i/a I/A insert  x delete  Enter/Tab next  :wq save  Esc cancel"
             },
         ),
+        Mode::Merge => (
+            "SELECT TASKS TO MERGE",
+            "m mark/unmark  j/k gg/G ^u/^d move  Enter edit merge (2+ tasks)  Esc cancel",
+        ),
         Mode::ConfirmDiscard(_) => (
             "DISCARD CHANGES?",
             "Discard unsaved changes? y discard  n / Esc / Enter keep editing",
         ),
         Mode::Command(id) => (
-            if id.is_some() {
+            if app.merge_ids.len() >= 2 {
+                "MERGE TASKS"
+            } else if id.is_some() {
                 "EDIT TASK"
             } else {
                 "ADD TASK"
@@ -1042,6 +1121,8 @@ fn draw(frame: &mut Frame, app: &mut App) {
             "NORMAL"
         };
         format!("td | {mode} | {editing}")
+    } else if matches!(app.mode, Mode::Merge) {
+        format!("td | {mode} | {} marked", app.merge_ids.len())
     } else if matches!(app.mode, Mode::Command(_)) {
         format!("td | {mode} | COMMAND")
     } else if matches!(app.mode, Mode::Normal) {
@@ -1066,7 +1147,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
         Mode::Form(_) | Mode::ConfirmDiscard(_) => draw_form(frame, &app.form, chunks[1]),
         Mode::Search => draw_input(frame, "Filter", &app.input, app.input.len(), chunks[1]),
         Mode::Command(_) => draw_input(frame, "Command", &app.input, app.input.len(), chunks[1]),
-        Mode::Normal | Mode::Project => {
+        Mode::Normal | Mode::Project | Mode::Merge => {
             app.half_page = (chunks[1].height.saturating_sub(4) as usize / 2).max(1);
             let widths = [
                 Constraint::Length(8),
@@ -1106,9 +1187,15 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 .iter()
                 .map(|view| {
                     let completed = view.task.status == TaskStatus::Completed;
+                    let prefix = if app.merge_ids.contains(&view.task.id) {
+                        "[x] "
+                    } else {
+                        ""
+                    };
                     let width =
                         (columns[4].width as usize).saturating_sub(if completed { 2 } else { 0 });
-                    let mut description = wrap_description(&view.task.description, width);
+                    let mut description =
+                        wrap_description(&format!("{prefix}{}", view.task.description), width);
                     if completed {
                         for (index, line) in description.lines.iter_mut().enumerate() {
                             for span in &mut line.spans {
@@ -1255,8 +1342,14 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         "Next action",
         "Notes",
     ];
+    let (description_lines, description_cursor) =
+        wrapped_form_description(form, inner.width as usize);
     let mut fields = Vec::new();
     for index in 0..form.field_count() {
+        if index == 0 {
+            fields.extend((0..description_lines.len()).map(|line| (0, Some(line))));
+            continue;
+        }
         fields.push((index, None));
         let count = match index {
             5 => WorkCategory::ALL.len(),
@@ -1284,9 +1377,13 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         .iter()
         .rposition(|(index, choice)| {
             *index == form.active
-                && (choice.is_none()
-                    || inner.height as usize > choice_count
-                    || *choice == selected_choice)
+                && if *index == 0 {
+                    *choice == Some(description_cursor.1)
+                } else {
+                    choice.is_none()
+                        || inner.height as usize > choice_count
+                        || *choice == selected_choice
+                }
         })
         .unwrap_or(0);
     let start = focus.saturating_sub(inner.height.saturating_sub(1) as usize);
@@ -1297,6 +1394,20 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         .take(inner.height as usize)
     {
         let row = Rect::new(inner.x, inner.y + (line - start) as u16, inner.width, 1);
+        if index == 0 {
+            let description_line = choice.unwrap_or(0);
+            frame.render_widget(
+                Paragraph::new(description_lines[description_line].clone()),
+                row,
+            );
+            if form.active == 0 && description_line == description_cursor.1 && row.width > 0 {
+                frame.set_cursor_position((
+                    row.x + description_cursor.0.min(row.width as usize - 1) as u16,
+                    row.y,
+                ));
+            }
+            continue;
+        }
         if let Some(choice) = choice {
             let (shortcut, label, description, selected) = if index == 5 {
                 let category = WorkCategory::ALL[choice];
@@ -1410,6 +1521,62 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
     }
 }
 
+fn wrapped_form_description(form: &Form, width: usize) -> (Vec<Line<'static>>, (usize, usize)) {
+    let width = width.max(1);
+    let active = form.active == 0;
+    let prefix = if active {
+        "> Description: "
+    } else {
+        "  Description: "
+    };
+    let text = format!("{prefix}{}", form.values[0]);
+    let cursor = prefix.len() + if active { form.cursor } else { 0 };
+    let mut lines = vec![String::new()];
+    let mut column = 0;
+    let mut offset = 0;
+    let mut position = (0, 0);
+    for (index, paragraph) in text.split('\n').enumerate() {
+        if index > 0 {
+            lines.push(String::new());
+            column = 0;
+            offset += 1;
+        }
+        let line = Line::from(paragraph);
+        for grapheme in line.styled_graphemes(Style::default()) {
+            let size = Line::from(grapheme.symbol).width();
+            if column > 0 && column + size > width {
+                lines.push(String::new());
+                column = 0;
+            }
+            if (offset..offset + grapheme.symbol.len()).contains(&cursor) {
+                position = (column, lines.len() - 1);
+            }
+            lines.last_mut().unwrap().push_str(grapheme.symbol);
+            column += size;
+            offset += grapheme.symbol.len();
+        }
+        if cursor == offset {
+            if column >= width {
+                lines.push(String::new());
+                column = 0;
+            }
+            position = (column, lines.len() - 1);
+        }
+    }
+    let style = if active {
+        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
+    (
+        lines
+            .into_iter()
+            .map(|line| Line::styled(line, style))
+            .collect(),
+        position,
+    )
+}
+
 fn draw_input(frame: &mut Frame, label: &str, value: &str, cursor: usize, area: Rect) {
     let line = Line::from(format!("> {label}: {value}"));
     let width = Line::from(format!("> {label}: {}", &value[..cursor])).width();
@@ -1442,6 +1609,144 @@ mod tests {
             handle_key(app, KeyCode::Char(ch)).unwrap();
         }
         handle_key(app, KeyCode::Enter).unwrap();
+    }
+
+    #[test]
+    fn merge_form_populates_edits_saves_and_cancels_without_losing_sources() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        for description in ["First 工作", "Second\nline"] {
+            app.form.values = [description.into(), "work".into(), "H".into(), "D".into()];
+            app.form.work.notes = description.into();
+            save_form(&mut app, None).unwrap();
+        }
+        let original = app.tasks.clone();
+        let before = std::fs::read(&app.path).unwrap();
+        for attempt in 0..2 {
+            app.selected = 1;
+            let survivor = app.selected_task().unwrap().task.clone();
+            for key in ['m', 'm', 'm', 'k', 'm'] {
+                handle_key(&mut app, KeyCode::Char(key)).unwrap();
+            }
+            handle_key(&mut app, KeyCode::Enter).unwrap();
+            assert!(matches!(app.mode, Mode::Form(Some(id)) if id == survivor.id));
+            assert_eq!(app.form.values[0], "Second\nline\n\nFirst 工作");
+            assert_eq!(app.form.values[1..], ["work", "H", "D"]);
+            assert_eq!(app.form.work, survivor.work);
+            assert_eq!(std::fs::read(&app.path).unwrap(), before);
+            if attempt == 0 {
+                handle_key(&mut app, KeyCode::Esc).unwrap();
+                assert!(matches!(app.mode, Mode::ConfirmDiscard(_)));
+                handle_key(&mut app, KeyCode::Char('y')).unwrap();
+                assert!(app.merge_ids.is_empty());
+                assert_eq!(std::fs::read(&app.path).unwrap(), before);
+                continue;
+            }
+            app.form.values[0].clear();
+            save_form(&mut app, Some(survivor.id)).unwrap();
+            assert_eq!(std::fs::read(&app.path).unwrap(), before);
+            app.form.values[0] = "Edited merged task".into();
+            app.form.values[2] = "A".into();
+            write_and_quit(&mut app);
+            let tasks = load_tasks(&app.path).unwrap();
+            let merged = &tasks[&survivor.id];
+            assert_eq!(merged.description, "Edited merged task");
+            assert_eq!(merged.priority.as_deref(), Some("A"));
+            assert_eq!(merged.work, survivor.work);
+            assert_eq!(merged.created_at, survivor.created_at);
+            assert_eq!(app.selected_task().unwrap().task.id, survivor.id);
+            let source = original
+                .iter()
+                .find(|view| view.task.id != survivor.id)
+                .unwrap();
+            assert_eq!(tasks[&source.task.id].status, TaskStatus::Deleted);
+            assert_eq!(tasks[&source.task.id].description, source.task.description);
+            assert_eq!(tasks[&source.task.id].work, source.task.work);
+            assert!(app.merge_ids.is_empty());
+        }
+    }
+
+    #[test]
+    fn form_description_wraps_unicode_and_tracks_the_cursor() {
+        let mut form = Form::default();
+        form.values[0] = "abc工作👩‍💻\ntail".into();
+        form.cursor = form.values[0].len();
+        let (lines, cursor) = wrapped_form_description(&form, 18);
+        assert_eq!(
+            lines.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            ["> Description: abc", "工作👩‍💻", "tail"]
+        );
+        assert_eq!(cursor, (4, 2));
+        form.cursor = 3;
+        assert_eq!(wrapped_form_description(&form, 18).1, (0, 1));
+        form.cursor = 0;
+        assert_eq!(wrapped_form_description(&form, 18).1, (15, 0));
+    }
+
+    #[test]
+    fn long_form_description_scrolls_to_cursor_and_metadata_in_small_terminals() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        app.form.values[0] = format!("{}tail", "long description 工作 ".repeat(30));
+        app.form.cursor = app.form.values[0].len();
+        let before = app.form.values[0].clone();
+        for (width, height) in [(80, 24), (40, 10), (20, 6)] {
+            app.form.active = 0;
+            app.form.cursor = app.form.values[0].len();
+            app.form.insert = true;
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let ratatui::layout::Position { x, y } = terminal.get_cursor_position().unwrap();
+            let buffer = terminal.backend().buffer();
+            assert!(x < width && y > 0 && y < height - 1);
+            let previous = if x > 1 {
+                (x - 1, y)
+            } else {
+                (width - 2, y - 1)
+            };
+            assert_eq!(
+                buffer[previous].symbol(),
+                "l",
+                "{width}x{height} cursor {x},{y}: {buffer:?}"
+            );
+            handle_key(&mut app, KeyCode::Tab).unwrap();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let screen: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(screen.contains("> Project:"));
+        }
+        assert_eq!(app.form.values[0], before);
+        assert!(!app.path.exists());
+    }
+
+    #[test]
+    fn merge_ignores_completed_tasks_and_handles_empty_views() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        handle_key(&mut app, KeyCode::Char('m')).unwrap();
+        handle_key(&mut app, KeyCode::Char('m')).unwrap();
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        assert!(app.merge_ids.is_empty());
+        assert!(!app.path.exists());
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        app.form.values[0] = "Completed task".into();
+        save_form(&mut app, None).unwrap();
+        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        let before = std::fs::read(&app.path).unwrap();
+        handle_key(&mut app, KeyCode::Char('m')).unwrap();
+        handle_key(&mut app, KeyCode::Char('m')).unwrap();
+        assert!(app.merge_ids.is_empty());
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        handle_key(&mut app, KeyCode::Char('m')).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
+        assert_eq!(std::fs::read(&app.path).unwrap(), before);
     }
 
     #[test]

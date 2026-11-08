@@ -78,6 +78,9 @@ Update `src/urgency.rs` to change the weights.
 - Ctrl-U / Ctrl-D: move up / down half a page (based on the visible table height)
 - `a`: open the add form
 - `e`: open the edit form for the selected task
+- `m`: mark/unmark the current pending task for merging; move and press `m` on
+  each additional task. Enter opens the populated merge form; edit any field and
+  use `:wq` to save. Esc cancels with a discard check; `:q!` discards immediately.
 - `d`: mark done
 - `u`: reopen the selected completed task (in either view)
 - `x`: delete
@@ -85,6 +88,11 @@ Update `src/urgency.rs` to change the weights.
 - `/`: filter tasks in the current view
 - Esc from a project view: return to All projects; Esc from All projects: quit
 - `q`: quit from any task list
+
+Merging joins descriptions with a blank line, in marking order. The first marked
+task supplies the ID and metadata; all fields remain editable. Saving soft-deletes
+the other tasks, preserving their original data in the event log. Completed tasks
+cannot be marked. Selection and preview do not write changes.
 
 The table title shows the current project view. Each project view matches the
 project field exactly, not words in the description. Pending/Done and `/` text
@@ -250,6 +258,9 @@ be read fully. `j`/`k` still move between tasks. The `>` marker identifies the
 selected line without changing category colors or intensity. Deleted tasks are
 hidden in the TUI; the CLI can still list them.
 
+Descriptions wrap across lines in add, edit, and merge forms. The form scrolls
+to keep the description cursor or selected metadata field visible.
+
 In the add/edit form:
 
 - Enter or Tab: move to the next field (wraps after blocked)
@@ -260,6 +271,7 @@ In the add/edit form:
 
 If the form has unsaved changes, cancellation asks for confirmation: `y` discards;
 `n`, Esc, or Enter keeps editing. An unchanged form closes without a prompt.
+A merge always asks before discarding.
 Opening a form or moving between fields does not count as a change.
 
 Use `:wq` or `:q!` from text normal mode or any choice field. In text
