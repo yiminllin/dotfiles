@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+if [[ "${1:-}" != --render ]]; then
+  export TMUX_CONTEXT_SCRIPT="$0"
+  exec nvim -u NONE -i NONE -n \
+    -c 'set termguicolors noruler laststatus=0' \
+    -c 'highlight Normal guibg=#fdf6e3 guifg=#2e3440' \
+    -c 'lua dofile(vim.env.TMUX_CONTEXT_SCRIPT .. ".lua")' \
+    -c 'nnoremap <buffer> q <Cmd>qa!<CR>'
+fi
+
+section() {
+  printf '\n\033[1;36m%s\033[0m\n' "$1"
+  printf '\033[2m────────────────────────────────────────────────\033[0m\n\n'
+}
+
+{
+  if root=$(git rev-parse --show-toplevel 2>/dev/null); then
+    branch=$(git symbolic-ref --quiet --short HEAD || git rev-parse --short HEAD)
+    changes=$(git --no-optional-locks -c color.status=always status --short)
+    printf '\n\033[1m󰉋 %s\033[0m  ║  \033[36m %s\033[0m  ║  ' "${root##*/}" "$branch"
+    if [[ -n "$changes" ]]; then
+      printf '\033[33m● uncommitted changes\033[0m\n'
+    else
+      printf '\033[32m✓ clean\033[0m\n'
+    fi
+    printf '\n\033[1mWORKTREE  %s\033[0m\n' "$root"
+    if [[ "$PWD" != "$root" ]]; then
+      printf '\033[1mCURRENT   %s\033[0m\n' "$PWD"
+    fi
+
+    section '󰓩 PR STACK'
+    if command -v git-spice >/dev/null 2>&1; then
+      git-spice log long --no-prompt
+    else
+      printf '\033[2mgit-spice is not installed.\033[0m\n'
+    fi
+
+    section '󰏫 CHANGES'
+    if [[ -n "$changes" ]]; then
+      printf '%s\n' "$changes"
+    else
+      printf '\033[32m✓ Working tree clean\033[0m\n'
+    fi
+  else
+    printf '\n\033[1m󰉋 %s\033[0m\n' "$PWD"
+    printf '\n\033[2mNot in a Git worktree.\033[0m\n'
+  fi
+  printf '\n'
+} 2>&1

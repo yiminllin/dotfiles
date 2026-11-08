@@ -29,7 +29,13 @@ discover_repos() {
 
 main() {
     local workspaces workspace
-    local -a fzf_args=(--cycle --border=bold --footer "Session Finder")
+    local -a fzf_args=(
+        --cycle
+        --border=bold
+        --border-label ' Session Finder '
+        --color 'light,bg:#fdf6e3,fg:#2e3440,bg+:#eee8d5,fg+:#2e3440,border:#ffd7af,label:#9c5f2d:bold,hl:#9c5f2d,hl+:#9c5f2d:bold,prompt:#9c5f2d,pointer:#9c5f2d,info:#657b83,footer:#657b83'
+        --footer 'Enter: open · Esc: cancel'
+    )
 
     workspaces=$(
         printf '%s\n' '~'
@@ -37,7 +43,7 @@ main() {
     )
 
     if supports_fzf_tmux; then
-        fzf_args+=(--tmux)
+        fzf_args+=(--tmux=center,70%,65%)
     fi
 
     workspace=$(printf '%s\n' "$workspaces" | fzf "${fzf_args[@]}" || true)
