@@ -36,17 +36,17 @@ To test in a container: `docker run -it -v ~/dotfiles:/root/dotfiles ubuntu bash
 
 Start `tmux`. Prefix is Ctrl-Space.
 
-| Action                               | Command / key                              |
-| ------------------------------------ | ------------------------------------------ |
-| Select home (`~`) or a Git workspace | prefix + f                                 |
-| Open tasks                           | prefix + T or `td` ([guide](td/README.md)) |
-| Open Agent Board                     | prefix + a                                 |
-| Toggle current agent's dimmed entry   | prefix + Shift+A; Shift+A inside Agent Board |
-| Start Pi                             | `pi`, then `/login`                        |
-| Reload Pi configuration              | `/reload`                                  |
-| Cycle Pi models                      | Ctrl-P / Ctrl-Shift-P or Alt-] / Alt-[     |
-| Open or prompt the Pi pane           | Neovim `<leader>cp`                        |
-| Review a branch or PR                | `review [PR-number-or-URL]`                |
+| Action                               | Command / key                                |
+| ------------------------------------ | -------------------------------------------- |
+| Select home (`~`) or a Git workspace | prefix + f                                   |
+| Open tasks                           | prefix + T or `td` ([guide](td/README.md))   |
+| Open Agent Board                     | prefix + a                                   |
+| Toggle current agent's dimmed entry  | prefix + Shift+A; Shift+A inside Agent Board |
+| Start Pi                             | `pi`, then `/login`                          |
+| Reload Pi configuration              | `/reload`                                    |
+| Cycle Pi models                      | Ctrl-P / Ctrl-Shift-P or Alt-] / Alt-[       |
+| Open or prompt the Pi pane           | Neovim `<leader>cp`                          |
+| Review a branch or PR                | `review [PR-number-or-URL]`                  |
 
 Pi configuration lives in `pi/.pi/agent/`, linked to `~/.pi/agent/`; credentials and sessions stay private.
 For Pi-only setup: `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`,

@@ -210,6 +210,7 @@ echo "Stowing configurations"
 CONFIGS=(
     bash
     bat
+    bazel
     fish
     flightsystems
     git
