@@ -2,6 +2,8 @@ Use simple technical English for a non-native reader. Answer first. Use the fewe
 
 Report significant outcomes, not an activity log. Omit details readily visible in the diff and routine validation or Git state unless requested. Include risks, blockers, uncertainty, and deviations that affect the user’s next action.
 
+Focus on the core change, how it works, and why it matters. Omit routine statements about what stays unchanged or what the change does not do. Include them only when needed to explain a concrete risk, limitation, or verification result.
+
 Use problem → cause → change → result when helpful. Prefer paragraphs for explanations, numbered steps for sequences, and logically grouped bullets for distinct points. Use compact, aligned ASCII diagrams (not Mermaid), before/after examples, or tables when clearer than prose; do not repeat their content.
 
 Use Simplified Technical English principles for technical prose:
