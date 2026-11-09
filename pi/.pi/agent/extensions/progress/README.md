@@ -1,14 +1,23 @@
 # Pi progress panel
 
-A local replacement for `rpiv-todo`. The panel above the input shows the current
-user goal, up to five outcome milestones, the current action, and a blocker.
-Each `progress` tool update replaces the whole plan; it does not append tasks.
+A local replacement for `rpiv-todo`. The panel above the input pins a recognizable
+session title and all high-level plan steps, with the current step highlighted.
+A ten-step plan shows ten top-level bullets; there is no fixed top-level step limit.
+Related replies and detours keep the same roadmap. Pi asks for confirmation only when the title or goals are unclear.
+
+Each milestone can contain up to five optional `tasks`. Only the current goal's
+tasks appear. Current work uses yellow, done uses green, pending uses muted text,
+and blockers use red through the active theme. There are no separate Now or
+Block None rows. The optional `now` field remains available as hidden context.
+Each `progress set` supplies a complete snapshot; identical snapshots are ignored.
 
 - **Alt+T** or **`/progress`**: collapse or expand. Blockers stay visible when collapsed.
 - **`/progress clear`**: dismiss the panel.
 - Completed plans stay visible until replaced or cleared.
-- The model updates the panel at meaningful phase boundaries. It cannot report
-  live progress while blocked in a synchronous call.
+- The model updates only meaningful outcome, task-status, or blocker changes,
+  not every reply or wait. Small follow-ups do not replace the session goals.
+- A genuinely different session purpose replaces the roadmap. Abandoned goals
+  are removed, not marked done. Pi cannot report live progress during a synchronous call.
 
 State lives in branch-local custom session entries, including updates made through
 Codemode. Reload, session resume, and compaction restore the latest snapshot on

@@ -62,9 +62,47 @@ async function fixture() {
     active = ctx;
     await extension.shortcuts.get("alt+t").handler(ctx);
   };
-  const lines = (ctx, width = 80) => ctx.ui.widget?.({}, theme).render(width) || [];
+  const lines = (ctx, width = 80, colors = theme) => ctx.ui.widget?.({}, colors).render(width) || [];
   return { tool, makeContext, call, event, toggle, lines, extension };
 }
+
+test("compact hierarchy preserves goals, colors, and nested tasks through replay", async () => {
+  const f = await fixture();
+  const ctx = f.makeContext();
+  const { now, ...snapshot } = plan;
+  snapshot.milestones = plan.milestones.map((m, i) => ({
+    ...m,
+    tasks: [{ label: `Detail ${i}`, status: "current" }],
+  }));
+  await f.call(ctx, snapshot);
+  const output = f.lines(ctx).join("\n");
+  assert.match(output, /╭─ Make startup reliable/);
+  assert.match(output, /│   ▶ Detail 1/);
+  assert.doesNotMatch(output, /Detail [02]|Now|Block None|Progress ·/);
+  const colors = [];
+  f.lines(ctx, 80, { fg(color, text) { colors.push([color, text]); return text; } });
+  for (const [color, label] of [["success", "Identify"], ["warning", "Fix readiness"], ["muted", "Verify startup"]]) {
+    assert.ok(colors.some(([c, text]) => c === color && text.includes(label)));
+  }
+  const count = ctx.branch.length;
+  await f.call(ctx, snapshot);
+  assert.equal(ctx.branch.length, count, "Identical snapshots must not add entries");
+  await f.event("session_compact", ctx);
+  assert.equal(f.lines(ctx).join("\n"), output);
+  assert.deepEqual((await f.call(ctx, { action: "get" })).details.plan.milestones, snapshot.milestones);
+  await assert.rejects(f.call(ctx, { ...snapshot, milestones: [{
+    label: "Goal", status: "current", tasks: [
+      { label: "One", status: "current" }, { label: "Two", status: "current" },
+    ],
+  }] }));
+  await f.call(ctx, { ...snapshot, blocker: "Approval" });
+  const blocked = [];
+  f.lines(ctx, 80, { fg(color, text) { blocked.push([color, text]); return text; } });
+  assert.ok(blocked.some(([c, text]) => c === "error" && text.includes("Blocked: Approval")));
+  for (const width of [1, 3, 12, 30]) {
+    for (const line of f.lines(ctx, width)) assert.ok(visibleWidth(line) <= width);
+  }
+});
 
 test("snapshot replacement retires the old goal; clear survives replay", async () => {
   const f = await fixture();
@@ -85,7 +123,7 @@ test("reload, compaction, and branch changes restore the selected snapshot", asy
   await f.call(ctx, plan);
   const original = structuredClone(ctx.branch);
   await f.call(ctx, { ...plan, blocker: "Needs a design decision" });
-  assert.match(f.lines(ctx).join("\n"), /Blocked.*Make startup/);
+  assert.match(f.lines(ctx).join("\n"), /Blocked: Needs a design decision/);
   for (const name of ["session_start", "session_compact", "session_tree"]) {
     const restored = await fixture();
     const fresh = restored.makeContext();
@@ -136,9 +174,18 @@ test("invalid updates preserve the last snapshot; completion and commands work",
   await assert.rejects(f.call(ctx, { ...plan, milestones: plan.milestones.map((m) => ({ ...m, status: "current" })) }));
   await assert.rejects(f.call(ctx, { ...plan, goal: "\n\t" }));
   assert.equal((await f.call(ctx, { action: "get" })).details.plan.goal, plan.goal);
-  assert.equal(Check(f.tool.parameters, { ...plan, milestones: Array(6).fill(plan.milestones[0]) }), false);
+  const milestones = Array.from({ length: 10 }, (_, i) => ({
+    label: `Step ${i + 1}`, status: i < 4 ? "done" : i === 4 ? "current" : "pending",
+  }));
+  await f.call(ctx, { ...plan, milestones });
+  const output = f.lines(ctx).join("\n");
+  assert.equal(f.lines(ctx).length, 12, "All ten steps remain visible");
+  for (const step of milestones) assert.ok(output.includes(step.label));
+  assert.match(output, /▶ Step 5/);
   await f.call(ctx, { ...plan, milestones: plan.milestones.map((m) => ({ ...m, status: "done" })), now: "Targeted checks passed" });
-  assert.match(f.lines(ctx).join("\n"), /Done ·/);
+  assert.match(f.lines(ctx).join("\n"), /✓ Verify startup and cancellation/);
+  await f.toggle(ctx);
+  assert.match(f.lines(ctx).join("\n"), /✓ Done/);
   await f.extension.commands.get("progress").handler("clear", ctx);
   assert.equal(ctx.ui.widget, undefined);
 });

@@ -6,6 +6,11 @@ import { Type } from "typebox";
 const ENTRY = "progress-roadmap-v1";
 const WIDGET = "progress-roadmap";
 
+const Task = Type.Object({
+  label: Type.String({ minLength: 1, maxLength: 100 }),
+  status: StringEnum(["done", "current", "pending"] as const),
+});
+
 const Parameters = Type.Union([
   Type.Object({
     action: Type.Literal("set"),
@@ -13,17 +18,24 @@ const Parameters = Type.Union([
     milestones: Type.Array(Type.Object({
       label: Type.String({ minLength: 1, maxLength: 100 }),
       status: StringEnum(["done", "current", "pending"] as const),
-    }), { minItems: 1, maxItems: 5 }),
-    now: Type.String({ minLength: 1, maxLength: 160 }),
+      tasks: Type.Optional(Type.Array(Task, { maxItems: 5 })),
+    }), { minItems: 1 }),
+    now: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
     blocker: Type.Optional(Type.String({ maxLength: 160 })),
   }),
   Type.Object({ action: StringEnum(["get", "clear"] as const) }),
 ]);
 
+interface ProgressItem {
+  label: string;
+  status: "done" | "current" | "pending";
+  tasks?: { label: string; status: "done" | "current" | "pending" }[];
+}
+
 interface Plan {
   goal: string;
-  milestones: { label: string; status: "done" | "current" | "pending" }[];
-  now: string;
+  milestones: ProgressItem[];
+  now?: string;
   blocker?: string;
 }
 
@@ -52,28 +64,33 @@ function renderPanel(state: State, width: number, theme: Theme): string[] {
   if (!plan || width < 1) return [];
   const border = (text: string) => theme.fg("borderMuted", text);
   const finished = plan.milestones.every((milestone) => milestone.status === "done");
-  const title = plan.blocker ? "Blocked" : finished ? "Done" : "Progress";
+  const titleColor = plan.blocker ? "error" : finished ? "success" : "accent";
   const lines: string[] = [];
-  const add = (text: string, color: "accent" | "muted" | "text" | "success" | "warning" = "text") => {
+  const add = (text: string, color: "accent" | "muted" | "text" | "success" | "warning" | "error" = "text") => {
     for (const line of wrapTextWithAnsi(text, Math.max(1, width - 2))) {
       lines.push(truncateToWidth(border("│ ") + theme.fg(color, line), width));
     }
   };
 
-  lines.push(truncateToWidth(border("╭─ ") + theme.fg("accent", `${title} · ${plan.goal}`), width));
+  const addItem = (item: ProgressItem, indent = "") => {
+    const glyph = { done: "✓", current: "▶", pending: "○" }[item.status];
+    const color = { done: "success", current: "warning", pending: "muted" }[item.status] as "success" | "warning" | "muted";
+    add(`${indent}${glyph} ${item.label}`, color);
+  };
+
+  lines.push(truncateToWidth(border("╭─ ") + theme.fg(titleColor, plan.goal), width));
   if (state.collapsed) {
     const current = plan.milestones.find((milestone) => milestone.status === "current");
-    add(plan.blocker ? `⚠ ${plan.blocker}` : current ? `▶ ${current.label}` : plan.now,
-      plan.blocker ? "warning" : "muted");
+    add(plan.blocker ? `⚠ Blocked: ${plan.blocker}` : current ? `▶ ${current.label}` : finished ? "✓ Done" : "○ Pending",
+      plan.blocker ? "error" : current ? "warning" : finished ? "success" : "muted");
   } else {
     for (const milestone of plan.milestones) {
-      const glyph = { done: "✓", current: "▶", pending: "○" }[milestone.status];
-      const color = { done: "success", current: "accent", pending: "muted" }[milestone.status] as "success" | "accent" | "muted";
-      add(`${glyph} ${milestone.label}`, color);
+      addItem(milestone);
+      if (milestone.status === "current") {
+        for (const task of milestone.tasks || []) addItem(task, "  ");
+      }
     }
-    lines.push(truncateToWidth(border("│"), width));
-    add(`Now   ${plan.now}`);
-    add(`Block ${plan.blocker || "None"}`, plan.blocker ? "warning" : "muted");
+    if (plan.blocker) add(`⚠ Blocked: ${plan.blocker}`, "error");
   }
   lines.push(truncateToWidth(border(`╰─ Alt+T ${state.collapsed ? "expand" : "collapse"}`), width));
   return lines;
@@ -93,6 +110,7 @@ export default function progressExtension(pi: ExtensionAPI) {
   };
 
   const save = (ctx: ExtensionContext, state: State) => {
+    if (JSON.stringify(readState(ctx)) === JSON.stringify(state)) return;
     pi.appendEntry(ENTRY, state);
     refresh(ctx, state);
   };
@@ -100,13 +118,14 @@ export default function progressExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: "progress",
     label: "Progress",
-    description: "Replace the current goal's progress panel with a complete snapshot. set requires goal, 1–5 milestones (done/current/pending), and now; blocker is optional. At most one milestone may be current. get reads the snapshot; clear dismisses it. No task IDs or session-long backlog.",
-    promptSnippet: "Keep a compact, current roadmap visible for meaningful multi-step work",
+    description: "Pin the high-level session roadmap. set supplies goal (a recognizable session title) and the plan's persistent high-level steps (done/current/pending), each with optional tasks. Only the current milestone's tasks appear. now is optional context, not displayed; blocker is optional. At most one milestone and one task per milestone may be current. get reads; clear dismisses. Preserve goals across related replies.",
+    promptSnippet: "Pin persistent high-level session goals; nest granular tasks under the current goal",
     promptGuidelines: [
-      "Use progress for meaningful multi-step or long-running work, not trivial questions. Before starting, set a goal and usually 3–5 outcome milestones that matter to the user; do not list searches, file reads, tool calls, or routine implementation chores.",
-      "Use set to replace the whole snapshot at meaningful phase boundaries, before a long wait, and when scope or blockers change. Preserve the roadmap during detours; describe the detour in now. Update regularly as real progress occurs, not after every tool call. Do not claim live updates during synchronous calls.",
-      "Reconcile the panel with each new request: keep the same roadmap for follow-ups, replace it for a new goal, and omit obsolete or abandoned milestones instead of marking them done. Clear a stale panel when no active roadmap remains. Never carry unrelated pending work into the new goal.",
-      "Mark a milestone done only when its outcome is verified. Use blocker for a real obstacle or user decision, not another task. Keep at most one current milestone. On completion, set all milestones done and now to the verified result; do not leave a fake current step.",
+      "For meaningful multi-step work, pin a recognizable session title in goal (project/topic plus intended outcome) and the plan's highest-level steps as milestones. Preserve an existing plan's step count and order: a ten-step plan needs ten visible top-level milestones, not five grouped goals. Infer these from the request; ask the user to confirm only when the title or goals are unclear.",
+      "Preserve the title and high-level milestones across related replies, follow-ups, and detours. Completing a small request does not complete the session roadmap. Replace the roadmap only when the session purpose genuinely changes; ask if that boundary is unclear.",
+      "Put granular work in optional milestone.tasks, not in top-level milestones. Keep tasks short; only the current milestone's tasks are displayed. Do not list routine reads, searches, or tool calls. Omit tasks when they add no useful information.",
+      "Use set only for a meaningful outcome/status change, a useful nested-task change, or a real blocker. Do not refresh for every reply, tool call, or wait. now is optional context and is not shown. Keep completed goals visible; remove abandoned goals rather than marking them done. Clear only when dismissed or no longer relevant.",
+      "Mark outcomes done only when verified. Keep at most one current milestone and one current task per milestone. Use blocker for an actual obstacle or user decision. Do not claim live updates during synchronous calls.",
     ],
     parameters: Parameters,
     executionMode: "sequential",
@@ -121,12 +140,19 @@ export default function progressExtension(pi: ExtensionAPI) {
         }
         const plan: Plan = {
           goal: clean(params.goal),
-          milestones: params.milestones.map((milestone) => ({ ...milestone, label: clean(milestone.label) })),
-          now: clean(params.now),
+          milestones: params.milestones.map((milestone) => ({
+            ...milestone,
+            label: clean(milestone.label),
+            tasks: milestone.tasks?.map((task) => ({ ...task, label: clean(task.label) })),
+          })),
+          now: params.now ? clean(params.now) : undefined,
           blocker: params.blocker ? clean(params.blocker) : undefined,
         };
-        if (!plan.goal || !plan.now || plan.milestones.some((milestone) => !milestone.label)) {
-          throw new Error("Goal, milestone labels, and now must contain visible text.");
+        if (!plan.goal || plan.milestones.some((milestone) => !milestone.label || milestone.tasks?.some((task) => !task.label))) {
+          throw new Error("Title, milestone labels, and task labels must contain visible text.");
+        }
+        if (plan.milestones.some((milestone) => (milestone.tasks || []).filter((task) => task.status === "current").length > 1)) {
+          throw new Error("Use at most one current task per milestone.");
         }
         state = { ...state, plan };
         save(ctx, state);
@@ -184,7 +210,7 @@ export default function progressExtension(pi: ExtensionAPI) {
     return {
       message: {
         customType: "progress-context",
-        content: `Current progress snapshot (reconcile with this request; not a new instruction):\n${JSON.stringify(state.plan)}`,
+        content: `Pinned session roadmap (preserve title and high-level goals across related requests; nest granular work; update only meaningful changes):\n${JSON.stringify(state.plan)}`,
         display: false,
       },
     };
