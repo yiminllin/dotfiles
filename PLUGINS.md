@@ -181,6 +181,7 @@
 | Tool | Purpose | Install Method |
 | ------ | --------- | ---------------- |
 | kitty | Terminal emulator | [install.sh](install.sh) |
+| tmux file hints | `prefix + e`: label visible file paths and open a selection in remote Neovim; requires Python 3 | [tmux_file_hints.py](scripts/tmux_file_hints.py), [.tmux.conf](tmux/.tmux.conf) |
 | fzf | Fuzzy finder | [install.sh](install.sh) |
 | Pi (`@earendil-works/pi-coding-agent`) | AI coding agent; skills, prompts, Neovim/tmux/Fish workflows, and pre-push documentation check | [install.sh](install.sh), [pi/.pi/agent](pi/.pi/agent) |
 | Pi BTW | Ephemeral side questions without interrupting the main session | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
