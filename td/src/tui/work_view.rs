@@ -344,7 +344,7 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
                 push(&work.jira, None);
             } else {
                 for reference in references {
-                    push(&reference.text, Some(&reference.url));
+                    push(&reference.label, Some(&reference.url));
                 }
             }
         }
@@ -368,15 +368,16 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
                             "{}{}{}",
                             "  ".repeat(depth),
                             if depth == 0 { "" } else { "└─ " },
-                            pr
+                            if references.len() == 1 {
+                                &references[0].label
+                            } else {
+                                pr
+                            }
                         ),
                         url,
                     );
                 }
             }
-        }
-        if !work.next_action.is_empty() {
-            push(&format!("\nNEXT ACTION\n{}", work.next_action), None);
         }
         if let Some(at) = &work.reviewed_at {
             push(&format!("\nLAST REVIEW ROUND\n{at}"), None);
@@ -384,15 +385,8 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
         if !work.notes.is_empty() {
             push(&format!("\nNOTES\n{}", work.notes), None);
         }
-        if work.jira.is_empty()
-            && work.prs.is_empty()
-            && work.next_action.is_empty()
-            && work.notes.is_empty()
-        {
-            push(
-                "\nPress e to add optional links, a next action, or notes.",
-                None,
-            );
+        if work.jira.is_empty() && work.prs.is_empty() && work.notes.is_empty() {
+            push("\nPress e to add optional links or notes.", None);
         }
     }
     let help_text = "j/k scroll  e edit  y copy  s state  S cycle  Esc back  q quit";
@@ -448,7 +442,7 @@ mod tests {
         type_text(&mut app, "Review startup");
         handle_key(&mut app, KeyCode::Tab).unwrap();
         handle_key(&mut app, KeyCode::Char('w')).unwrap();
-        assert_eq!(app.form.field_count(), 11);
+        assert_eq!(app.form.field_count(), 10);
         for _ in 0..4 {
             handle_key(&mut app, KeyCode::Tab).unwrap();
         }
@@ -457,17 +451,17 @@ mod tests {
         assert_eq!(app.form.work.state, WorkState::None);
         handle_key(&mut app, KeyCode::Tab).unwrap();
         handle_key(&mut app, KeyCode::Tab).unwrap();
-        for text in [
-            "FSW-12345",
-            "https://github.com/example/repo/pull/1 > #2; #3",
-            "Check ownership",
-            "Try λ cases",
-        ] {
-            type_text(&mut app, text);
-            if app.form.active < 10 {
-                handle_key(&mut app, KeyCode::Tab).unwrap();
-            }
-        }
+        type_text(&mut app, "12345");
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        type_text(&mut app, "https://github.com/example/repo/pull/1");
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        type_text(&mut app, "2");
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        handle_key(&mut app, KeyCode::Down).unwrap();
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        type_text(&mut app, "#3");
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        type_text(&mut app, "Try λ cases");
         handle_key(&mut app, KeyCode::Esc).unwrap();
         type_text(&mut app, ":wq");
         handle_key(&mut app, KeyCode::Enter).unwrap();
@@ -485,10 +479,6 @@ mod tests {
         );
         assert_eq!(loaded.selected_task().unwrap().task.work.prs,
             "https://github.com/example/repo/pull/1 > https://github.com/ZiplineTeam/FlightSystems/pull/2; https://github.com/ZiplineTeam/FlightSystems/pull/3");
-        assert_eq!(
-            loaded.selected_task().unwrap().task.work.next_action,
-            "Check ownership"
-        );
         handle_key(&mut loaded, KeyCode::Enter).unwrap();
         handle_key(&mut loaded, KeyCode::Char('s')).unwrap();
         handle_key(&mut loaded, KeyCode::Char('4')).unwrap();
@@ -644,7 +634,6 @@ mod tests {
         app.form.work.category = WorkCategory::Review;
         app.form.work.jira = "FSW-12345".into();
         app.form.work.prs = "#123".into();
-        app.form.work.next_action = "Check feedback".into();
         app.form.work.notes = "Keep this context".into();
         for (title, priority) in [("Other item", "M"), ("Cycle this item", "H")] {
             app.form.values = [title.into(), "work".into(), priority.into(), "D".into()];
@@ -821,7 +810,6 @@ mod tests {
         app.form.values = ["Item".into(), "work".into(), "H".into(), "D".into()];
         app.form.work.jira = "https://example.atlassian.net/browse/FSW-12345".into();
         app.form.work.prs = "#100 > #101; #102".into();
-        app.form.work.next_action = "Hidden next action".into();
         app.form.work.state = WorkState::InProgress;
         save_form(&mut app, None).unwrap();
         app.select_project(Some("work"));
@@ -860,21 +848,6 @@ mod tests {
             if width == 100 {
                 assert!(header.contains("Priority") && header.contains("Estimate"));
             }
-            assert!(!lines.iter().any(|line| line.contains("Hidden next action")));
-            handle_key(&mut app, KeyCode::Enter).unwrap();
-            for _ in 0..50 {
-                handle_key(&mut app, KeyCode::Char('j')).unwrap();
-            }
-            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
-            let detail = terminal
-                .backend()
-                .buffer()
-                .content
-                .iter()
-                .map(|cell| cell.symbol())
-                .collect::<String>();
-            assert!(detail.contains("Hidden next action"));
-            handle_key(&mut app, KeyCode::Esc).unwrap();
         }
         assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
         app.tasks[0].task.description = format!("{}LAST", "long wrapped description ".repeat(40));
@@ -1081,7 +1054,7 @@ mod tests {
                 app.form.work.state = WorkState::Waiting;
             }
             app.form.work.prs = "#1 > #2; #3".into();
-            app.form.work.next_action = "Investigate".into();
+            app.form.work.notes = "Investigate".into();
             save_form(&mut app, None).unwrap();
         }
         app.select_project(Some("work"));
@@ -1147,7 +1120,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         assert_eq!(app.form.work.category, WorkCategory::Uncategorized);
         assert_eq!(app.form.work.state, WorkState::None);
-        app.form.active = 10;
+        app.form.active = 9;
         let mut small = Terminal::new(TestBackend::new(45, 8)).unwrap();
         small.draw(|frame| draw(frame, &mut app)).unwrap();
         let screen = small

@@ -18,7 +18,6 @@ use ratatui::{
 pub(super) struct Reference {
     pub label: String,
     pub url: String,
-    pub text: String,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +28,13 @@ pub(super) struct Hyperlink {
 
 pub(super) fn jira_links(value: &str) -> Vec<Reference> {
     references(value, |token| {
+        let short_id;
+        let token = if !token.is_empty() && token.chars().all(|ch| ch.is_ascii_digit()) {
+            short_id = format!("FSW-{token}");
+            short_id.as_str()
+        } else {
+            token
+        };
         let id = token
             .split_once("/browse/")
             .map_or(token, |(_, id)| id)
@@ -115,11 +121,7 @@ fn references(value: &str, parse: impl Fn(&str) -> Option<(String, String)>) -> 
                 && !url.chars().any(char::is_control)
                 && !result.iter().any(|reference| reference.url == url)
             {
-                result.push(Reference {
-                    label,
-                    url,
-                    text: token.to_string(),
-                });
+                result.push(Reference { label, url });
             }
         }
     }

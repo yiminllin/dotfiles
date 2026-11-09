@@ -133,7 +133,6 @@ fn old_updates_load_and_unrelated_edits_preserve_work_details() {
         category: WorkCategory::Review,
         state: WorkState::Waiting,
         prs: "https://github.com/example/repo/pull/1".into(),
-        next_action: "Wait for author".into(),
         ..WorkDetails::default()
     };
     let update = new_envelope(
@@ -149,6 +148,12 @@ fn old_updates_load_and_unrelated_edits_preserve_work_details() {
         },
     )
     .unwrap();
+    let mut legacy = serde_json::to_value(&update).unwrap();
+    legacy["event"]["work"]["next_action"] = "Wait for author".into();
+    let update: EventEnvelope = serde_json::from_value(legacy).unwrap();
+    assert!(serde_json::to_value(&update).unwrap()["event"]["work"]
+        .get("next_action")
+        .is_none());
     let mut old_json = serde_json::to_value(&update).unwrap();
     old_json["event"].as_object_mut().unwrap().remove("work");
     old_json["event"]["priority"] = "H".into();

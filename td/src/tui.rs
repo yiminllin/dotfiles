@@ -2,7 +2,10 @@ use std::{io, path::PathBuf};
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event as TerminalEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    event::{
+        self, DisableBracketedPaste, EnableBracketedPaste, Event as TerminalEvent, KeyCode,
+        KeyEvent, KeyEventKind, KeyModifiers,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -26,6 +29,7 @@ use crate::work::{WorkCategory, WorkDetails, WorkState};
 
 mod clipboard;
 mod hyperlinks;
+mod references;
 mod work_view;
 use hyperlinks::{jira_links, pr_links, Hyperlink, Reference};
 use work_view::{draw_work_dashboard, draw_work_detail};
@@ -35,7 +39,7 @@ pub fn run(path: PathBuf) -> Result<()> {
     enable_raw_mode()?;
     let cleanup = TerminalCleanup;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableBracketedPaste)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout))?;
     let result = run_app(&mut terminal, app);
     let cursor_result = terminal.show_cursor();
@@ -51,7 +55,7 @@ struct TerminalCleanup;
 impl Drop for TerminalCleanup {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
-        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        let _ = execute!(io::stdout(), DisableBracketedPaste, LeaveAlternateScreen);
     }
 }
 
@@ -130,6 +134,7 @@ struct Form {
     cursor: usize,
     insert: bool,
     work: WorkDetails,
+    references: Option<references::ReferenceEditor>,
 }
 
 impl Form {
@@ -150,22 +155,19 @@ impl Form {
 
     fn field_count(&self) -> usize {
         if self.values[1] == "work" {
-            11
+            10
         } else {
             5
         }
     }
 
     fn is_text(&self) -> bool {
-        self.active == 0 || self.active >= 7
+        self.active == 0 || self.active == 9
     }
 
     fn text(&self) -> &str {
         match self.active {
-            7 => &self.work.jira,
-            8 => &self.work.prs,
-            9 => &self.work.next_action,
-            10 => &self.work.notes,
+            9 => &self.work.notes,
             _ => &self.values[0],
         }
     }
@@ -206,10 +208,7 @@ impl Form {
 
     fn edit_description(&mut self, key: KeyCode) {
         let text = match self.active {
-            7 => &mut self.work.jira,
-            8 => &mut self.work.prs,
-            9 => &mut self.work.next_action,
-            10 => &mut self.work.notes,
+            9 => &mut self.work.notes,
             _ => &mut self.values[0],
         };
         if self.insert {
@@ -287,6 +286,39 @@ impl Form {
         if !self.insert {
             self.cursor = self.cursor.min(previous(text, text.len()));
         }
+    }
+}
+
+fn open_reference_editor(form: &mut Form) {
+    if form.references.is_none() {
+        form.references = Some(references::ReferenceEditor::new(
+            if form.active == 8 {
+                &form.work.prs
+            } else {
+                &form.work.jira
+            },
+            form.active == 8,
+        ));
+    }
+}
+
+fn handle_reference_key(form: &mut Form, key: KeyCode) {
+    if form.references.as_mut().unwrap().key(key) {
+        let editor = form.references.take().unwrap();
+        if form.active == 8 {
+            form.work.prs = editor.value();
+        } else {
+            form.work.jira = editor.value();
+        }
+        if matches!(key, KeyCode::Tab | KeyCode::BackTab) {
+            form.active = if key == KeyCode::Tab {
+                form.active + 1
+            } else {
+                form.active - 1
+            };
+        }
+        form.insert = form.active == 9;
+        form.cursor = if form.insert { form.text().len() } else { 0 };
     }
 }
 
@@ -389,7 +421,6 @@ impl App {
                                 && ([
                                     &view.task.work.jira,
                                     &view.task.work.prs,
-                                    &view.task.work.next_action,
                                     &view.task.work.notes,
                                 ]
                                 .iter()
@@ -489,7 +520,22 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
         linked_rows = app.hyperlinks.iter().map(|link| link.area.y).collect();
         terminal.backend_mut().write_all(&output)?;
         io::Write::flush(terminal.backend_mut())?;
-        if let TerminalEvent::Key(key) = event::read()? {
+        let event = event::read()?;
+        if let TerminalEvent::Paste(value) = &event {
+            if matches!(app.mode, Mode::Search | Mode::Command(_)) {
+                app.input.push_str(value);
+            } else if matches!(app.mode, Mode::Form(_)) {
+                if matches!(app.form.active, 7 | 8) {
+                    open_reference_editor(&mut app.form);
+                    app.form.references.as_mut().unwrap().paste(value);
+                } else if app.form.is_text() {
+                    for ch in value.chars() {
+                        app.form.edit_description(KeyCode::Char(ch));
+                    }
+                }
+            }
+        }
+        if let TerminalEvent::Key(key) = event {
             if key.kind == KeyEventKind::Press {
                 if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('l') {
                     terminal.clear()?;
@@ -529,6 +575,27 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
     }
     match app.mode {
         Mode::Form(id) => {
+            if app.form.references.is_some() {
+                handle_reference_key(&mut app.form, key);
+                return Ok(false);
+            }
+            if matches!(app.form.active, 7 | 8)
+                && (key == KeyCode::Enter || matches!(key, KeyCode::Char(ch) if ch != ':'))
+            {
+                open_reference_editor(&mut app.form);
+                if key != KeyCode::Enter {
+                    handle_reference_key(&mut app.form, key);
+                }
+                return Ok(false);
+            }
+            if matches!(app.form.active, 7 | 8)
+                && !matches!(
+                    key,
+                    KeyCode::Esc | KeyCode::Tab | KeyCode::BackTab | KeyCode::Char(':')
+                )
+            {
+                return Ok(false);
+            }
             match key {
                 KeyCode::Esc if app.form.is_text() && app.form.insert => {
                     app.form.insert = false;
@@ -551,7 +618,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                             1
                         })
                         % count;
-                    app.form.insert = app.form.active >= 7;
+                    app.form.insert = app.form.active == 9;
                     app.form.cursor = if app.form.insert {
                         app.form.text().len()
                     } else {
@@ -920,12 +987,7 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
     }
     let is_work = project == "work";
     let mut work = app.form.work.clone();
-    for value in [
-        &mut work.jira,
-        &mut work.prs,
-        &mut work.next_action,
-        &mut work.notes,
-    ] {
+    for value in [&mut work.jira, &mut work.prs, &mut work.notes] {
         *value = value.trim().to_string();
     }
     if is_work {
@@ -1092,7 +1154,11 @@ fn draw(frame: &mut Frame, app: &mut App) {
             } else {
                 "ADD TASK"
             },
-            if !app.form.is_text() {
+            if app.form.references.is_some() {
+                "Enter add/edit  Tab back to form  Esc cancel input/back"
+            } else if matches!(app.form.active, 7 | 8) {
+                "Enter manage references  Tab next  :wq save  Esc cancel"
+            } else if !app.form.is_text() {
                 "Arrows/Space cycle  Letter select  Enter/Tab next  :wq save  Esc cancel"
             } else if app.form.insert {
                 "Arrows move  Enter/Tab next  Esc normal  :wq in normal mode saves"
@@ -1328,12 +1394,15 @@ fn wrap_description(description: &str, width: usize) -> Text<'static> {
 }
 
 fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
+    if let Some(editor) = &form.references {
+        editor.draw(frame, area);
+        return;
+    }
     let hint = match form.active {
         5 => "Category: f/r/d/a/u or arrows; Enter continues",
         6 => "State: 1-4 or arrows; Enter continues",
-        7 => "Jira (optional): FSW-12345 or ticket URL",
-        8 => "PRs (optional): #123, 123 or URL; > chain; ; separate",
-        9 => "Next action (optional): e.g. Address review comments",
+        7 => "Jira: Enter to manage tickets; Tab continues",
+        8 => "PRs: Enter to manage chains; Tab continues",
         _ => "Description required | - means unset",
     };
     let block = Block::default()
@@ -1351,8 +1420,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         "Category",
         "State",
         "Jira",
-        "PRs / tree",
-        "Next action",
+        "PR chains",
         "Notes",
     ];
     let (description_lines, description_cursor) =
@@ -1468,6 +1536,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
             continue;
         }
         let label = labels[index];
+        let reference_labels;
         let value = match index {
             4 => {
                 if form.blocked {
@@ -1478,10 +1547,34 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
             }
             5 => form.work.category.label(),
             6 => form.work.state.label(),
-            7 => &form.work.jira,
-            8 => &form.work.prs,
-            9 => &form.work.next_action,
-            10 => &form.work.notes,
+            7 | 8 => {
+                reference_labels = if index == 7 {
+                    jira_links(&form.work.jira)
+                        .into_iter()
+                        .map(|link| link.label)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                } else {
+                    form.work
+                        .prs
+                        .split(';')
+                        .map(|chain| {
+                            pr_links(chain)
+                                .into_iter()
+                                .map(|link| link.label)
+                                .collect::<Vec<_>>()
+                                .join(" → ")
+                        })
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                };
+                if reference_labels.is_empty() {
+                    "-"
+                } else {
+                    &reference_labels
+                }
+            }
+            9 => &form.work.notes,
             _ => &form.values[index],
         };
         if index == form.active && form.is_text() {
@@ -1591,8 +1684,13 @@ fn wrapped_form_description(form: &Form, width: usize) -> (Vec<Line<'static>>, (
 }
 
 fn draw_input(frame: &mut Frame, label: &str, value: &str, cursor: usize, area: Rect) {
-    let line = Line::from(format!("> {label}: {value}"));
-    let width = Line::from(format!("> {label}: {}", &value[..cursor])).width();
+    let prefix = if label.is_empty() {
+        "> ".to_string()
+    } else {
+        format!("> {label}: ")
+    };
+    let line = Line::from(format!("{prefix}{value}"));
+    let width = Line::from(format!("{prefix}{}", &value[..cursor])).width();
     let scroll = width.saturating_sub(area.width.saturating_sub(1) as usize) as u16;
     frame.render_widget(
         Paragraph::new(line)
@@ -2047,7 +2145,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(matches!(app.mode, Mode::Normal));
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
-        app.form.active = 10;
+        app.form.active = 9;
         app.form.insert = true;
         handle_key(&mut app, KeyCode::Char('λ')).unwrap();
         handle_key(&mut app, KeyCode::Esc).unwrap();

@@ -68,7 +68,6 @@ pub struct WorkDetails {
     pub state: WorkState,
     pub jira: String,
     pub prs: String,
-    pub next_action: String,
     pub notes: String,
     pub reviewed_at: Option<String>,
 }

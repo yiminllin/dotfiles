@@ -143,29 +143,39 @@ The Work table has Priority, Estimate, Jira, PRs, State, and Task columns. Narro
 windows shorten the first two headers to Pri/Est or P/E. Task descriptions wrap;
 Jira/PR columns show short IDs or counts for multiple references. Empty values
 show `-`. These columns use saved Work metadata, not links in descriptions.
-Full links, PR outlines, next action, review time, and notes stay in details
+Linked IDs, PR outlines, review time, and notes stay in details
 (Enter), without extra metadata rows in the task list.
 
-Selecting project `work` in the form reveals Category, State, Jira, PRs / tree,
-Next action, and Notes. Category always has a value and defaults to Uncategorized,
+Selecting project `work` in the form reveals Category, State, Jira, PR chains,
+and Notes. Category always has a value and defaults to Uncategorized,
 even when adding from a focused category view. Category and State choices appear
 as indented rows with short explanations, muted text, and a dot on the selected
 choice. Choice rows have no bold text or colored backgrounds.
-Links and notes are optional. Next action is one concrete step, such as
-“Address review comments”; it does not change workflow state or create a subtask.
+Links and notes are optional.
 Use arrows, `j` / `k`, or Space for category/state; `f` / `r` / `d` / `a` / `u`
-selects a category, and `1`–`4` selects a state. Enter/Tab moves between fields.
-Work text fields start in insert mode. Press Esc, then `:wq` and Enter to save. Text fields use the same Vim editing keys as Description.
+selects a category, and `1`–`4` selects a state. Tab moves between fields.
+Enter on Jira or PR chains opens its list editor. Notes use the same Vim editing
+keys as Description. Press Esc to leave insert mode, then `:wq` and Enter to save.
 
-Jira and PR references are manual, with no network sync. Jira accepts `FSW-12345`
-or a ticket URL. PRs accept `#123`, `123`, or a PR URL. Saving a Work form converts
-recognized references to canonical links, removing page suffixes, queries, and
-fragments while keeping the host and repository. Other text stays unchanged.
-Existing records are not rewritten until you save their Work form.
+Jira and PR references are manual, with no network sync. In the list editor:
 
-In PRs / tree, `#100 > #101 > #102; #200` displays a chain plus a separate PR.
-Normalization preserves these separators. This outline does not infer Git branches
-or track PR status. Notes and links use one line and wrap in details.
+- Type a Jira number, `FSW-12345`, PR number, `#123`, or full URL; Enter adds it.
+- Paste one or several IDs/URLs to add them immediately. Spaces, commas, and
+  newlines separate pasted references. Multiple PRs enter the selected chain.
+- References immediately become short IDs backed by canonical URLs. Page suffixes,
+  queries, and fragments are removed; explicit hosts and repositories are kept.
+  Duplicate URLs are ignored. Invalid input stays editable with an error.
+- Use arrows or `j`/`k` to select an entry. Enter edits it; `x` deletes it.
+  `J`/`K` moves an entry down/up within its chain. Esc cancels the current input.
+- Select **Add chain**, then Enter to start an independent PR group. Add PRs in
+  dependency order, with the base PR first. No separators need to be typed.
+- Tab accepts current input and returns to the next form field. Esc from the list
+  returns to the current field. Changes are saved only with the form's `:wq`.
+
+Bare Jira numbers use the `FSW` project. Bare PR numbers use FlightSystems.
+Existing `>` / `;` outlines remain readable and editable. The outline does not
+infer Git branches or track PR status. Details show short, linked IDs in a tree.
+Opening a reference list does not write task data; saving the form commits changes.
 
 #### Keyboard hyperlinks over SSH
 
