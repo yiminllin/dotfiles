@@ -78,6 +78,9 @@ Update `src/urgency.rs` to change the weights.
 - Ctrl-U / Ctrl-D: move up / down half a page (based on the visible table height)
 - `a`: open the add form
 - `e`: open the edit form for the selected task
+- `y`: copy the selected task's full description to the clipboard (also in Work details).
+  Uses tmux clipboard forwarding inside tmux, or OSC 52 otherwise. Your terminal
+  must allow clipboard writes; this also works over SSH.
 - `m`: mark/unmark the current pending task for merging; move and press `m` on
   each additional task. Enter opens the populated merge form; edit any field and
   use `:wq` to save. Esc cancels with a discard check; `:q!` discards immediately.

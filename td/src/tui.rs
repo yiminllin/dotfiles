@@ -24,6 +24,7 @@ use crate::data::{
 
 use crate::work::{WorkCategory, WorkDetails, WorkState};
 
+mod clipboard;
 mod hyperlinks;
 mod work_view;
 use hyperlinks::{jira_links, pr_links, Hyperlink, Reference};
@@ -74,6 +75,7 @@ struct App {
     form: Form,
     initial_form: Form,
     hyperlinks: Vec<Hyperlink>,
+    clipboard: Option<String>,
     mode: Mode,
 }
 
@@ -344,6 +346,7 @@ impl App {
             form: Form::default(),
             initial_form: Form::default(),
             hyperlinks: Vec::new(),
+            clipboard: None,
             mode: Mode::Normal,
         };
         app.reload()?;
@@ -493,6 +496,9 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 } else if handle_key_event(&mut app, key)? {
                     return Ok(());
                 }
+                if let Some(description) = app.clipboard.take() {
+                    clipboard::copy(terminal.backend_mut(), &description)?;
+                }
             }
         }
     }
@@ -514,6 +520,13 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Result<bool> {
 }
 
 fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
+    if key == KeyCode::Char('y') && matches!(app.mode, Mode::Normal | Mode::Detail) {
+        app.g_pressed = false;
+        app.clipboard = app
+            .selected_task()
+            .map(|view| view.task.description.clone());
+        return Ok(false);
+    }
     match app.mode {
         Mode::Form(id) => {
             match key {
@@ -1069,7 +1082,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
     let (mode, help) = match app.mode {
         Mode::Normal => (
             "",
-            "Tab view  j/k gg/G ^u/^d move  a add  e edit  m mark  d done  u reopen  x delete  b block  p project  / filter  Esc all  q",
+            "Tab view  j/k gg/G ^u/^d move  a add  e edit  y copy  m mark  d done  u reopen  x delete  b block  p project  / filter  Esc all  q",
         ),
         Mode::Form(id) => (
             if app.merge_ids.len() >= 2 {
@@ -1609,6 +1622,39 @@ mod tests {
             handle_key(app, KeyCode::Char(ch)).unwrap();
         }
         handle_key(app, KeyCode::Enter).unwrap();
+    }
+
+    #[test]
+    fn yank_copies_selected_description_without_editing_tasks() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        handle_key(&mut app, KeyCode::Char('y')).unwrap();
+        assert!(app.clipboard.is_none());
+
+        for description in ["First task", "Full description\n中文 🦀\nWith details"] {
+            app.form.values = [description.into(), "work".into(), "".into(), "".into()];
+            save_form(&mut app, None).unwrap();
+        }
+        let before = std::fs::read(&app.path).unwrap();
+        app.selected = 1;
+        let expected = app.selected_task().unwrap().task.description.clone();
+        for mode in [Mode::Normal, Mode::Detail] {
+            app.mode = mode;
+            assert!(!handle_key(&mut app, KeyCode::Char('y')).unwrap());
+            assert_eq!(app.clipboard.take().as_deref(), Some(expected.as_str()));
+        }
+        app.mode = Mode::Normal;
+        app.select_project(Some("work"));
+        app.selected = 1;
+        handle_key(&mut app, KeyCode::Char('y')).unwrap();
+        assert_eq!(app.clipboard.take().as_deref(), Some(expected.as_str()));
+
+        handle_key(&mut app, KeyCode::Char('e')).unwrap();
+        app.form.insert = true;
+        handle_key(&mut app, KeyCode::Char('y')).unwrap();
+        assert!(app.clipboard.is_none());
+        assert!(app.form.values[0].contains('y'));
+        assert_eq!(std::fs::read(&app.path).unwrap(), before);
     }
 
     #[test]

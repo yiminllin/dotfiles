@@ -37,7 +37,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         Paragraph::new(Line::from(spans)).wrap(ratatui::widgets::Wrap { trim: true }),
         tabs,
     );
-    frame.render_widget(Paragraph::new("j/k move  Enter details  a add  e edit  m mark  s state  S cycle  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit")
+    frame.render_widget(Paragraph::new("j/k move  Enter details  a add  e edit  y copy  m mark  s state  S cycle  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit")
         .style(Style::default().add_modifier(Modifier::DIM)), help);
 
     let (priority_width, estimate_width, state_width, jira_width, prs_width) = if body.width >= 100
@@ -395,7 +395,7 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
             );
         }
     }
-    let help_text = "j/k scroll  e edit  s state  S cycle  Esc back  q quit";
+    let help_text = "j/k scroll  e edit  y copy  s state  S cycle  Esc back  q quit";
     let max_scroll = lines
         .len()
         .saturating_sub(inner.height as usize)
