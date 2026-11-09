@@ -1,11 +1,17 @@
 # Pi progress panel
 
 A local replacement for `rpiv-todo`. The panel above the input pins a recognizable
-session title and all high-level plan steps, with the current step highlighted.
-A ten-step plan shows ten top-level bullets; there is no fixed top-level step limit.
+session title and genuine high-level outcomes, with the current milestone highlighted.
+Explicitly requested steps stay separate; there is no fixed top-level milestone limit.
 Related replies and detours keep the same roadmap. Pi asks for confirmation only when the title or goals are unclear.
 
-Each milestone can contain up to five optional `tasks`. Only the current goal's
+Small refinements belong under an existing milestone when one fits. As related
+small items accumulate, Pi folds them into tasks under one new outcome-based
+milestone, such as `Polish review output`, preserving their status and meaningful
+detail. This is model-guided regrouping, not automatic label-based rewriting.
+Distinct deliverables are not merged just to shorten the panel.
+
+Each milestone can contain up to five optional `tasks`. Only the current milestone's
 tasks appear. Current work uses yellow, done uses green, pending uses muted text,
 and blockers use red through the active theme. There are no separate Now or
 Block None rows. The optional `now` field remains available as hidden context.

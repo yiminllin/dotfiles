@@ -104,6 +104,29 @@ test("compact hierarchy preserves goals, colors, and nested tasks through replay
   }
 });
 
+test("related refinements fold into a new milestone without losing their status", async () => {
+  const f = await fixture();
+  const ctx = f.makeContext();
+  const outcomes = plan.milestones.map((milestone) => ({ ...milestone, status: "done" }));
+  const refinements = [
+    { label: "Tighten wording", status: "done" },
+    { label: "Add review labels", status: "done" },
+    { label: "Check consistency", status: "current" },
+  ];
+  await f.call(ctx, { ...plan, milestones: [...outcomes, ...refinements] });
+  const grouped = [...outcomes, { label: "Polish review output", status: "current", tasks: refinements }];
+  await f.call(ctx, { ...plan, milestones: grouped });
+  await f.event("session_compact", ctx);
+  const restored = await f.call(ctx, { action: "get" });
+  assert.deepEqual(JSON.parse(restored.content[0].text).milestones, grouped);
+  const output = f.lines(ctx).join("\n");
+  assert.match(output, /│ ▶ Polish review output/);
+  assert.match(output, /│   ✓ Tighten wording/);
+  assert.match(output, /│   ✓ Add review labels/);
+  assert.match(output, /│   ▶ Check consistency/);
+  assert.doesNotMatch(output, /│ [✓▶] (Tighten wording|Add review labels|Check consistency)/);
+});
+
 test("snapshot replacement retires the old goal; clear survives replay", async () => {
   const f = await fixture();
   const ctx = f.makeContext();

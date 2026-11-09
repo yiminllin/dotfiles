@@ -118,14 +118,14 @@ export default function progressExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: "progress",
     label: "Progress",
-    description: "Pin the high-level session roadmap. set supplies goal (a recognizable session title) and the plan's persistent high-level steps (done/current/pending), each with optional tasks. Only the current milestone's tasks appear. now is optional context, not displayed; blocker is optional. At most one milestone and one task per milestone may be current. get reads; clear dismisses. Preserve goals across related replies.",
-    promptSnippet: "Pin persistent high-level session goals; nest granular tasks under the current goal",
+    description: "Pin the high-level session roadmap. set supplies goal (a recognizable session title) and outcome-based milestones (done/current/pending), each with optional tasks. Fold accumulated small refinements into tasks under one new high-level milestone, not a growing list of milestones. Only the current milestone's tasks appear. now is hidden context; blocker is optional. At most one milestone and one task per milestone may be current. get reads; clear dismisses. Preserve genuine goals across related replies.",
+    promptSnippet: "Pin outcome-based session goals; fold small refinements into nested tasks",
     promptGuidelines: [
-      "For meaningful multi-step work, pin a recognizable session title in goal (project/topic plus intended outcome) and the plan's highest-level steps as milestones. Preserve an existing plan's step count and order: a ten-step plan needs ten visible top-level milestones, not five grouped goals. Infer these from the request; ask the user to confirm only when the title or goals are unclear.",
-      "Preserve the title and high-level milestones across related replies, follow-ups, and detours. Completing a small request does not complete the session roadmap. Replace the roadmap only when the session purpose genuinely changes; ask if that boundary is unclear.",
-      "Put granular work in optional milestone.tasks, not in top-level milestones. Keep tasks short; only the current milestone's tasks are displayed. Do not list routine reads, searches, or tool calls. Omit tasks when they add no useful information.",
-      "Use set only for a meaningful outcome/status change, a useful nested-task change, or a real blocker. Do not refresh for every reply, tool call, or wait. now is optional context and is not shown. Keep completed goals visible; remove abandoned goals rather than marking them done. Clear only when dismissed or no longer relevant.",
-      "Mark outcomes done only when verified. Keep at most one current milestone and one current task per milestone. Use blocker for an actual obstacle or user decision. Do not claim live updates during synchronous calls.",
+      "Use progress for meaningful multi-step work. Pin a recognizable session title in goal (project/topic plus intended outcome) and genuine high-level outcomes as milestones. Preserve those outcomes and their order, including every explicitly requested step; do not merge distinct deliverables just to shorten the panel. Infer the plan; ask only when its title or scope is unclear.",
+      "Keep the progress title and high-level outcomes across related replies and detours. Put small refinements under an existing milestone, reopening it when needed. If none fits, create one high-level follow-up milestone, not a milestone per refinement. If fine-grained milestones have accumulated, fold them into tasks under one new outcome-based milestone, preserving status and meaningful detail. A small follow-up does not complete the whole roadmap. Replace the roadmap only when the session purpose genuinely changes; ask if that boundary is unclear.",
+      "Use progress milestone.tasks for useful granular work; only the current milestone's tasks appear. Keep tasks short and group related details within the five-task limit. Do not list routine reads, searches, or tool calls. Omit tasks when they add no useful information.",
+      "Use progress set only for a meaningful outcome/status change, a useful nested-task change, or a real blocker. Do not refresh for every reply, tool call, or wait. now is optional context and is not shown. Keep completed goals visible; remove abandoned goals rather than marking them done. Clear only when dismissed or no longer relevant.",
+      "Mark progress outcomes done only when verified. Keep at most one current milestone and one current task per milestone. Use blocker for an actual obstacle or user decision. Do not claim live updates during synchronous calls.",
     ],
     parameters: Parameters,
     executionMode: "sequential",
@@ -210,7 +210,7 @@ export default function progressExtension(pi: ExtensionAPI) {
     return {
       message: {
         customType: "progress-context",
-        content: `Pinned session roadmap (preserve title and high-level goals across related requests; nest granular work; update only meaningful changes):\n${JSON.stringify(state.plan)}`,
+        content: `Pinned session roadmap (preserve genuine high-level outcomes and order; fold accumulated small refinements into tasks under one new high-level milestone; update only meaningful changes):\n${JSON.stringify(state.plan)}`,
         display: false,
       },
     };
