@@ -1,18 +1,15 @@
 ---
 name: pr-description-chain-writer
-description: Generate or update public, reviewer-friendly PR descriptions/bodies/templates for chained/stacked GitHub PRs in FlightSystems by reading each PR's commits/files and reusing a style reference PR body. Use when asked to draft PR descriptions for a PR chain, draft local git-spice stack PR bodies before PRs exist, replicate the same style as a previous chain, update PR body sections such as Verification, Criticality of Change, Release Notes, or per-PR checklist/progress items, or bulk-generate chain-aware PR bodies from PR numbers.
+description: Write, draft, shorten, or update a public PR description, PR body, or PR template for a single PR or a chained/stacked set, including local branches before PRs exist. Use for "write the PR description", "summarize this change for the PR body", same-style rewrites, and updates to Verification, Criticality of Change, Release Notes, or PR checklists. Defaults to FlightSystems; supports other repositories. Not for private human-review guides or review-comment triage.
 ---
 
 # Pr Description Chain Writer
 
 ## Overview
 
-Generate each public GitHub PR body for an ordered PR chain or a local git-spice stack whose PRs may not exist yet. The body is authored as the user's reviewer-facing PR description, not a private inspection guide. Reuse section structure and tone from a style reference PR. Stacked PRs should share only the genuinely common motivation in `Reason for Change`, state each PR's distinct impact in `Description of Change`, use diagrams/tables/before-after comparisons when they improve clarity, keep the shape flexible rather than forced, prefer exact verification commands/links over vague CI claims, and include `PR Tree` by default for multi-PR stacks.
+Generate a public GitHub PR body for a single PR, an ordered PR chain, or a local git-spice stack whose PRs may not exist yet. The body is authored as the user's reviewer-facing PR description, not a private inspection guide. Reuse section structure and tone from a style reference PR. Stacked PRs should share only the genuinely common motivation in `Reason for Change`, state each PR's distinct impact in `Description of Change`, give non-trivial PRs a source-backed diagram and core-code comparison, keep the surrounding prose flexible, prefer short verification results with evidence links over command transcripts or vague CI claims, and include `PR Tree` by default for multi-PR stacks.
 
-Local drafting and inspection are the default. Any `gh` read requires
-network/auth approval; posting bodies requires separate explicit approval for
-the exact PR writes. Never start or repair authentication, submit a stack, or
-push branches from this skill.
+Draft locally by default. Use existing authentication for requested read-only GitHub inspection. Obtain explicit approval before posting bodies. Never log in, submit a stack, or push branches from this skill.
 
 Use this skill for public PR body follow-ups that say body, description, template, same style, update a PR section, verification section, criticality, release notes, or per-PR checklist/progress. Do not use it for generic PR review, review-comment triage, or private Diffview/human-review guides.
 
@@ -32,7 +29,7 @@ Do not include private inspection content in public PR bodies. Forbidden in publ
 
 ### 1. Collect inputs
 
-- Collect ordered PR numbers in chain order.
+- Accept one PR number/URL, a local branch, or ordered PR numbers in chain order.
 - For local stacks before PRs exist, collect the current git-spice stack from the repo checkout instead of asking for PR numbers.
 - Default to `ZiplineTeam/FlightSystems` unless user specifies another repo.
 - Prefer using a style reference PR with a high-quality body in the same chain.
@@ -58,7 +55,7 @@ Lock these items when present:
 
 ### 3. Generate draft bodies
 
-For an existing PR body or one-section update, first read the live body (after network approval), then draft the smallest requested diff against it. Do not run the whole-body generator for a section-only update. For new PR bodies or an explicitly requested rewrite, use the generator script from the loaded skill directory. Set `SKILL_DIR` to that directory when needed; for the stowed global skill this is usually `$HOME/.pi/agent/skills/pr-description-chain-writer`. The generator uses `gh`, so obtain network/auth approval before running it.
+For an existing PR body or one-section update, first read the live body, then draft the smallest requested diff against it. Do not run the whole-body generator for a section-only update. For new PR bodies or an explicitly requested rewrite, use the generator script from the loaded skill directory. Set `SKILL_DIR` to that directory when needed; for the stowed global skill this is usually `$HOME/.pi/agent/skills/pr-description-chain-writer`. The generator uses read-only `gh` queries; run it only for the requested repository and PRs with existing authentication.
 
 ```bash
 SKILL_DIR="${SKILL_DIR:-$HOME/.pi/agent/skills/pr-description-chain-writer}"
@@ -88,6 +85,7 @@ Important options:
 
 ### 4. Review generated content before posting
 
+- Load `../code-explainer/SKILL.md`. For non-trivial PRs, use both its diagram and core-code procedures: include the goal, before/after behavior, a source-backed diagram, and representative core code under `Description of Change`. Reuse the human guide's verified explanation when its scope and revisions match, but omit private review routes, questions, and comments. Keep actual symbols and file/line anchors. Tiny mechanical changes or an explicit prose-only request may omit these views; missing source must be disclosed, not invented. Short verification does not mean a prose-only description.
 - Read `references/style-notes.md` and keep template order/shape consistent.
 - For section-update requests, update only the requested body/template section, preserving all other live wording, checklist state, and style. Show the minimal proposed diff before posting.
 - Do a title preflight before writing or posting:
@@ -97,7 +95,7 @@ Important options:
   - For throwaway/test PRs, add `[DNL]` when the user asks for that marker.
   - Ensure commit-derived PR titles or wording still follow requested `[FSW-#####] [Phoenix] ...` and `[DNL]` conventions.
 - Tighten the generated reason paragraph so it states the concrete reviewer-visible problem and the mechanism/root cause changed in this PR.
-- Treat script-inferred prose from paths/patches as a draft, not proof; check every mechanism and impact claim against code and measured evidence. Keep `Description of Change` concise and plain-language: feature/mechanism first, file inventory second. Under `In particular:`, prefer conceptual area bullets with semantic labels and nested file details when that improves skimmability, for example `**Config source of truth**`, `**Physics plumbing**`, `**Gen2 tether-guide geometry**`, and `**Contact behavior**`. Use the hybrid shape as a useful default, reduce local jargon, and use diagrams/tables only when they make the review easier. Include short code or pseudocode snippets only when they clarify an API, struct, or flow. Summarize generated, mechanical, or bulk churn as one clear bullet/table row instead of listing repetitive file edits.
+- Treat script-inferred prose from paths/patches as a draft, not proof; check every mechanism and impact claim against code and measured evidence. Keep `Description of Change` concise and plain-language: feature/mechanism first, file inventory second. Under `In particular:`, prefer conceptual area bullets with semantic labels and nested file details when that improves skimmability, for example `**Config source of truth**`, `**Physics plumbing**`, `**Gen2 tether-guide geometry**`, and `**Contact behavior**`. Use prose and bullets to connect the diagram and core code, not repeat them. A table may supplement the explanation; it does not replace the required views for a non-trivial PR. Summarize generated, mechanical, or bulk churn as one clear bullet/table row instead of listing repetitive file edits.
 - For chains, keep the chain-level reason paragraph/context identical across PRs and keep `PR Tree` by default; only omit it when the user asks or it is clearly noise for reviewers.
 - If you include `PR Tree`, keep the ordering exactly aligned to the chain, use PR numbers only such as `- #123`, do not include PR titles or markdown links, and keep `◀` on the current PR.
 - When a Jira ticket is known, add `Jira Ticket: [FSW-XXXXX](https://flyzipline.atlassian.net/browse/FSW-XXXXX)` directly below the `PR Tree` block; use the ticket most relevant to each PR, even when multiple PRs share a ticket.
@@ -108,10 +106,9 @@ Important options:
 - Optionally add `### Watchouts` only for real risk or follow-up. Skip it when there is no meaningful risk. Keep compact bullets shaped as `**Risk**: ...`, `**Mitigation**: ...`, and `**Follow-up**: ...`.
 - Both sections are optional; skip `Map for Reviewers` for tiny PRs and skip `Watchouts` when there is no real risk or follow-up. Keep them factual and public-safe. Do not include emoji, deep/skim labels, suggested comments, private TODOs, or unresolved inspection questions in public PR bodies.
 - Preserve the repository template checkbox blocks for `Criticality of Change` and `Release Notes`; do not collapse them to prose such as `L3 Nonfunctional`. Use the existing repo checklist blocks when known, or copy/preserve the exact checklist shape from the current PR template or style reference. Before finalizing, verify the checked criticality and release-notes state reflect reality for each PR.
-- Never copy checked verification from a style PR to another PR. Confirm evidence separately for each PR. Finalize `Verification` as non-empty checked evidence bullets, not raw generated text: use `- [x] Manual Test [Baraza](...) [S3](...)` or another short result label; multiple tests get multiple `- [x]` bullets. If verification was intentionally not run, include a short explicit not-run reason instead of leaving the section blank. Use fenced `bash` only for real commands that were run or are the evidence. Never leave TODOs, empty query results, or template placeholders.
-- Treat Baraza/S3/GHA links as evidence, not decoration: prefer Baraza and `[S3](...)` links over Aspect links or local paths when available, but never invent links. Upload or link logs only when the user requested/authorized it; otherwise omit unavailable links or state local-only evidence.
-- For `Manual Test`, keep it concise: name the Phoenix scenario or workflow, add environment or mode only when it matters, summarize the result briefly, and include links when useful.
-- A verification bullet may be followed by a fenced `bash` command block when the exact command is useful; include command details only when they are real verification evidence.
+- In `Verification`, name the concrete check and result in a short bullet, then show the useful command in a fenced `bash` block. Prefer `Reposition seed 17: passed` over evidence-process prose such as `recorded integrated-stack checks pass; source hashes match`. Group related checks; keep logs and incidental metrics in working notes.
+- Recover commands from saved scripts, logs, or history. Include needed targets, flags, seeds, and output-directory requirements. Put the command block directly after the result; omit labels such as `Reproduce:`. If the exact invocation is unavailable, use a source-checked equivalent without claiming it is the original command or was newly run. Avoid duplicate commands, but do not omit useful reproduction commands merely to shorten the section.
+- Never inherit results from another PR. State pending/failed/not-run status, baseline failures, and material scope limits briefly, including stack-tip-only or pre-cleanup evidence. If nothing ran, say why. Prefer existing run links over local evidence paths; never invent links or upload logs without approval. Remove placeholders.
 
 ### 5. Apply generated body to each PR (optional, separately approved)
 
@@ -135,7 +132,7 @@ For each PR, generate:
 - Human-readable `Description of Change`, flexible in final shape even though the script renders hybrid, prose-only, or bullets-only drafts.
 - More detailed nested bullets with reviewer-meaningful section labels where the diff supports them.
 - Optional `### Map for Reviewers` and `### Watchouts` sections only when they add reviewer value.
-- Optional illustrative snippets when requested.
+- Source-backed diagram and representative core code for non-trivial PRs, with a clear before/after comparison and verified source anchors. Keep public wording concise; do not copy private review content.
 - Existing PRs' own `Criticality of Change` and `Release Notes` checkboxes (no inferred checked defaults); review them for each new PR, plus concise per-PR verification evidence.
 
 Write files to:

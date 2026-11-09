@@ -33,6 +33,8 @@ If the request is ambiguous, ask only one short clarifying question (e.g., "Do y
 
 ## Choose the explanation
 
+For public PR bodies, use `../pr-description-chain-writer/SKILL.md`; for private guides, use `../pr-human-review-guide/SKILL.md`. When loaded by either skill, supply explanation procedures without routing back or emitting a separate report.
+
 Investigate enough source to choose the view. Load these procedures as needed; they are not separate agents:
 
 | What the reader needs | Action |
@@ -109,7 +111,7 @@ If intent is unclear, scan adjacent docs or README in the same subsystem. If sti
 ## Evidence rules
 
 - Every factual claim must be backed by a file reference.
-- Prefer line-number references; include a short snippet when line numbers are unavailable or when clarifying intent.
+- Keep actual symbols in core code, including simplified code. Give each snippet a verified `path:line` range and revision/side. Map conceptual aliases to real symbols; disclose missing anchors rather than inventing source lines.
 - Mark edges "confirmed" only when you can see the call site.
 - Mark edges "likely" when inferred (dynamic dispatch, generated code, macros).
 - If you cannot locate a definition or doc, say so and stop expanding that branch.
