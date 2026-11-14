@@ -50,6 +50,24 @@ Each `progress set` supplies a complete snapshot; identical snapshots are ignore
 - **Alt+T** or **`/progress`**: collapse or expand. Blockers stay visible when collapsed.
 - **`/progress clear`**: dismiss the panel.
 - Completed plans stay visible until replaced or cleared.
+- **tmux prefix + a**: Agent Board shows equal-sized session blocks in four columns,
+  filled left-to-right, then top-to-bottom. Each block has its own border and a
+  shaded, bold supplied agent name above a separator. The progress goal is bold,
+  blue, and underlined, so emphasis does not depend on font weight alone.
+  Milestones use green for done, amber for current work, gray for pending, and red
+  for blockers. The selected block has a cyan border. Dimmed blocks stay gray.
+  Short blocks get padding; long text wraps. Scroll with **j/k** or **PgUp/PgDn**.
+  Popup height fits the grid content when opened, up to 85% of the
+  screen; one grid row opens shorter than two. Widen terminals below 54 columns.
+- Agent numbers and positions stay fixed across status changes, dimming, and
+  closing another agent. New agents take the first free slot. **1–9** jumps directly;
+  **arrows** select any agent, **Enter** jumps, and **Shift+A** dims the selection.
+  The selected number is highlighted; current-window headings stay underlined.
+- Agent Board needs Python 3. Pins publish directly from this extension to tmux.
+  Existing Pi sessions keep extension code in memory: run **`/reload` once per
+  session** to load the progress publisher. Board layout changes only need reopening
+  the popup. Missing publication shows “Progress unavailable”; a connected session
+  without a pin shows “No pinned progress”.
 - The model updates only meaningful outcome, task-status, or blocker changes,
   not every reply or wait. Small follow-ups do not replace the session goals.
 - A genuinely different session purpose replaces the roadmap. Abandoned goals
@@ -75,7 +93,8 @@ pi -e ./pi/.pi/agent/extensions/progress/index.ts
 From the repository root, run the offline checks with the installed Pi SDK:
 
 ```sh
-JITI_FS_CACHE=0 node --test pi/.pi/agent/extensions/progress/test.mjs
+JITI_FS_CACHE=0 node --test pi/.pi/agent/extensions/{progress,agent-board}/test.mjs
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_pi_agent_board.py
 ```
 
 The tests load the actual extension and check rendering and state transitions.

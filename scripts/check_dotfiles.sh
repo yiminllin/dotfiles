@@ -185,6 +185,7 @@ check_pi_source_references() {
 
   local board_files=(
     tmux/.tmux/pi-agent-board
+    tmux/.tmux/pi-agent-board.py
     tmux/.tmux/pi-agent-board-ensure
     tmux/.tmux/pi-agent-board-resize
     tmux/.tmux/pi-agent-board-resurrect

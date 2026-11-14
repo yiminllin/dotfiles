@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { Text, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
@@ -97,8 +98,26 @@ function renderPanel(state: State, width: number, theme: Theme): string[] {
 }
 
 export default function progressExtension(pi: ExtensionAPI) {
+  const publishBoard = (ctx: ExtensionContext, state: State | null) => {
+    const pane = process.env.TMUX_PANE;
+    if (ctx.mode !== "tui" || !pane || process.env.PI_REVIEW_WORKER === "1") return;
+    const plan = state?.plan;
+    const snapshot = state ? JSON.stringify({
+      pid: process.pid,
+      plan: plan ? { goal: plan.goal, milestones: plan.milestones, blocker: plan.blocker } : null,
+    }) : "";
+    try {
+      execFileSync("tmux", ["set-option", "-pt", pane, "@pi_agent_progress", snapshot], {
+        stdio: "ignore", timeout: 1000,
+      });
+    } catch {
+      // The board shows an unavailable hint if publication fails.
+    }
+  };
+
   const refresh = (ctx: ExtensionContext, state = readState(ctx)) => {
     if (ctx.mode !== "tui") return;
+    publishBoard(ctx, state);
     if (!state.plan) {
       ctx.ui.setWidget(WIDGET, undefined);
       return;
@@ -202,6 +221,7 @@ export default function progressExtension(pi: ExtensionAPI) {
   pi.on("session_tree", (_event, ctx) => refresh(ctx));
   pi.on("session_compact", (_event, ctx) => refresh(ctx));
   pi.on("session_shutdown", (_event, ctx) => {
+    publishBoard(ctx, null);
     if (ctx.mode === "tui") ctx.ui.setWidget(WIDGET, undefined);
   });
   pi.on("before_agent_start", (_event, ctx) => {

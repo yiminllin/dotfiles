@@ -6,6 +6,9 @@ import { dirname, join, parse } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
+// Renderer tests must never publish into the caller's live tmux pane.
+delete process.env.TMUX_PANE;
+
 // Use the installed Pi loader and its dependency aliases, not a second SDK copy.
 let sdk = dirname(realpathSync(execFileSync("which", ["pi"], { encoding: "utf8" }).trim()));
 while (!existsSync(join(sdk, "dist/core/extensions/loader.js"))) {
