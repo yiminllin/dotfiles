@@ -37,17 +37,30 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         Paragraph::new(Line::from(spans)).wrap(ratatui::widgets::Wrap { trim: true }),
         tabs,
     );
-    frame.render_widget(Paragraph::new("j/k move  Enter details  a add  e edit  y copy  m mark  s state  S cycle  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit")
+    frame.render_widget(Paragraph::new("j/k move  Enter details  a add  A template  e edit  y copy  m mark  s state  S cycle  r refresh PRs  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit")
         .style(Style::default().add_modifier(Modifier::DIM)), help);
 
-    let (priority_width, estimate_width, state_width, jira_width, prs_width) = if body.width >= 100
-    {
-        (8, 8, 12, 12, 12)
-    } else if body.width >= 70 {
-        (3, 3, 11, 11, 9)
-    } else {
-        (1, 1, 11, 9, 5)
-    };
+    let visible = app.visible_tasks();
+    let has_titles = visible.iter().any(|view| {
+        pr_links(&view.task.work.prs)
+            .iter()
+            .any(|reference| app.pr_titles.title(&reference.url).is_some())
+    });
+    let (priority_width, estimate_width, state_width, jira_width, mut prs_width) =
+        if body.width >= 100 {
+            (8, 8, 12, 12, 12)
+        } else if body.width >= 70 {
+            (3, 3, 11, 11, 9)
+        } else {
+            (1, 1, 11, 9, 6)
+        };
+    if has_titles {
+        // Leave at least eight columns for task text after table spacing.
+        let available = body
+            .width
+            .saturating_sub(priority_width + estimate_width + jira_width + state_width + 17);
+        prs_width = prs_width.max((body.width / 5 * 2).min(available));
+    }
     let widths = [
         Constraint::Length(priority_width),
         Constraint::Length(estimate_width),
@@ -67,6 +80,11 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         .title(Line::from(vec![
             app.status_label(),
             Span::raw(format!(" | Work | filter: {}", app.filter)),
+            Span::raw(if app.pr_titles.is_loading() {
+                " | refreshing PR titles"
+            } else {
+                ""
+            }),
         ]))
         .borders(Borders::ALL)
         .border_style(Style::default().add_modifier(Modifier::DIM));
@@ -77,7 +95,6 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         .spacing(1)
         .split(columns_area);
     let text_width = columns[5].width as usize;
-    let visible = app.visible_tasks();
     let mut rows = Vec::new();
     let mut row_links = Vec::new();
     let mut heights = Vec::new();
@@ -86,7 +103,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         let work = &task.work;
         let start = rows.len();
         let mut style = project_row_style("work");
-        if work.state.is_waiting() || task.status == TaskStatus::Completed {
+        if task.state.is_waiting() || task.status == TaskStatus::Completed {
             style = style.add_modifier(Modifier::DIM);
         }
         let description_style = if task.status == TaskStatus::Completed {
@@ -94,13 +111,33 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         } else {
             style
         };
-        for (column, references) in [(2, jira_links(&work.jira)), (3, pr_links(&work.prs))] {
-            if references.len() == 1 {
-                row_links.push((rows.len(), column, references.into_iter().next().unwrap()));
+        let jira = jira_links(&work.jira);
+        if let [reference] = jira.as_slice() {
+            row_links.push((start, 2, reference.clone()));
+        }
+        let prs = pr_links(&work.prs);
+        let mut pr_lines = Vec::new();
+        for (index, label) in pr_labels(&work.prs, &prs).into_iter().enumerate() {
+            let reference = prs.get(index);
+            let title = reference.and_then(|reference| app.pr_titles.title(&reference.url));
+            for line in pr_title_lines(&label, title, columns[3].width as usize) {
+                if let Some(reference) = reference {
+                    row_links.push((
+                        start + pr_lines.len(),
+                        3,
+                        Reference {
+                            label: line.to_string(),
+                            url: reference.url.clone(),
+                        },
+                    ));
+                }
+                pr_lines.push(line);
             }
         }
         let description = wrap_description(&task.description, text_width);
-        for (index, line) in description.lines.into_iter().enumerate() {
+        let height = description.lines.len().max(pr_lines.len());
+        for index in 0..height {
+            let line = description.lines.get(index).cloned().unwrap_or_default();
             rows.push(
                 Row::new(vec![
                     Cell::from(if index == 0 {
@@ -120,32 +157,14 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                     } else {
                         String::new()
                     }),
-                    Cell::from(if index == 0 {
-                        pr_summary(&work.prs)
-                    } else {
-                        String::new()
-                    }),
-                    Cell::from(if index == 0 {
-                        if task.status == TaskStatus::Completed {
-                            "Done"
+                    Cell::from(pr_lines.get(index).cloned().unwrap_or_default()),
+                    Cell::from(if index == 0 { task.state_label() } else { "" }).style(
+                        if index == 0 {
+                            task_state_style(task)
                         } else {
-                            work.state.label()
-                        }
-                    } else {
-                        ""
-                    })
-                    .style(if index == 0 {
-                        if task.status == TaskStatus::Completed {
                             Style::default()
-                                .fg(Color::Rgb(75, 105, 77))
-                                .bg(Color::Rgb(232, 240, 228))
-                                .remove_modifier(Modifier::DIM)
-                        } else {
-                            state_style(work.state)
-                        }
-                    } else {
-                        Style::default()
-                    }),
+                        },
+                    ),
                     Cell::from(line).style(description_style),
                 ])
                 .style(style),
@@ -193,7 +212,8 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                 let area = Rect::new(
                     columns[column].x,
                     inner.y + 1 + relative as u16,
-                    (reference.label.len() as u16).min(columns[column].width),
+                    (Line::from(reference.label.as_str()).width() as u16)
+                        .min(columns[column].width),
                     1,
                 );
                 app.hyperlinks.push(Hyperlink {
@@ -218,16 +238,58 @@ fn jira_summary(value: &str) -> String {
     reference_summary(value, "tickets", jira_links(value))
 }
 
-fn pr_summary(value: &str) -> String {
-    reference_summary(value, "PRs", pr_links(value))
+fn pr_title_lines(label: &str, title: Option<&str>, width: usize) -> Vec<Line<'static>> {
+    let indent = Line::from(label).width() + 2;
+    let Some(title) = title.filter(|_| width > indent) else {
+        return wrap_description(label, width).lines;
+    };
+    wrap_description(title, width - indent)
+        .lines
+        .into_iter()
+        .enumerate()
+        .map(|(index, line)| {
+            let prefix = if index == 0 {
+                format!("{label}  ")
+            } else {
+                " ".repeat(indent)
+            };
+            Line::from(format!("{prefix}{line}"))
+        })
+        .collect()
 }
 
-fn state_style(state: WorkState) -> Style {
+fn pr_labels(value: &str, references: &[Reference]) -> Vec<String> {
+    if references.is_empty() {
+        vec![if value.trim().is_empty() {
+            "-".into()
+        } else {
+            value.trim().into()
+        }]
+    } else {
+        references
+            .iter()
+            .map(|reference| reference.label.clone())
+            .collect()
+    }
+}
+
+pub(super) fn task_state_style(task: &crate::data::Task) -> Style {
+    if task.status == TaskStatus::Completed {
+        Style::default()
+            .fg(Color::Rgb(75, 105, 77))
+            .bg(Color::Rgb(232, 240, 228))
+            .remove_modifier(Modifier::DIM)
+    } else {
+        state_style(task.state)
+    }
+}
+
+fn state_style(state: TaskState) -> Style {
     let (foreground, background) = match state {
-        WorkState::None => (Color::Rgb(100, 100, 96), Color::Rgb(238, 237, 233)),
-        WorkState::Next => (Color::Rgb(70, 103, 104), Color::Rgb(229, 240, 238)),
-        WorkState::InProgress => (Color::Rgb(103, 80, 115), Color::Rgb(239, 231, 242)),
-        WorkState::Waiting => (Color::Rgb(117, 100, 64), Color::Rgb(245, 238, 217)),
+        TaskState::None => (Color::Rgb(100, 100, 96), Color::Rgb(238, 237, 233)),
+        TaskState::Next => (Color::Rgb(70, 103, 104), Color::Rgb(229, 240, 238)),
+        TaskState::InProgress => (Color::Rgb(103, 80, 115), Color::Rgb(239, 231, 242)),
+        TaskState::Waiting => (Color::Rgb(117, 100, 64), Color::Rgb(245, 238, 217)),
     };
     Style::default()
         .fg(foreground)
@@ -239,8 +301,13 @@ pub(super) fn draw_state_picker(frame: &mut Frame, app: &App) {
     let Some(view) = app.selected_task() else {
         return;
     };
-    let work = &view.task.work;
-    let states = WorkState::ALL;
+    let task = &view.task;
+    let context = if task.project.as_deref() == Some("work") {
+        task.work.category.label()
+    } else {
+        task.project.as_deref().unwrap_or("No project")
+    };
+    let states = TaskState::ALL;
     let area = frame.area();
     let width = area.width.min(54);
     let height = area.height.min(states.len() as u16 + 7);
@@ -252,11 +319,7 @@ pub(super) fn draw_state_picker(frame: &mut Frame, app: &App) {
     );
     frame.render_widget(ratatui::widgets::Clear, popup);
     let mut lines = vec![
-        Line::from(format!(
-            " {} · current: {}",
-            work.category.label(),
-            work.state.label()
-        )),
+        Line::from(format!(" {} · current: {}", context, task.state.label())),
         Line::default(),
     ];
     for (index, state) in states.iter().enumerate() {
@@ -271,7 +334,7 @@ pub(super) fn draw_state_picker(frame: &mut Frame, app: &App) {
                     state_style(*state)
                 },
             ),
-            Span::raw(if *state == work.state {
+            Span::raw(if *state == task.state {
                 "  current"
             } else {
                 ""
@@ -292,7 +355,7 @@ pub(super) fn draw_state_picker(frame: &mut Frame, app: &App) {
             )
             .block(
                 Block::default()
-                    .title(" Set work state ")
+                    .title(" Set state ")
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(ACCENT)),
             ),
@@ -326,14 +389,13 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
         };
         push(
             &format!(
-                "{}\n{} · {} · {}\nPriority: {} · Estimate: {} · Blocked: {}",
+                "{}\n{} · {} · {}\nPriority: {} · Estimate: {}",
                 task.description,
                 work.category.label(),
-                work.state.label(),
+                task.state_label(),
                 task.status.as_str(),
                 task.priority.as_deref().unwrap_or("-"),
-                task.estimate.as_deref().unwrap_or("-"),
-                if task.blocked { "yes" } else { "no" }
+                task.estimate.as_deref().unwrap_or("-")
             ),
             None,
         );
@@ -389,7 +451,7 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
             push("\nPress e to add optional links or notes.", None);
         }
     }
-    let help_text = "j/k scroll  e edit  y copy  s state  S cycle  Esc back  q quit";
+    let help_text = "j/k scroll  e edit  y copy  s state  S cycle  r refresh PRs  Esc back  q quit";
     let max_scroll = lines
         .len()
         .saturating_sub(inner.height as usize)
@@ -442,14 +504,13 @@ mod tests {
         type_text(&mut app, "Review startup");
         handle_key(&mut app, KeyCode::Tab).unwrap();
         handle_key(&mut app, KeyCode::Char('w')).unwrap();
-        assert_eq!(app.form.field_count(), 10);
+        assert_eq!(app.form.field_count(), 9);
         for _ in 0..4 {
             handle_key(&mut app, KeyCode::Tab).unwrap();
         }
         assert_eq!(app.form.active, 5);
         handle_key(&mut app, KeyCode::Char('r')).unwrap();
-        assert_eq!(app.form.work.state, WorkState::None);
-        handle_key(&mut app, KeyCode::Tab).unwrap();
+        assert_eq!(app.form.state, TaskState::None);
         handle_key(&mut app, KeyCode::Tab).unwrap();
         type_text(&mut app, "12345");
         handle_key(&mut app, KeyCode::Tab).unwrap();
@@ -485,16 +546,13 @@ mod tests {
         assert!(matches!(loaded.mode, Mode::Detail));
         let task = &loaded.selected_task().unwrap().task;
         assert_eq!(task.status, TaskStatus::Pending);
-        assert_eq!(task.work.state, WorkState::Waiting);
+        assert_eq!(task.state, TaskState::Waiting);
         assert!(task.work.reviewed_at.is_some());
         handle_key(&mut loaded, KeyCode::Esc).unwrap();
         assert_eq!(loaded.project, Some("work"));
         handle_key(&mut loaded, KeyCode::Char('s')).unwrap();
         handle_key(&mut loaded, KeyCode::Char('2')).unwrap();
-        assert_eq!(
-            loaded.selected_task().unwrap().task.work.state,
-            WorkState::Next
-        );
+        assert_eq!(loaded.selected_task().unwrap().task.state, TaskState::Next);
         handle_key(&mut loaded, KeyCode::Tab).unwrap();
         assert!(loaded.visible_tasks().is_empty());
     }
@@ -529,7 +587,7 @@ mod tests {
             handle_key(&mut app, KeyCode::Tab).unwrap();
         }
         assert_eq!(app.form.active, 5);
-        app.form.work.state = WorkState::Waiting;
+        app.form.state = TaskState::Waiting;
         for (shortcut, category) in [
             ('f', WorkCategory::Feature),
             ('r', WorkCategory::Review),
@@ -539,7 +597,7 @@ mod tests {
         ] {
             handle_key(&mut app, KeyCode::Char(shortcut)).unwrap();
             assert_eq!(app.form.work.category, category);
-            assert_eq!(app.form.work.state, WorkState::Waiting);
+            assert_eq!(app.form.state, TaskState::Waiting);
             let mut terminal = Terminal::new(TestBackend::new(45, 8)).unwrap();
             terminal.draw(|frame| draw(frame, &mut app)).unwrap();
             let buffer = terminal.backend().buffer();
@@ -563,7 +621,7 @@ mod tests {
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         app.select_project(Some("work"));
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
-        app.form.active = 6;
+        app.form.active = 4;
         for (width, height) in [(100, 24), (45, 12)] {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             terminal.draw(|frame| draw(frame, &mut app)).unwrap();
@@ -575,15 +633,15 @@ mod tests {
                 .map(|cell| cell.symbol())
                 .collect::<String>();
             assert!(text.contains("> State: [No state]"));
-            for state in WorkState::ALL {
+            for state in TaskState::ALL {
                 assert!(text.contains(state.label()));
             }
             assert!(text.contains("Not a current"));
-            assert!(text.contains("Needs external"));
+            assert!(text.contains("Waiting on"));
         }
-        for (index, state) in WorkState::ALL.iter().enumerate() {
+        for (index, state) in TaskState::ALL.iter().enumerate() {
             handle_key(&mut app, KeyCode::Char((b'1' + index as u8) as char)).unwrap();
-            assert_eq!(app.form.work.state, *state);
+            assert_eq!(app.form.state, *state);
             let mut terminal = Terminal::new(TestBackend::new(45, 8)).unwrap();
             terminal.draw(|frame| draw(frame, &mut app)).unwrap();
             let row = terminal
@@ -609,18 +667,18 @@ mod tests {
             assert!(!row[marker].modifier.contains(Modifier::BOLD));
         }
         handle_key(&mut app, KeyCode::Down).unwrap();
-        assert_eq!(app.form.work.state, WorkState::None);
+        assert_eq!(app.form.state, TaskState::None);
         handle_key(&mut app, KeyCode::Up).unwrap();
-        assert_eq!(app.form.work.state, WorkState::Waiting);
+        assert_eq!(app.form.state, TaskState::Waiting);
         handle_key(&mut app, KeyCode::Char('j')).unwrap();
-        assert_eq!(app.form.work.state, WorkState::None);
+        assert_eq!(app.form.state, TaskState::None);
         handle_key(&mut app, KeyCode::Char('k')).unwrap();
-        assert_eq!(app.form.work.state, WorkState::Waiting);
+        assert_eq!(app.form.state, TaskState::Waiting);
         handle_key(&mut app, KeyCode::Enter).unwrap();
-        assert_eq!(app.form.active, 7);
+        assert_eq!(app.form.active, 5);
         handle_key(&mut app, KeyCode::BackTab).unwrap();
-        assert_eq!(app.form.active, 6);
-        assert_eq!(app.form.work.state, WorkState::Waiting);
+        assert_eq!(app.form.active, 4);
+        assert_eq!(app.form.state, TaskState::Waiting);
         assert!(!app.path.exists());
     }
 
@@ -644,10 +702,10 @@ mod tests {
         let id = app.selected_task().unwrap().task.id;
         let mut expected = app.selected_task().unwrap().task.work.clone();
         for state in [
-            WorkState::Next,
-            WorkState::InProgress,
-            WorkState::Waiting,
-            WorkState::None,
+            TaskState::Next,
+            TaskState::InProgress,
+            TaskState::Waiting,
+            TaskState::None,
         ] {
             handle_key_event(
                 &mut app,
@@ -658,8 +716,8 @@ mod tests {
             let task = &app.selected_task().unwrap().task;
             assert_eq!(task.id, id);
             assert_eq!(task.status, TaskStatus::Pending);
-            expected.state = state;
-            if state == WorkState::Waiting {
+            assert_eq!(task.state, state);
+            if state == TaskState::Waiting {
                 assert!(task.work.reviewed_at.is_some());
                 expected.reviewed_at = task.work.reviewed_at.clone();
             }
@@ -668,10 +726,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Enter).unwrap();
         handle_key(&mut app, KeyCode::Char('S')).unwrap();
         assert!(matches!(app.mode, Mode::Detail));
-        assert_eq!(
-            app.selected_task().unwrap().task.work.state,
-            WorkState::Next
-        );
+        assert_eq!(app.selected_task().unwrap().task.state, TaskState::Next);
         handle_key(&mut app, KeyCode::Esc).unwrap();
         handle_key(&mut app, KeyCode::Char('d')).unwrap();
         let before = std::fs::read(&app.path).unwrap();
@@ -705,13 +760,13 @@ mod tests {
                 .iter()
                 .map(|cell| cell.symbol())
                 .collect::<String>();
-            assert!(text.contains("Set work state"));
+            assert!(text.contains("Set state"));
             assert!(text.contains("Enter apply"));
             assert!(text.contains("Esc cancel"));
             assert!(buffer
                 .content
                 .iter()
-                .any(|cell| cell.bg == state_style(WorkState::None).bg.unwrap()));
+                .any(|cell| cell.bg == state_style(TaskState::None).bg.unwrap()));
         }
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(matches!(app.mode, Mode::Normal));
@@ -723,7 +778,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Enter).unwrap();
         assert!(matches!(app.mode, Mode::Normal));
         let task = &app.selected_task().unwrap().task;
-        assert_eq!(task.work.state, WorkState::Waiting);
+        assert_eq!(task.state, TaskState::Waiting);
         assert_eq!(task.status, TaskStatus::Pending);
         assert!(task.work.reviewed_at.is_some());
         let mut terminal = Terminal::new(TestBackend::new(100, 16)).unwrap();
@@ -734,10 +789,10 @@ mod tests {
             .content
             .iter()
             .any(|cell| cell.symbol() == "W"
-                && cell.bg == state_style(WorkState::Waiting).bg.unwrap()));
+                && cell.bg == state_style(TaskState::Waiting).bg.unwrap()));
         assert_ne!(
-            state_style(WorkState::Waiting).bg,
-            state_style(WorkState::InProgress).bg
+            state_style(TaskState::Waiting).bg,
+            state_style(TaskState::InProgress).bg
         );
     }
 
@@ -746,7 +801,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         app.form.values = ["Work item".into(), "work".into(), "H".into(), "D".into()];
-        app.form.work.state = WorkState::InProgress;
+        app.form.state = TaskState::InProgress;
         save_form(&mut app, None).unwrap();
         app.select_project(Some("work"));
         let work = app.selected_task().unwrap().task.work.clone();
@@ -765,9 +820,9 @@ mod tests {
             .any(|cell| cell.symbol() == "D"
                 && cell.bg == green
                 && !cell.modifier.contains(Modifier::DIM)));
-        for (index, state) in WorkState::ALL.iter().enumerate() {
+        for (index, state) in TaskState::ALL.iter().enumerate() {
             assert_ne!(state_style(*state).bg, Some(green));
-            for other in &WorkState::ALL[index + 1..] {
+            for other in &TaskState::ALL[index + 1..] {
                 assert_ne!(state_style(*state).bg, state_style(*other).bg);
             }
         }
@@ -782,25 +837,26 @@ mod tests {
             .content
             .iter()
             .any(|cell| cell.symbol() == "I"
-                && Some(cell.bg) == state_style(WorkState::InProgress).bg));
+                && Some(cell.bg) == state_style(TaskState::InProgress).bg));
     }
 
     #[test]
-    fn reference_columns_summarize_ids_without_changing_saved_text() {
+    fn reference_columns_format_ids_without_changing_saved_text() {
         assert_eq!(jira_summary(""), "-");
         assert_eq!(
             jira_summary("https://example.atlassian.net/browse/FSW-12345?x=1"),
             "FSW-12345"
         );
         assert_eq!(jira_summary("FSW-12345; FSW-12346"), "2 tickets");
-        assert_eq!(pr_summary(""), "-");
+        let labels = |value: &str| pr_labels(value, &pr_links(value));
+        assert_eq!(labels(""), ["-"]);
         assert_eq!(
-            pr_summary("https://github.com/example/repo/pull/12345/files"),
-            "#12345"
+            labels("https://github.com/example/repo/pull/12345/files"),
+            ["#12345"]
         );
-        assert_eq!(pr_summary("#1 > #2; #3"), "3 PRs");
-        assert_eq!(pr_summary("#1 > #2; #1"), "2 PRs");
-        assert_eq!(pr_summary("custom reference"), "custom reference");
+        assert_eq!(labels("#1 > #2; #3"), ["#1", "#2", "#3"]);
+        assert_eq!(labels("#1 > #2; #1"), ["#1", "#2"]);
+        assert_eq!(labels("custom reference"), ["custom reference"]);
     }
 
     #[test]
@@ -809,8 +865,8 @@ mod tests {
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         app.form.values = ["Item".into(), "work".into(), "H".into(), "D".into()];
         app.form.work.jira = "https://example.atlassian.net/browse/FSW-12345".into();
-        app.form.work.prs = "#100 > #101; #102".into();
-        app.form.work.state = WorkState::InProgress;
+        app.form.work.prs = "#64310 > #64311; #64312".into();
+        app.form.state = TaskState::InProgress;
         save_form(&mut app, None).unwrap();
         app.select_project(Some("work"));
         let before = std::fs::read_to_string(&app.path).unwrap();
@@ -825,12 +881,20 @@ mod tests {
                 .map(|row| row.iter().map(|cell| cell.symbol()).collect())
                 .collect();
             let row = lines.iter().find(|line| line.contains("Item")).unwrap();
-            for expected in ["H", "D", "In progress", "FSW-12345", "3 PRs"] {
+            for expected in ["H", "D", "In progress", "FSW-12345", "#64310"] {
                 assert!(
                     row.contains(expected),
                     "missing {expected} at width {width}: {row}"
                 );
             }
+            let first = lines
+                .iter()
+                .position(|line| line.contains("#64310"))
+                .unwrap();
+            assert!(lines[first + 1].contains("#64311"));
+            assert!(lines[first + 2].contains("#64312"));
+            assert!(!lines.iter().any(|line| line.contains("3 PRs")));
+            assert_eq!(app.row_heights, [3]);
             let header = lines
                 .iter()
                 .find(|line| line.contains("Task") && line.contains("State"))
@@ -840,7 +904,7 @@ mod tests {
                 .map(|label| header.find(label).unwrap())
                 .collect();
             assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
-            let positions: Vec<_> = ["FSW-12345", "3 PRs", "In progress", "Item"]
+            let positions: Vec<_> = ["FSW-12345", "#64310", "In progress", "Item"]
                 .iter()
                 .map(|value| row.find(value).unwrap())
                 .collect();
@@ -871,6 +935,126 @@ mod tests {
         assert!(screen.contains("LAST"));
         assert_eq!(app.selected, 0);
         assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
+        app.tasks[0].task.description = "Short task with a long PR chain".into();
+        app.tasks[0].task.work.prs = (10001..=10030)
+            .map(|number| format!("#{number}"))
+            .collect::<Vec<_>>()
+            .join(" > ");
+        app.selected_line = 0;
+        app.table_state = TableState::default();
+        for _ in 0..50 {
+            small.draw(|frame| draw(frame, &mut app)).unwrap();
+            handle_key_event(
+                &mut app,
+                KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+            )
+            .unwrap();
+        }
+        small.draw(|frame| draw(frame, &mut app)).unwrap();
+        assert_eq!(app.row_heights, [30]);
+        assert_eq!(app.selected, 0);
+        assert!(app
+            .hyperlinks
+            .iter()
+            .any(|link| link.url.ends_with("/pull/10030")));
+        for link in &app.hyperlinks {
+            assert!(link.area.right() <= 45 && link.area.bottom() <= 12);
+            let label = (link.area.x..link.area.right())
+                .map(|x| small.backend().buffer()[(x, link.area.y)].symbol())
+                .collect::<String>();
+            assert!(link.url.ends_with(&format!("/{}", &label[1..])));
+        }
+        assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
+    }
+
+    #[test]
+    fn wrapped_pr_titles_align_beneath_the_title_not_the_number() {
+        let lines = pr_title_lines("#73970", Some("Refactor perception components"), 27);
+        assert_eq!(
+            lines.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            ["#73970  Refactor perception", "        components"]
+        );
+        let lines = pr_title_lines("#73970", Some("改善 Camera title"), 18);
+        assert!(lines.iter().all(|line| line.width() <= 18));
+        assert!(lines
+            .iter()
+            .skip(1)
+            .all(|line| line.to_string().starts_with("        ")));
+        assert_eq!(
+            pr_title_lines("#73970", Some("Title"), 6)[0].to_string(),
+            "#73970"
+        );
+        assert_eq!(pr_title_lines("#73970", None, 27)[0].to_string(), "#73970");
+    }
+
+    #[test]
+    fn cached_titles_wrap_and_keep_each_pr_linked_without_changing_tasks() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        app.form.values = [
+            "Original task".into(),
+            "work".into(),
+            "H".into(),
+            "H".into(),
+        ];
+        app.form.work.prs = "#64310 > #64311".into();
+        save_form(&mut app, None).unwrap();
+        app.select_project(Some("work"));
+        let id = app.selected_task().unwrap().task.id;
+        let before = std::fs::read_to_string(&app.path).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        assert_eq!(app.row_heights, [2], "cold start still shows PR numbers");
+        let path = dir.path().join("pr-titles.json");
+        let cache = serde_json::json!({
+            "https://github.com/ZiplineTeam/FlightSystems/pull/64310": {"title": "Camera 改善 observation interfaces ".repeat(4), "fetched_at": 1000},
+            "https://github.com/ZiplineTeam/FlightSystems/pull/64311": {"title": "Final title", "fetched_at": 1000},
+        });
+        std::fs::write(&path, serde_json::to_vec(&cache).unwrap()).unwrap();
+        app.pr_titles = pr_titles::Cache::load(path);
+        for width in [100, 80, 45] {
+            let mut terminal = Terminal::new(TestBackend::new(width, 12)).unwrap();
+            app.selected_line = 0;
+            app.table_state = TableState::default();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let text: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(text.contains("#64310"));
+            if width == 45 {
+                assert!(!text.contains("Camera"));
+                assert_eq!(app.row_heights, [2]);
+            } else {
+                assert!(text.contains("Camera"));
+                assert!(app.row_heights[0] > 2);
+                let pr_width = text.find("State").unwrap() - text.find("PRs").unwrap() - 1;
+                assert_eq!(pr_width, (width / 5 * 2) as usize);
+            }
+            for _ in 0..100 {
+                handle_key_event(
+                    &mut app,
+                    KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+                )
+                .unwrap();
+                terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            }
+            assert!(app
+                .hyperlinks
+                .iter()
+                .any(|link| link.url.ends_with("/pull/64311")));
+            assert!(app
+                .hyperlinks
+                .iter()
+                .all(|link| link.area.right() <= width && link.area.bottom() <= 12));
+            assert_eq!(app.selected_task().unwrap().task.id, id);
+        }
+        handle_key(&mut app, KeyCode::Char('r')).unwrap();
+        assert_eq!(app.selected_task().unwrap().task.id, id);
+        assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
     }
 
     #[test]
@@ -889,11 +1073,16 @@ mod tests {
         app.select_project(Some("work"));
         let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
-        assert_eq!(
-            app.hyperlinks.len(),
-            1,
-            "PR count is not a link to an arbitrary PR"
-        );
+        assert_eq!(app.hyperlinks.len(), 4, "each PR number has its own link");
+        let pr_rows: Vec<_> = app.hyperlinks[1..].iter().map(|link| link.area.y).collect();
+        assert_eq!(pr_rows, [pr_rows[0], pr_rows[0] + 1, pr_rows[0] + 2]);
+        for (link, expected) in app.hyperlinks[1..].iter().zip(["#64310", "#64311", "#42"]) {
+            let label = (link.area.x..link.area.right())
+                .map(|x| terminal.backend().buffer()[(x, link.area.y)].symbol())
+                .collect::<String>();
+            assert_eq!(label, expected);
+            assert!(link.url.ends_with(&format!("/{}", &expected[1..])));
+        }
         let link = &app.hyperlinks[0];
         assert_eq!(
             link.url,
@@ -938,7 +1127,7 @@ mod tests {
             handle_key(&mut app, KeyCode::Char(view)).unwrap();
             handle_key(&mut app, KeyCode::Char('a')).unwrap();
             assert_eq!(app.form.work.category, WorkCategory::Uncategorized);
-            assert_eq!(app.form.work.state, WorkState::None);
+            assert_eq!(app.form.state, TaskState::None);
             app.form.values[0] = format!("New task from view {view}");
             save_form(&mut app, None).unwrap();
             if view == '0' {
@@ -985,10 +1174,7 @@ mod tests {
         app.select_project(Some("work"));
         handle_key(&mut app, KeyCode::Char('4')).unwrap();
         assert_eq!(app.visible_tasks().len(), 2);
-        assert_eq!(
-            app.selected_task().unwrap().task.work.state,
-            WorkState::None
-        );
+        assert_eq!(app.selected_task().unwrap().task.state, TaskState::None);
         let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         let lines: Vec<String> = terminal
@@ -1016,17 +1202,103 @@ mod tests {
         );
         handle_key(&mut app, KeyCode::Char('s')).unwrap();
         handle_key(&mut app, KeyCode::Char('4')).unwrap();
-        assert_eq!(
-            app.selected_task().unwrap().task.work.state,
-            WorkState::Waiting
-        );
+        assert_eq!(app.selected_task().unwrap().task.state, TaskState::Waiting);
         assert_eq!(
             app.selected_task().unwrap().task.status,
             TaskStatus::Pending
         );
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         assert_eq!(app.form.work.category, WorkCategory::Uncategorized);
-        assert_eq!(app.form.work.state, WorkState::None);
+        assert_eq!(app.form.state, TaskState::None);
+    }
+
+    #[test]
+    fn work_pending_sorts_by_state_then_urgency_in_all_and_focused_categories() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        for category in [WorkCategory::Feature, WorkCategory::Review] {
+            for (label, state, completed) in [
+                ("waiting", TaskState::Waiting, false),
+                ("no state", TaskState::None, false),
+                ("next", TaskState::Next, false),
+                ("in progress", TaskState::InProgress, false),
+                ("done", TaskState::Waiting, true),
+            ] {
+                for priority in ["L", "A"] {
+                    let description = format!("{label} {priority} {}", category.label());
+                    app.form = Form::default();
+                    app.form.values[0] = description.clone();
+                    app.form.values[1] = "work".into();
+                    app.form.values[2] = priority.into();
+                    app.form.work.category = category;
+                    app.form.state = state;
+                    save_form(&mut app, None).unwrap();
+                    if completed {
+                        let id = app
+                            .tasks
+                            .iter()
+                            .find(|view| view.task.description == description)
+                            .unwrap()
+                            .task
+                            .id;
+                        append_event(
+                            &app.path,
+                            &new_envelope(id, "test", Event::TaskCompleted).unwrap(),
+                        )
+                        .unwrap();
+                    }
+                }
+            }
+        }
+        app.reload().unwrap();
+        let all_order: Vec<_> = app
+            .visible_tasks()
+            .iter()
+            .map(|view| view.task.id)
+            .collect();
+        app.select_project(Some("work"));
+        assert_eq!(
+            app.visible_tasks()
+                .iter()
+                .map(|view| view.task.id)
+                .collect::<Vec<_>>(),
+            all_order
+        );
+        for category in [
+            None,
+            Some(WorkCategory::Feature),
+            Some(WorkCategory::Review),
+        ] {
+            app.work_category = category;
+            let mut expected = Vec::new();
+            for label in ["done", "in progress", "next", "no state", "waiting"] {
+                for priority in ["A", "L"] {
+                    for value in [WorkCategory::Feature, WorkCategory::Review] {
+                        if category.is_none_or(|category| category == value) {
+                            expected.push(format!("{label} {priority} {}", value.label()));
+                        }
+                    }
+                }
+            }
+            let visible: Vec<_> = app
+                .visible_tasks()
+                .iter()
+                .map(|view| view.task.description.clone())
+                .collect();
+            assert_eq!(visible, expected);
+            app.filter = "in progress".into();
+            assert_eq!(
+                app.visible_tasks()
+                    .iter()
+                    .map(|view| view.task.description.clone())
+                    .collect::<Vec<_>>(),
+                expected
+                    .into_iter()
+                    .filter(|description| description.starts_with("in progress"))
+                    .collect::<Vec<_>>()
+            );
+            app.filter.clear();
+        }
     }
 
     #[test]
@@ -1051,7 +1323,7 @@ mod tests {
             }
             .into();
             if category == WorkCategory::Review {
-                app.form.work.state = WorkState::Waiting;
+                app.form.state = TaskState::Waiting;
             }
             app.form.work.prs = "#1 > #2; #3".into();
             app.form.work.notes = "Investigate".into();
@@ -1069,10 +1341,11 @@ mod tests {
             .collect::<String>();
         let visible = app.visible_tasks();
         assert_eq!(
-            visible[0].task.description, "Review item",
-            "All keeps urgency order even for Waiting tasks"
+            visible.last().unwrap().task.description,
+            "Review item",
+            "Waiting follows other states even with higher urgency"
         );
-        assert!(visible
+        assert!(visible[..4]
             .windows(2)
             .all(|pair| pair[0].urgency >= pair[1].urgency));
         let lines: Vec<String> = terminal
@@ -1092,8 +1365,8 @@ mod tests {
             })
             .collect();
         assert!(
-            positions.windows(2).all(|pair| pair[1] == pair[0] + 1),
-            "no category headers between tasks"
+            positions.windows(2).all(|pair| pair[1] == pair[0] + 3),
+            "three PR lines per task, without category headers or extra separators"
         );
         for header in [
             "Features (1)",
@@ -1119,8 +1392,8 @@ mod tests {
         );
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         assert_eq!(app.form.work.category, WorkCategory::Uncategorized);
-        assert_eq!(app.form.work.state, WorkState::None);
-        app.form.active = 9;
+        assert_eq!(app.form.state, TaskState::None);
+        app.form.active = 8;
         let mut small = Terminal::new(TestBackend::new(45, 8)).unwrap();
         small.draw(|frame| draw(frame, &mut app)).unwrap();
         let screen = small

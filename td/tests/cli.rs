@@ -33,12 +33,17 @@ fn edits_and_clears_fields_then_completes_a_task() {
             "H",
             "--estimate",
             "D",
-            "--blocked",
+            "--state",
+            "waiting",
         ],
     );
     let id = id.trim();
     assert!(uuid::Uuid::parse_str(id).is_ok());
     assert!(td(&path, &["list"]).contains(id));
+    assert!(td(&path, &["list"]).contains("Waiting"));
+    td(&path, &["edit", id, "--priority", "A"]);
+    let task: Value = serde_json::from_str(&td(&path, &["show", id])).unwrap();
+    assert_eq!(task["state"], "waiting");
     td(
         &path,
         &[
@@ -52,8 +57,8 @@ fn edits_and_clears_fields_then_completes_a_task() {
             "",
             "--estimate",
             "",
-            "--blocked",
-            "false",
+            "--state",
+            "none",
         ],
     );
     let task: Value = serde_json::from_str(&td(&path, &["show", id])).unwrap();
@@ -61,7 +66,12 @@ fn edits_and_clears_fields_then_completes_a_task() {
     assert!(task["project"].is_null());
     assert!(task["priority"].is_null());
     assert!(task["estimate"].is_null());
-    assert_eq!(task["blocked"], false);
+    assert_eq!(task["state"], "none");
+    assert!(task.get("blocked").is_none());
+    assert!(!fs::read_to_string(&path).unwrap().contains("\"blocked\""));
+    let help = td(&path, &["add", "--help"]);
+    assert!(help.contains("--state"));
+    assert!(!help.contains("--blocked"));
     td(&path, &["done", id]);
     assert!(td(&path, &["list"]).is_empty());
     assert!(td(&path, &["list", "--status", "completed"]).contains(id));

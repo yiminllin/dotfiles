@@ -13,6 +13,7 @@ fn replays_create_update_done_delete_order() {
                 project: Some("dotfiles".to_string()),
                 priority: Some("H".to_string()),
                 estimate: None,
+                state: None,
                 blocked: false,
                 imported_uuid: None,
             },
@@ -25,6 +26,7 @@ fn replays_create_update_done_delete_order() {
                 project: None,
                 priority: None,
                 estimate: Some("D".to_string()),
+                state: None,
                 blocked: Some(true),
                 work: None,
                 improve_category: None,
@@ -41,7 +43,7 @@ fn replays_create_update_done_delete_order() {
     assert_eq!(task.description, "write rust td");
     assert_eq!(task.project.as_deref(), Some("dotfiles"));
     assert_eq!(task.estimate.as_deref(), Some("D"));
-    assert!(task.blocked);
+    assert_eq!(task.state, td::state::TaskState::Waiting);
     assert_eq!(task.status, TaskStatus::Deleted);
     assert_eq!(task.event_count, 5);
 }
@@ -58,6 +60,7 @@ fn lookup_accepts_unambiguous_task_and_imported_uuid_prefixes() {
             project: None,
             priority: None,
             estimate: None,
+            state: None,
             blocked: false,
             imported_uuid: Some(imported_uuid),
         },

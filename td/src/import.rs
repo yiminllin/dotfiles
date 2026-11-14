@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::data::{envelope_at, now_string, Event, EventEnvelope, Task};
+use crate::{
+    data::{envelope_at, now_string, Event, EventEnvelope, Task},
+    state::TaskState,
+};
 
 #[derive(Debug, Serialize)]
 pub struct ImportSummary {
@@ -79,7 +82,14 @@ pub fn load_taskwarrior_import(
                 project: clean_string(task.project),
                 priority: clean_string(task.priority),
                 estimate: task.estimate.as_ref().and_then(value_string),
-                blocked: task.blocked.as_ref().and_then(value_bool).unwrap_or(false),
+                state: Some(
+                    if task.blocked.as_ref().and_then(value_bool).unwrap_or(false) {
+                        TaskState::Waiting
+                    } else {
+                        TaskState::None
+                    },
+                ),
+                blocked: false,
                 imported_uuid: Some(task.uuid),
             },
         )?);

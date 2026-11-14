@@ -36,12 +36,14 @@ td show <id-prefix>
 td edit <id-prefix> --description "new text"
 td done <id-prefix>
 td delete <id-prefix>
-td edit <id-prefix> --project work --priority M --estimate Q --blocked true
-td edit <id-prefix> --project "" --priority "" --estimate "" --blocked false
+td edit <id-prefix> --project work --priority M --estimate Q --state waiting
+td edit <id-prefix> --project "" --priority "" --estimate "" --state none
 ```
 
 The CLI displays full UUIDs. Unambiguous UUID prefixes also work as input.
-Use empty values to clear project, priority, or estimate. Descriptions cannot be empty.
+Use empty values to clear project, priority, or estimate. Use `--state none` to clear
+state. `add` and `edit` accept `none`, `next`, `in-progress`, or `waiting`.
+Descriptions cannot be empty.
 
 Loading rejects malformed logs, unsupported schemas, duplicate events or task
 creations, and updates without a preceding task creation.
@@ -52,16 +54,15 @@ It does not use sudo or install a crates.io package named `td`.
 
 ## Urgency and ordering
 
-CLI lists and the TUI Pending view use descending urgency (higher scores first).
-Ties use older creation time, then UUID. The TUI Done view instead sorts by
-completion time, newest first, with UUID as the tie-breaker. Tasks without a valid
-completion time appear last. The TUI has only Pending and Done views; the CLI
-still supports all statuses and keeps urgency ordering. Urgency uses these weights:
+CLI lists and every TUI Pending view sort by Done → In progress → Next →
+No state → Waiting, with descending urgency within each group. Urgency ties use
+older creation time, then UUID. The TUI Done view instead sorts by completion time,
+newest first, then UUID. Tasks without a valid completion time appear last.
+The CLI also supports deleted tasks. Urgency uses these weights:
 
 - Priority A/H/M/L: 100/10/5/1; unset: 0
 - Estimate Q/H/D/W/M: 8/5/2/0.5/0.1; unset: 0
 - Project: base bonus 1, plus improve/work 5, code 3, note 2, read 1, opensource 0.5
-- Blocked: -100
 - Age: 2 × whole days / 365, capped at 2; future or missing dates contribute 0
 
 Due dates, tags, annotations, and task dependencies are not supported.
@@ -77,6 +78,7 @@ Update `src/urgency.rs` to change the weights.
 - `gg` / `G`: first / last task in the current view
 - Ctrl-U / Ctrl-D: move up / down half a page (based on the visible table height)
 - `a`: open the add form
+- `A` (Shift+a): add from a preset template
 - `e`: open the edit form for the selected task
 - `y`: copy the selected task's full description to the clipboard (also in Work details).
   Uses tmux clipboard forwarding inside tmux, or OSC 52 otherwise. Your terminal
@@ -87,7 +89,9 @@ Update `src/urgency.rs` to change the weights.
 - `d`: mark done
 - `u`: reopen the selected completed task (in either view)
 - `x`: delete
-- `b`: toggle blocked
+- `s`: open the state picker; arrows or `j`/`k` move, Enter applies, `1`–`4` selects directly, Esc cancels
+- `S` (Shift+s): cycle No state → Next → In progress → Waiting → No state.
+  State controls also work in Work details; completed tasks are unchanged.
 - `/`: filter tasks in the current view
 - Esc from a project view: return to All projects; Esc from All projects: quit
 - `q`: quit from any task list
@@ -102,6 +106,59 @@ project field exactly, not words in the description. Pending/Done and `/` text
 filtering work within that view. Switching projects keeps the status and text
 filter. New tasks default to the current project; you can change it in the form.
 Project views are session-only; starting `td` opens All projects.
+
+### Workflow state
+
+Every task has a state, including tasks without a project. New tasks default to No state.
+Changing project or category preserves state. Standard add/edit forms include State;
+quick-add templates keep their minimal fields and start with No state.
+
+| Picker key | State | Meaning | Background |
+|---|---|---|---|
+| `1` | No state | Tracked, but not a current focus | Gray |
+| `2` | Next | You intend to work on it next | Cyan |
+| `3` | In progress | You are working on it | Purple |
+| `4` | Waiting | Waiting on someone or something before continuing | Amber |
+
+State is separate from Pending / Done. Waiting tasks stay Pending.
+Use `d` when the task is done and `u` to reopen it with its previous state.
+Done is not a picker choice: a green Done badge overrides the state badge while
+complete. Waiting rows are dimmed outside the state badge.
+
+### Quick-add templates
+
+Press `A` from a task list, then choose `p` (PR review), `i` (Improvement),
+`f` (Feature work), or `d` (Document review). The picker shows these letter hints.
+Numbers `1`–`4` or arrows and Enter also work. Each template shows only its required inputs:
+
+| Template | Inputs | Presets |
+|---|---|---|
+| PR review | One PR link or number, priority | Work / Reviews, M/H |
+| Improvement | Description, priority, category | Improve, A/Q |
+| Feature work | One Jira ticket link or key, priority | Work / Features, M/H |
+| Document review | Document link, priority | Work / Reviews, M/H |
+
+The last two preset letters mean priority / estimate. Work templates start with
+No state. Bare PR numbers use FlightSystems; bare Jira numbers use `FSW`.
+Improvement category starts Uncategorized. Ordinary `a` keeps its existing defaults.
+
+Templates use the same editing keys as ordinary add. Type or paste the input;
+multiline pasted descriptions stay intact. Enter and Tab advance fields without
+saving; Shift-Tab moves back. Choose priority with A/H/M/L or Left/Right; choose
+an Improve category with `1`–`6` or arrows. Text fields support the same Vim keys.
+Esc leaves insert mode, then `:wq` and Enter save. `:q!` and Enter discard.
+Esc in normal/select mode cancels, with confirmation for unsaved changes.
+Ctrl-S does not save.
+
+Linked templates look up titles in the background: PRs use `gh`, configured-host
+Jira tickets use `jira issue view --raw`, and document pages use `curl` without
+browser authentication. These tools are optional for quick-add: lookup failure,
+missing tools, or a five-second timeout uses the reference as the task description.
+The document URL is always kept in Work notes. Existing authentication is used;
+quick-add does not log in. Esc during lookup returns to the draft without saving.
+
+Saving opens the template's project/category and clears the text filter so the
+new task is visible. Use ordinary `e` afterward to change any other field.
 
 ### Improve categories
 
@@ -125,47 +182,56 @@ Use `p`, then `w` to open Work. Other project views keep the original table.
 
 - `0` / `1` / `2` / `3` / `4` / `5`: All / Features / Reviews / Design and learning / Administrative / Uncategorized
 - Enter: open details; `j` / `k` scroll details; Esc returns to the dashboard
-- `s`: open the state popup; `j` / `k` or arrows move, Enter applies, a number selects directly, and Esc cancels
-- `S` (Shift+s): cycle No state → Next → In progress → Waiting → No state.
-  Works on the dashboard and in details; completed tasks are unchanged.
-- `a` / `e`: add / edit; every new Work task starts as Uncategorized / No state
+- `a` / `e`: add / edit; ordinary add starts as Uncategorized / No state
+- `A`: quick-add from a template with a preset category
+- `r`: refresh the selected task's PR titles in the background (also in details)
 - Tab: Pending / Done within the selected category
 - `/`: search descriptions and Work details
 - Esc from the dashboard: All projects; `q`: quit
 
-Every Work category uses the same states. Changing category preserves the state.
+For Work reviews, choosing Waiting records the review-round time. Move the review
+to Next when it needs attention.
 
-| Picker key | State | Meaning | Background |
-|---|---|---|---|
-| `1` | No state | Tracked, but not a current focus | Gray |
-| `2` | Next | You intend to work on it next | Cyan |
-| `3` | In progress | You are working on it | Purple |
-| `4` | Waiting | Someone or something else must act first | Amber |
-
-Workflow state is separate from Pending / Done. A review in Waiting stays Pending;
-choosing Waiting records the review-round time. Move it to Next when it needs attention.
-Use `d` on the dashboard when the whole task is done. Tab opens the Done view;
-`u` reopens the selected task with its previous workflow state. Done is not a picker
-choice: the green Done badge overrides the workflow badge while the task is complete.
-Completed tasks also stay visible in Pending for 24 hours.
-
-All shows one continuous list without category headers: Pending uses descending
-urgency across all categories, and Done uses newest completion first. Waiting items
-are dimmed outside the state badge. In a focused category's Pending view, they follow
-other items; urgency ordering applies within each group. Administrative covers Jira
-housekeeping, messages, and similar work. Task rows have no blank separators.
+All shows one continuous list without category headers. Focused categories use
+the same ordering as other Pending views. Administrative covers Jira housekeeping,
+messages, and similar work. Task rows have no blank separators.
 
 The Work table has Priority, Estimate, Jira, PRs, State, and Task columns. Narrow
-windows shorten the first two headers to Pri/Est or P/E. Task descriptions wrap;
-Jira/PR columns show short IDs or counts for multiple references. Empty values
-show `-`. These columns use saved Work metadata, not links in descriptions.
-Linked IDs, PR outlines, review time, and notes stay in details
-(Enter), without extra metadata rows in the task list.
+windows shorten the first two headers to Pri/Est or P/E. Task descriptions wrap.
+The PR column lists each PR number and its cached title, in saved order, instead
+of a count. Wrapped title lines align under the title, not the PR number, and
+keep their PR link. If the column cannot fit both fields, or no title is cached,
+only the linked PR number appears. Each task uses enough lines for its
+description and PR list. Jira shows a
+short ID or a count for multiple tickets. Empty values show `-`. These columns
+use saved Work metadata, not links in descriptions. Full PR chain outlines,
+review time, and notes stay in details (Enter).
 
-Selecting project `work` in the form reveals Category, State, Jira, PR chains,
-and Notes. Category always has a value and defaults to Uncategorized,
-even when adding from a focused category view. Category and State choices appear
-as indented rows with short explanations, muted text, and a dot on the selected
+### Cached PR titles
+
+Work refreshes missing titles and titles at least 10 minutes old in the background,
+using the existing `gh` authentication. It checks tasks in the current Work list,
+including its category and text filters. Requests run one at a time with a
+five-second timeout. `r` refreshes the selected task's PRs without waiting for the
+10-minute interval. Failed requests keep existing titles; automatic attempts for
+the same PR stay at least 10 minutes apart.
+
+The cache is `$XDG_CACHE_HOME/td/pr-titles.json`, or
+`~/.cache/td/pr-titles.json` by default. It stores titles and refresh times by full
+PR URL, separately from the task event log. Cached titles appear immediately;
+first-time fetches do not block navigation, editing, saving, or quitting. Quitting
+cancels an active refresh. Missing, corrupt, or unwritable caches do not prevent
+task entry. Deleting the cache is safe. Task descriptions are never overwritten.
+This uses ordinary `gh` requests, not conditional ETag requests.
+
+When testing with an isolated event log, also set `XDG_CACHE_HOME` to a temporary
+directory to keep test titles separate from your normal cache.
+
+### Work item fields
+
+Selecting project `work` in the form reveals Category, Jira, PR chains, and Notes. Category always has a value. Ordinary add defaults to Uncategorized,
+even from a focused category view; quick-add templates supply their preset category.
+Category choices and the focused State field appear as indented rows with short explanations, muted text, and a dot on the selected
 choice. Choice rows have no bold text or colored backgrounds.
 Links and notes are optional.
 Use arrows, `j` / `k`, or Space for category/state; `f` / `r` / `d` / `a` / `u`
@@ -173,7 +239,8 @@ selects a category, and `1`–`4` selects a state. Tab moves between fields.
 Enter on Jira or PR chains opens its list editor. Notes use the same Vim editing
 keys as Description. Press Esc to leave insert mode, then `:wq` and Enter to save.
 
-Jira and PR references are manual, with no network sync. In the list editor:
+Jira and PR references are entered manually; background title refreshes do not
+change them. In the list editor:
 
 - Type a Jira number, `FSW-12345`, PR number, `#123`, or full URL; Enter adds it.
 - Paste one or several IDs/URLs to add them immediately. Spaces, commas, and
@@ -195,10 +262,10 @@ Opening a reference list does not write task data; saving the form commits chang
 
 #### Keyboard hyperlinks over SSH
 
-Jira and PR cells with a single recognized reference emit OSC 8 hyperlinks while
-keeping short labels in the table. Counts such as `3 PRs` are not links to an
-arbitrary PR: press Enter to select individual links in details. Wrapped detail
-links keep their target. Unknown reference text remains plain text.
+Each PR number in the table emits its own OSC 8 hyperlink. A Jira cell with one
+recognized reference is also linked; a multiple-ticket count is not. Press Enter
+for individual Jira links and PR chain outlines in details. Wrapped detail links
+keep their target. Unknown reference text remains plain text.
 
 Bare Jira IDs resolve to `https://flyzipline.atlassian.net/browse/<ID>`; bare
 `#123` or `123` references resolve to `https://github.com/ZiplineTeam/FlightSystems/pull/123`.
@@ -237,13 +304,19 @@ does not restore or overwrite saved sessions while the old server is still activ
 The PATH selects the matching tmux executable. Existing sessions stay on their
 current server; switching the usual server is a separate action.
 
-Work tasks without metadata appear as Uncategorized / No state. Explicitly saved
-categories are preserved. Old states load as shared states without rewriting the log:
+Legacy logs load without rewriting history. Legacy Blocked becomes Waiting;
+otherwise the saved Work state is preserved, or defaults to No state.
 Active/Reviewing/Exploring → In progress; To review/Follow-up → Next;
-Idea/Paused → No state; Waiting stays Waiting. Old event logs need no migration. Saving a new
-Work task from a focused category view opens its saved category, so the new task
-stays visible. Work metadata is an optional field on update events; ordinary edits
-preserve it, including edits made with the previously installed binary.
+Idea/Paused → No state; Waiting stays Waiting. New saves use task-wide state,
+which overrides later legacy state/blocked updates. New events and task JSON omit
+Blocked and nested Work state. Taskwarrior imports map Blocked to Waiting.
+The old Blocked flag, shortcut, and urgency penalty are removed. Update older
+`td` binaries on other machines before reading new saves; they require the retired
+Blocked field.
+
+Work tasks without category metadata appear as Uncategorized. Explicit categories
+are preserved. Saving a new Work task from a focused category view opens its saved
+category, so it stays visible. Ordinary edits preserve unrelated Work metadata.
 
 For an isolated trial, use the locally prepared sample log (edits persist there):
 
@@ -256,8 +329,8 @@ Then press `p`, `w`. The sample references are fictional. This does not use
 
 ### General task behavior
 
-The Pending table also keeps tasks completed within the last 24 hours in their
-usual urgency order. Completed rows are dimmed, with a ✓ marker and strikethrough
+Every Pending view keeps tasks completed within the last 24 hours and puts them
+first. Completed rows are dimmed, with a ✓ marker and strikethrough
 on the description only. Project colors stay unchanged. Dimming depends on your
 terminal; it does not change background transparency. Press `u` to reopen an
 accidental completion.
@@ -272,15 +345,15 @@ dim borders and muted accents without reverse video. The palette suits the
 Solarized Light terminal configuration. Priority uses distinct dark red, orange,
 amber, and taupe shades; estimates range from deep blue to slate blue.
 A/H priorities and Q/H estimates stay bold; other values use less saturated colors.
-Project labels use green; blocked uses purple.
+Project labels use green. State badges use the colors listed above.
 
 Task rows have pale project backgrounds: improve sage, work blue, code lavender,
 note sand, read blush, and opensource mint. Wrapped continuation lines share the
-same background. Unset or custom projects keep the terminal background.
+same background, except for state badges. Unset or custom projects keep the terminal background.
 
-The task list has labeled columns: Priority, Estimate, Blocked, Project, and
-Description. Status is shown by the selected Pending/Done view rather than a
-column. Urgency still controls sorting but is not shown in the TUI.
+The task list has labeled columns: Priority, Estimate, State, Project, and
+Description. Narrow windows use Pri/Est. Status is shown by the Pending/Done view
+and Done badges. Urgency sorts within state groups but is not shown in the TUI.
 Descriptions wrap at word boundaries, including long words when needed.
 Ctrl-U/Ctrl-D move by screen lines so even descriptions taller than the popup can
 be read fully. `j`/`k` still move between tasks. The `>` marker identifies the
@@ -292,7 +365,7 @@ to keep the description cursor or selected metadata field visible.
 
 In the add/edit form:
 
-- Enter or Tab: move to the next field (wraps after blocked)
+- Enter or Tab: move to the next field (wraps after the last field)
 - Shift-Tab: move to the previous field
 - `:wq` then Enter: save all fields and return to the task list
 - `:q!` then Enter: discard the form immediately, without confirmation
@@ -320,8 +393,8 @@ Project, priority, and estimate are choice fields. Use left/right arrows or Spac
 to cycle. Backspace/Delete selects unset (`-`). Project first letters select
 directly; `h`/`l` also cycle projects. Priority and estimate letters work in either
 case (`h` selects H, `l` selects L for priority, `q` selects Q for estimate).
-Esc requests cancellation from any choice field. For blocked, `y` selects yes and `n` selects no;
-Space or left/right still toggles it.
+State uses `1`–`4` to select directly, or arrows, `j`/`k`, or Space to cycle.
+Esc requests cancellation from any choice field.
 
 - Projects: improve, work, code, note, read, opensource
 - Priorities: A, H, M, L

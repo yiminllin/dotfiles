@@ -10,7 +10,9 @@ use crate::{
         append_event, append_events, load_tasks, lookup_task_id, new_envelope, resolve_events_path,
         sorted_task_views, Event, TaskStatus,
     },
-    import, tui,
+    import,
+    state::TaskState,
+    tui,
 };
 
 #[derive(Debug, Parser)]
@@ -30,8 +32,8 @@ struct Fields {
     priority: Option<String>,
     #[arg(long)]
     estimate: Option<String>,
-    #[arg(long, num_args = 0..=1, default_missing_value = "true")]
-    blocked: Option<bool>,
+    #[arg(long, value_enum)]
+    state: Option<TaskState>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -118,11 +120,11 @@ pub fn run() -> Result<()> {
                 for view in views {
                     let task = view.task;
                     println!(
-                        "{} {} {} {} {:<12} {}",
+                        "{} {} {} {:<11} {:<12} {}",
                         task.id,
                         task.priority.as_deref().unwrap_or("-"),
                         task.estimate.as_deref().unwrap_or("-"),
-                        if task.blocked { "B" } else { "-" },
+                        task.state_label(),
                         task.project.as_deref().unwrap_or("-"),
                         task.description,
                     );
@@ -144,7 +146,8 @@ pub fn run() -> Result<()> {
                 project: trim(fields.project).filter(|value| !value.is_empty()),
                 priority: trim(fields.priority).filter(|value| !value.is_empty()),
                 estimate: trim(fields.estimate).filter(|value| !value.is_empty()),
-                blocked: fields.blocked.unwrap_or(false),
+                state: Some(fields.state.unwrap_or_default()),
+                blocked: false,
                 imported_uuid: None,
             },
         ),
@@ -157,7 +160,7 @@ pub fn run() -> Result<()> {
                 && fields.project.is_none()
                 && fields.priority.is_none()
                 && fields.estimate.is_none()
-                && fields.blocked.is_none()
+                && fields.state.is_none()
             {
                 bail!("edit needs at least one field flag");
             }
@@ -168,7 +171,8 @@ pub fn run() -> Result<()> {
                     project: trim(fields.project),
                     priority: trim(fields.priority),
                     estimate: trim(fields.estimate),
-                    blocked: fields.blocked,
+                    state: fields.state,
+                    blocked: None,
                     work: None,
                     improve_category: None,
                 },

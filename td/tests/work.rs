@@ -1,6 +1,7 @@
 use td::{
     data::{append_events, load_tasks, new_envelope, Event, EventEnvelope, TaskStatus},
-    work::{WorkCategory, WorkDetails, WorkState},
+    state::TaskState,
+    work::{WorkCategory, WorkDetails},
 };
 use uuid::Uuid;
 
@@ -21,6 +22,7 @@ fn missing_metadata_is_uncategorized_but_explicit_features_stay_features() {
                     project: Some("work".into()),
                     priority: None,
                     estimate: None,
+                    state: None,
                     blocked: false,
                     imported_uuid: None,
                 },
@@ -37,6 +39,7 @@ fn missing_metadata_is_uncategorized_but_explicit_features_stay_features() {
                 project: None,
                 priority: None,
                 estimate: None,
+                state: None,
                 blocked: None,
                 improve_category: None,
                 work: Some(WorkDetails {
@@ -50,7 +53,7 @@ fn missing_metadata_is_uncategorized_but_explicit_features_stay_features() {
     append_events(&path, &events).unwrap();
     let tasks = load_tasks(&path).unwrap();
     assert_eq!(tasks[&old_id].work.category, WorkCategory::Uncategorized);
-    assert_eq!(tasks[&old_id].work.state, WorkState::None);
+    assert_eq!(tasks[&old_id].state, TaskState::None);
     assert_eq!(tasks[&feature_id].work.category, WorkCategory::Feature);
 }
 
@@ -59,14 +62,14 @@ fn legacy_states_load_as_shared_states_without_rewriting_the_log() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("events.jsonl");
     for (old, expected) in [
-        ("active", WorkState::InProgress),
-        ("reviewing", WorkState::InProgress),
-        ("exploring", WorkState::InProgress),
-        ("to_review", WorkState::Next),
-        ("follow_up", WorkState::Next),
-        ("idea", WorkState::None),
-        ("paused", WorkState::None),
-        ("waiting", WorkState::Waiting),
+        ("active", TaskState::InProgress),
+        ("reviewing", TaskState::InProgress),
+        ("exploring", TaskState::InProgress),
+        ("to_review", TaskState::Next),
+        ("follow_up", TaskState::Next),
+        ("idea", TaskState::None),
+        ("paused", TaskState::None),
+        ("waiting", TaskState::Waiting),
     ] {
         let id = Uuid::now_v7();
         let create = new_envelope(
@@ -77,6 +80,7 @@ fn legacy_states_load_as_shared_states_without_rewriting_the_log() {
                 project: Some("work".into()),
                 priority: None,
                 estimate: None,
+                state: None,
                 blocked: false,
                 imported_uuid: None,
             },
@@ -90,6 +94,7 @@ fn legacy_states_load_as_shared_states_without_rewriting_the_log() {
                 project: None,
                 priority: None,
                 estimate: None,
+                state: None,
                 blocked: None,
                 improve_category: None,
                 work: Some(WorkDetails {
@@ -104,7 +109,7 @@ fn legacy_states_load_as_shared_states_without_rewriting_the_log() {
         let log = format!("{}\n{}\n", serde_json::to_string(&create).unwrap(), raw);
         std::fs::write(&path, &log).unwrap();
         let task = load_tasks(&path).unwrap().remove(&id).unwrap();
-        assert_eq!(task.work.state, expected, "{old}");
+        assert_eq!(task.state, expected, "{old}");
         assert_eq!(task.status, TaskStatus::Pending);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), log);
         let serialized = serde_json::to_string(&expected).unwrap();
@@ -126,6 +131,7 @@ fn old_updates_load_and_unrelated_edits_preserve_work_details() {
             project: Some("work".into()),
             priority: None,
             estimate: None,
+            state: None,
             blocked: false,
             imported_uuid: None,
         },
@@ -133,7 +139,6 @@ fn old_updates_load_and_unrelated_edits_preserve_work_details() {
     .unwrap();
     let work = WorkDetails {
         category: WorkCategory::Review,
-        state: WorkState::Waiting,
         prs: "https://github.com/example/repo/pull/1".into(),
         ..WorkDetails::default()
     };
@@ -145,6 +150,7 @@ fn old_updates_load_and_unrelated_edits_preserve_work_details() {
             project: None,
             priority: None,
             estimate: None,
+            state: Some(TaskState::Waiting),
             blocked: None,
             work: Some(work.clone()),
             improve_category: None,
@@ -159,12 +165,14 @@ fn old_updates_load_and_unrelated_edits_preserve_work_details() {
         .is_none());
     let mut old_json = serde_json::to_value(&update).unwrap();
     old_json["event"].as_object_mut().unwrap().remove("work");
+    old_json["event"].as_object_mut().unwrap().remove("state");
     old_json["event"]["priority"] = "H".into();
     old_json["event_id"] = Uuid::now_v7().to_string().into();
     let old_update: EventEnvelope = serde_json::from_value(old_json).unwrap();
     append_events(&path, &[create, update, old_update]).unwrap();
     let task = load_tasks(&path).unwrap().remove(&id).unwrap();
     assert_eq!(task.work, work);
+    assert_eq!(task.state, TaskState::Waiting);
     assert_eq!(task.priority.as_deref(), Some("H"));
     assert_eq!(task.status, TaskStatus::Pending);
 }

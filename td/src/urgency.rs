@@ -27,7 +27,6 @@ pub fn score(task: &Task, now: OffsetDateTime) -> f64 {
         Some(project) if !project.is_empty() => 1.0,
         _ => 0.0,
     };
-    let blocked = if task.blocked { -100.0 } else { 0.0 };
     let age = task
         .created_at
         .as_deref()
@@ -35,7 +34,7 @@ pub fn score(task: &Task, now: OffsetDateTime) -> f64 {
         .map(|created| (now - created).whole_days().clamp(0, 365) as f64 / 365.0 * 2.0)
         .unwrap_or_default();
 
-    priority + estimate + project + blocked + age
+    priority + estimate + project + age
 }
 
 #[cfg(test)]
@@ -55,6 +54,7 @@ mod tests {
                 project: None,
                 priority: None,
                 estimate: None,
+                state: None,
                 blocked: false,
                 imported_uuid: None,
             },
@@ -103,8 +103,8 @@ mod tests {
         task.project = Some("work".to_string());
         task.priority = Some("H".to_string());
         task.estimate = Some("Q".to_string());
-        task.blocked = true;
-        assert_eq!(score(&task, now), -76.0);
+        task.state = crate::state::TaskState::Waiting;
+        assert_eq!(score(&task, now), 24.0);
     }
 
     #[test]

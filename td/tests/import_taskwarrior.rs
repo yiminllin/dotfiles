@@ -47,6 +47,14 @@ fn imports_taskwarrior_fixture_and_skips_existing_imported_uuid() {
     assert_eq!(summary.deleted, 1);
     assert_eq!(summary.events_to_append, 5);
     assert_eq!(tasks.len(), 3);
+    let pending = tasks
+        .values()
+        .find(|task| task.description == "pending task")
+        .unwrap();
+    assert_eq!(pending.state, td::state::TaskState::Waiting);
+    let serialized = serde_json::to_string(&events).unwrap();
+    assert!(serialized.contains("\"state\":\"waiting\""));
+    assert!(!serialized.contains("\"blocked\""));
 
     let (summary, events) = load_taskwarrior_import(&export, tasks.into_values()).unwrap();
     assert_eq!(summary.skipped_existing, 3);

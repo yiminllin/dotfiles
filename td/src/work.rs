@@ -31,41 +31,13 @@ impl WorkCategory {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WorkState {
-    #[default]
-    #[serde(alias = "idea", alias = "paused")]
-    None,
-    #[serde(alias = "to_review", alias = "follow_up")]
-    Next,
-    #[serde(alias = "active", alias = "reviewing", alias = "exploring")]
-    InProgress,
-    Waiting,
-}
-
-impl WorkState {
-    pub const ALL: [Self; 4] = [Self::None, Self::Next, Self::InProgress, Self::Waiting];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::None => "No state",
-            Self::Next => "Next",
-            Self::InProgress => "In progress",
-            Self::Waiting => "Waiting",
-        }
-    }
-
-    pub fn is_waiting(self) -> bool {
-        self == Self::Waiting
-    }
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WorkDetails {
     pub category: WorkCategory,
-    pub state: WorkState,
+    // Read legacy Work state without writing it back into Work metadata.
+    #[serde(default, rename = "state", skip_serializing)]
+    pub legacy_state: Option<crate::state::TaskState>,
     pub jira: String,
     pub prs: String,
     pub notes: String,

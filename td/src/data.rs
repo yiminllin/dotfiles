@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use uuid::Uuid;
 
+use crate::state::TaskState;
+
 pub const SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +33,9 @@ pub enum Event {
         project: Option<String>,
         priority: Option<String>,
         estimate: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        state: Option<TaskState>,
+        #[serde(default, skip_serializing)]
         blocked: bool,
         imported_uuid: Option<String>,
     },
@@ -39,6 +44,9 @@ pub enum Event {
         project: Option<String>,
         priority: Option<String>,
         estimate: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        state: Option<TaskState>,
+        #[serde(default, skip_serializing)]
         blocked: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         work: Option<crate::work::WorkDetails>,
@@ -75,7 +83,7 @@ pub struct Task {
     pub project: Option<String>,
     pub priority: Option<String>,
     pub estimate: Option<String>,
-    pub blocked: bool,
+    pub state: TaskState,
     pub status: TaskStatus,
     pub created_at: Option<String>,
     pub modified_at: Option<String>,
@@ -85,6 +93,16 @@ pub struct Task {
     pub event_count: usize,
     pub work: crate::work::WorkDetails,
     pub improve_category: crate::improve::ImproveCategory,
+}
+
+impl Task {
+    pub fn state_label(&self) -> &'static str {
+        if self.status == TaskStatus::Completed {
+            "Done"
+        } else {
+            self.state.label()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -195,10 +213,60 @@ pub fn load_tasks(path: &Path) -> Result<BTreeMap<Uuid, Task>> {
     Ok(project_tasks(&read_events(path)?))
 }
 
+#[derive(Default)]
+struct StateProjection {
+    explicit: Option<TaskState>,
+    blocked: bool,
+    work: TaskState,
+}
+
+impl StateProjection {
+    fn apply(&mut self, event: &Event) {
+        match event {
+            Event::TaskCreated { state, blocked, .. } => {
+                self.explicit = *state;
+                self.blocked = *blocked;
+            }
+            Event::TaskUpdated {
+                state,
+                blocked,
+                work,
+                ..
+            } => {
+                if let Some(state) = state {
+                    self.explicit = Some(*state);
+                }
+                if let Some(blocked) = blocked {
+                    self.blocked = *blocked;
+                }
+                if let Some(work) = work {
+                    self.work = work.legacy_state.unwrap_or_default();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn value(&self) -> TaskState {
+        // Explicit state overrides legacy flags, even after unrelated old-style updates.
+        self.explicit.unwrap_or(if self.blocked {
+            TaskState::Waiting
+        } else {
+            self.work
+        })
+    }
+}
+
 pub fn project_tasks(events: &[EventEnvelope]) -> BTreeMap<Uuid, Task> {
     let mut tasks = BTreeMap::new();
+    let mut states: BTreeMap<Uuid, StateProjection> = BTreeMap::new();
     for envelope in events {
+        let state = states.entry(envelope.task_id).or_default();
+        state.apply(&envelope.event);
         apply_event(&mut tasks, envelope);
+        if let Some(task) = tasks.get_mut(&envelope.task_id) {
+            task.state = state.value();
+        }
     }
     tasks
 }
@@ -214,9 +282,16 @@ pub fn sorted_task_views(tasks: impl IntoIterator<Item = Task>) -> Vec<TaskView>
         .collect();
 
     views.sort_by(|left, right| {
-        right
-            .urgency
-            .total_cmp(&left.urgency)
+        let rank = |view: &TaskView| {
+            if view.task.status == TaskStatus::Completed {
+                0
+            } else {
+                view.task.state.sort_order()
+            }
+        };
+        rank(left)
+            .cmp(&rank(right))
+            .then_with(|| right.urgency.total_cmp(&left.urgency))
             .then_with(|| left.task.created_at.cmp(&right.task.created_at))
             .then_with(|| left.task.id.cmp(&right.task.id))
     });
@@ -269,8 +344,8 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
             project,
             priority,
             estimate,
-            blocked,
             imported_uuid,
+            ..
         } => {
             tasks.insert(
                 envelope.task_id,
@@ -280,7 +355,7 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
                     project: project.clone(),
                     priority: priority.clone(),
                     estimate: estimate.clone(),
-                    blocked: *blocked,
+                    state: TaskState::None,
                     status: TaskStatus::Pending,
                     created_at: Some(envelope.at.clone()),
                     modified_at: Some(envelope.at.clone()),
@@ -298,9 +373,9 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
             project,
             priority,
             estimate,
-            blocked,
             work,
             improve_category,
+            ..
         } => {
             if let Some(task) = tasks.get_mut(&envelope.task_id) {
                 if let Some(description) = description {
@@ -320,9 +395,7 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
                 }
                 if let Some(work) = work {
                     task.work.clone_from(work);
-                }
-                if let Some(blocked) = blocked {
-                    task.blocked = *blocked;
+                    task.work.legacy_state = None;
                 }
                 task.modified_at = Some(envelope.at.clone());
                 task.event_count += 1;
