@@ -1,4 +1,8 @@
 {
   "app.model.cycleForward": ["ctrl+p", "alt+]"],
-  "app.model.cycleBackward": ["ctrl+shift+p", "alt+["]
+  "app.model.cycleBackward": ["ctrl+shift+p", "alt+["],
+  "tui.altScreen.halfPageUp": "ctrl+u",
+  "tui.altScreen.halfPageDown": "ctrl+d",
+  "tui.altScreen.lineUp": "alt+k",
+  "tui.altScreen.lineDown": "alt+j"
 }
