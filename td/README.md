@@ -103,6 +103,22 @@ filtering work within that view. Switching projects keeps the status and text
 filter. New tasks default to the current project; you can change it in the form.
 Project views are session-only; starting `td` opens All projects.
 
+### Improve categories
+
+Use `p`, then `i` to open Improve. The table shows Category instead of Project.
+
+- `0` / `1` / `2` / `3` / `4` / `5` / `6`: All / td / nvim / agents / terminal / system / Uncategorized
+- Add or edit an Improve task to choose Category with `1`–`6` or arrows.
+- Category appears in the form only when Project is `improve`.
+- Tab switches Pending / Done within the selected category; `/` filters descriptions.
+
+New and existing tasks default to Uncategorized. Adding from a focused category
+still starts Uncategorized; saving switches the filter to the new task's category.
+Changing projects preserves saved category metadata. Improve categories are separate
+from Work categories and do not affect urgency. `td show` and `td list --json` include
+`improve_category`; category editing is currently TUI-only, like Work metadata.
+Old events need no rewrite: category changes append update events.
+
 ### Work dashboard (draft)
 
 Use `p`, then `w` to open Work. Other project views keep the original table.

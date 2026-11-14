@@ -27,6 +27,7 @@ fn replays_create_update_done_delete_order() {
                 estimate: Some("D".to_string()),
                 blocked: Some(true),
                 work: None,
+                improve_category: None,
             },
         ),
         event(task_id, "2026-06-07T12:00:00Z", Event::TaskCompleted),

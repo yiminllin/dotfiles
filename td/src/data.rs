@@ -42,6 +42,8 @@ pub enum Event {
         blocked: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         work: Option<crate::work::WorkDetails>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        improve_category: Option<crate::improve::ImproveCategory>,
     },
     TaskCompleted,
     TaskDeleted,
@@ -82,6 +84,7 @@ pub struct Task {
     pub imported_uuid: Option<String>,
     pub event_count: usize,
     pub work: crate::work::WorkDetails,
+    pub improve_category: crate::improve::ImproveCategory,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -286,6 +289,7 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
                     imported_uuid: imported_uuid.clone(),
                     event_count: 1,
                     work: crate::work::WorkDetails::default(),
+                    improve_category: crate::improve::ImproveCategory::default(),
                 },
             );
         }
@@ -296,6 +300,7 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
             estimate,
             blocked,
             work,
+            improve_category,
         } => {
             if let Some(task) = tasks.get_mut(&envelope.task_id) {
                 if let Some(description) = description {
@@ -309,6 +314,9 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
                     if let Some(value) = update {
                         *field = (!value.is_empty()).then(|| value.clone());
                     }
+                }
+                if let Some(category) = improve_category {
+                    task.improve_category = *category;
                 }
                 if let Some(work) = work {
                     task.work.clone_from(work);

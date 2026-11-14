@@ -38,6 +38,7 @@ fn missing_metadata_is_uncategorized_but_explicit_features_stay_features() {
                 priority: None,
                 estimate: None,
                 blocked: None,
+                improve_category: None,
                 work: Some(WorkDetails {
                     category: WorkCategory::Feature,
                     ..WorkDetails::default()
@@ -90,6 +91,7 @@ fn legacy_states_load_as_shared_states_without_rewriting_the_log() {
                 priority: None,
                 estimate: None,
                 blocked: None,
+                improve_category: None,
                 work: Some(WorkDetails {
                     category: WorkCategory::Review,
                     ..WorkDetails::default()
@@ -145,6 +147,7 @@ fn old_updates_load_and_unrelated_edits_preserve_work_details() {
             estimate: None,
             blocked: None,
             work: Some(work.clone()),
+            improve_category: None,
         },
     )
     .unwrap();

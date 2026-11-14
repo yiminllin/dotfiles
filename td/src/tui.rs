@@ -25,6 +25,7 @@ use crate::data::{
     TaskView,
 };
 
+use crate::improve::ImproveCategory;
 use crate::work::{WorkCategory, WorkDetails, WorkState};
 
 mod clipboard;
@@ -73,6 +74,7 @@ struct App {
     filter: String,
     project: Option<&'static str>,
     work_category: Option<WorkCategory>,
+    improve_category: Option<ImproveCategory>,
     detail_scroll: u16,
     state_selected: usize,
     input: String,
@@ -134,6 +136,7 @@ struct Form {
     cursor: usize,
     insert: bool,
     work: WorkDetails,
+    improve_category: ImproveCategory,
     references: Option<references::ReferenceEditor>,
 }
 
@@ -142,6 +145,7 @@ impl Form {
         self.values != initial.values
             || self.blocked != initial.blocked
             || (self.values[1] == "work" && self.work != initial.work)
+            || (self.values[1] == "improve" && self.improve_category != initial.improve_category)
     }
 
     fn options(&self) -> &[&str] {
@@ -156,6 +160,8 @@ impl Form {
     fn field_count(&self) -> usize {
         if self.values[1] == "work" {
             10
+        } else if self.values[1] == "improve" {
+            6
         } else {
             5
         }
@@ -173,6 +179,16 @@ impl Form {
     }
 
     fn choose(&mut self, forward: bool) {
+        if self.active == 5 && self.values[1] == "improve" {
+            let options = ImproveCategory::ALL;
+            let index = options
+                .iter()
+                .position(|value| *value == self.improve_category)
+                .unwrap();
+            self.improve_category =
+                options[(index + if forward { 1 } else { options.len() - 1 }) % options.len()];
+            return;
+        }
         if self.active == 5 {
             let options = WorkCategory::ALL;
             let index = options
@@ -372,6 +388,7 @@ impl App {
             filter: String::new(),
             project: None,
             work_category: None,
+            improve_category: None,
             detail_scroll: 0,
             state_selected: 0,
             input: String::new(),
@@ -412,6 +429,10 @@ impl App {
                         && self.project.is_none_or(|project| {
                             view.task.project.as_deref().unwrap_or_default() == project
                         })
+                        && (self.project != Some("improve")
+                            || self
+                                .improve_category
+                                .is_none_or(|category| view.task.improve_category == category))
                         && (self.project != Some("work")
                             || self
                                 .work_category
@@ -455,6 +476,7 @@ impl App {
     fn select_project(&mut self, project: Option<&'static str>) {
         self.project = project;
         self.work_category = None;
+        self.improve_category = None;
         self.selected = 0;
         self.selected_line = 0;
         self.row_heights.clear();
@@ -630,7 +652,14 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     app.mode = Mode::Command(id);
                 }
                 _ if app.form.is_text() => app.form.edit_description(key),
-                KeyCode::Char('f' | 'r' | 'd' | 'a' | 'u') if app.form.active == 5 => {
+                KeyCode::Char(ch @ '1'..='6')
+                    if app.form.active == 5 && app.form.values[1] == "improve" =>
+                {
+                    app.form.improve_category = ImproveCategory::ALL[(ch as u8 - b'1') as usize];
+                }
+                KeyCode::Char('f' | 'r' | 'd' | 'a' | 'u')
+                    if app.form.active == 5 && app.form.values[1] == "work" =>
+                {
                     let category = match key {
                         KeyCode::Char('r') => WorkCategory::Review,
                         KeyCode::Char('d') => WorkCategory::Design,
@@ -815,6 +844,15 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         app.selected_line = 0;
     }
     match key {
+        KeyCode::Char(ch @ '0'..='6') if app.project == Some("improve") => {
+            app.improve_category = ch
+                .to_digit(10)
+                .and_then(|index| index.checked_sub(1))
+                .map(|index| ImproveCategory::ALL[index as usize]);
+            app.selected = 0;
+            app.selected_line = 0;
+            app.table_state = TableState::default();
+        }
         KeyCode::Char(ch @ '0'..='5') if app.project == Some("work") => {
             app.work_category = match ch {
                 '1' => Some(WorkCategory::Feature),
@@ -895,6 +933,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     estimate: None,
                     blocked: Some(!task.task.blocked),
                     work: None,
+                    improve_category: None,
                 };
                 append_selected(app, event)?;
             }
@@ -954,6 +993,7 @@ fn open_task_form(app: &mut App, id: Uuid) {
             ],
             blocked: task.blocked,
             work: task.work.clone(),
+            improve_category: task.improve_category,
             ..Form::default()
         };
         app.initial_form = app.form.clone();
@@ -969,6 +1009,7 @@ fn work_update(work: WorkDetails) -> Event {
         estimate: None,
         blocked: None,
         work: Some(work),
+        improve_category: None,
     }
 }
 
@@ -986,6 +1027,7 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
         return Ok(());
     }
     let is_work = project == "work";
+    let is_improve = project == "improve";
     let mut work = app.form.work.clone();
     for value in [&mut work.jira, &mut work.prs, &mut work.notes] {
         *value = value.trim().to_string();
@@ -1013,6 +1055,7 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
             estimate: Some(estimate),
             blocked: Some(app.form.blocked),
             work: is_work.then(|| work.clone()),
+            improve_category: is_improve.then_some(app.form.improve_category),
         }
     } else {
         Event::TaskCreated {
@@ -1029,6 +1072,21 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
     if id.is_none() && is_work {
         events.push(new_envelope(task_id, "tui", work_update(work))?);
     }
+    if id.is_none() && is_improve {
+        events.push(new_envelope(
+            task_id,
+            "tui",
+            Event::TaskUpdated {
+                description: None,
+                project: None,
+                priority: None,
+                estimate: None,
+                blocked: None,
+                work: None,
+                improve_category: Some(app.form.improve_category),
+            },
+        )?);
+    }
     if id == app.merge_ids.first().copied() {
         for source_id in app.merge_ids.iter().skip(1) {
             events.push(new_envelope(*source_id, "tui", Event::TaskDeleted)?);
@@ -1036,12 +1094,20 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
     }
     append_events(&app.path, &events)?;
     app.merge_ids.clear();
-    let reveal_new_category =
-        id.is_none() && is_work && app.project == Some("work") && app.work_category.is_some();
+    let reveal_improve_category = id.is_none()
+        && is_improve
+        && app.project == Some("improve")
+        && app.improve_category.is_some();
+    if reveal_improve_category {
+        app.improve_category = Some(app.form.improve_category);
+        app.table_state = TableState::default();
+    }
+    let reveal_new_category = reveal_improve_category
+        || (id.is_none() && is_work && app.project == Some("work") && app.work_category.is_some());
     if id.is_none() {
         app.status = TaskStatus::Pending;
     }
-    if reveal_new_category {
+    if reveal_new_category && is_work {
         app.work_category = Some(app.form.work.category);
         app.table_state = TableState::default();
     }
@@ -1136,7 +1202,9 @@ fn draw(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(u16::from(!matches!(app.mode, Mode::Normal))),
+            Constraint::Length(u16::from(
+                !matches!(app.mode, Mode::Normal) || app.project == Some("improve"),
+            )),
             Constraint::Min(1),
             Constraint::Length(1),
         ])
@@ -1204,6 +1272,30 @@ fn draw(frame: &mut Frame, app: &mut App) {
         format!("td | {mode} | {} marked", app.merge_ids.len())
     } else if matches!(app.mode, Mode::Command(_)) {
         format!("td | {mode} | COMMAND")
+    } else if matches!(app.mode, Mode::Normal) && app.project == Some("improve") {
+        std::iter::once(
+            if app.improve_category.is_none() {
+                "[0 All]"
+            } else {
+                "0 All"
+            }
+            .to_string(),
+        )
+        .chain(
+            ImproveCategory::ALL
+                .iter()
+                .enumerate()
+                .map(|(index, category)| {
+                    let label = format!("{} {}", index + 1, category.label());
+                    if app.improve_category == Some(*category) {
+                        format!("[{label}]")
+                    } else {
+                        label
+                    }
+                }),
+        )
+        .collect::<Vec<_>>()
+        .join("  ")
     } else if matches!(app.mode, Mode::Normal) {
         String::new()
     } else {
@@ -1232,7 +1324,11 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 Constraint::Length(8),
                 Constraint::Length(8),
                 Constraint::Length(7),
-                Constraint::Length(12),
+                Constraint::Length(if app.project == Some("improve") {
+                    13
+                } else {
+                    12
+                }),
                 Constraint::Min(10),
             ];
             let block = Block::default()
@@ -1260,6 +1356,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 .flex(Flex::Start)
                 .spacing(1)
                 .split(columns_area);
+            let is_improve = app.project == Some("improve");
             let visible = app.visible_tasks();
             let is_empty = visible.is_empty();
             let descriptions: Vec<_> = visible
@@ -1327,7 +1424,14 @@ fn draw(frame: &mut Frame, app: &mut App) {
                                 Cell::from(if task.blocked { "yes" } else { "no" })
                                     .style(enum_style(4, if task.blocked { "yes" } else { "no" })),
                                 Cell::from(
-                                    if project.is_empty() { "-" } else { project }.to_string(),
+                                    if is_improve {
+                                        task.improve_category.label()
+                                    } else if project.is_empty() {
+                                        "-"
+                                    } else {
+                                        project
+                                    }
+                                    .to_string(),
                                 )
                                 .style(enum_style(1, project)),
                                 Cell::from(line),
@@ -1350,9 +1454,19 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 .select(if is_empty { None } else { Some(selected_row) });
             let table = Table::new(rows, widths)
                 .header(
-                    Row::new(["Priority", "Estimate", "Blocked", "Project", "Description"])
-                        .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))
-                        .bottom_margin(1),
+                    Row::new([
+                        "Priority",
+                        "Estimate",
+                        "Blocked",
+                        if app.project == Some("improve") {
+                            "Category"
+                        } else {
+                            "Project"
+                        },
+                        "Description",
+                    ])
+                    .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))
+                    .bottom_margin(1),
                 )
                 .column_spacing(1)
                 .block(block)
@@ -1399,6 +1513,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         return;
     }
     let hint = match form.active {
+        5 if form.values[1] == "improve" => "Category: 1-6 or arrows; Enter continues",
         5 => "Category: f/r/d/a/u or arrows; Enter continues",
         6 => "State: 1-4 or arrows; Enter continues",
         7 => "Jira: Enter to manage tickets; Tab continues",
@@ -1433,6 +1548,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         }
         fields.push((index, None));
         let count = match index {
+            5 if form.values[1] == "improve" => ImproveCategory::ALL.len(),
             5 => WorkCategory::ALL.len(),
             6 => WorkState::ALL.len(),
             _ => 0,
@@ -1440,6 +1556,12 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         fields.extend((0..count).map(|choice| (index, Some(choice))));
     }
     let (selected_choice, choice_count) = match form.active {
+        5 if form.values[1] == "improve" => (
+            ImproveCategory::ALL
+                .iter()
+                .position(|value| *value == form.improve_category),
+            ImproveCategory::ALL.len(),
+        ),
         5 => (
             WorkCategory::ALL
                 .iter()
@@ -1490,36 +1612,45 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
             continue;
         }
         if let Some(choice) = choice {
-            let (shortcut, label, description, selected) = if index == 5 {
-                let category = WorkCategory::ALL[choice];
-                let (shortcut, description) = match category {
-                    WorkCategory::Feature => ('f', "Build, fix or investigate"),
-                    WorkCategory::Review => ('r', "Review a PR; track replies"),
-                    WorkCategory::Design => ('d', "Explore ideas or learn"),
-                    WorkCategory::Administrative => ('a', "Tickets, messages, housekeeping"),
-                    WorkCategory::Uncategorized => ('u', "Decide later"),
+            let (shortcut, label, description, selected) =
+                if index == 5 && form.values[1] == "improve" {
+                    let category = ImproveCategory::ALL[choice];
+                    (
+                        (b'1' + choice as u8) as char,
+                        category.label(),
+                        "",
+                        category == form.improve_category,
+                    )
+                } else if index == 5 {
+                    let category = WorkCategory::ALL[choice];
+                    let (shortcut, description) = match category {
+                        WorkCategory::Feature => ('f', "Build, fix or investigate"),
+                        WorkCategory::Review => ('r', "Review a PR; track replies"),
+                        WorkCategory::Design => ('d', "Explore ideas or learn"),
+                        WorkCategory::Administrative => ('a', "Tickets, messages, housekeeping"),
+                        WorkCategory::Uncategorized => ('u', "Decide later"),
+                    };
+                    (
+                        shortcut,
+                        category.label(),
+                        description,
+                        category == form.work.category,
+                    )
+                } else {
+                    let state = WorkState::ALL[choice];
+                    let description = match state {
+                        WorkState::None => "Not a current focus",
+                        WorkState::Next => "Plan to work on next",
+                        WorkState::InProgress => "Working on it",
+                        WorkState::Waiting => "Needs external action",
+                    };
+                    (
+                        (b'1' + choice as u8) as char,
+                        state.label(),
+                        description,
+                        state == form.work.state,
+                    )
                 };
-                (
-                    shortcut,
-                    category.label(),
-                    description,
-                    category == form.work.category,
-                )
-            } else {
-                let state = WorkState::ALL[choice];
-                let description = match state {
-                    WorkState::None => "Not a current focus",
-                    WorkState::Next => "Plan to work on next",
-                    WorkState::InProgress => "Working on it",
-                    WorkState::Waiting => "Needs external action",
-                };
-                (
-                    (b'1' + choice as u8) as char,
-                    state.label(),
-                    description,
-                    state == form.work.state,
-                )
-            };
             let marker = if selected { "●" } else { " " };
             let style = Style::default().fg(if selected {
                 Color::Rgb(85, 100, 102)
@@ -1545,6 +1676,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                     "no"
                 }
             }
+            5 if form.values[1] == "improve" => form.improve_category.label(),
             5 => form.work.category.label(),
             6 => form.work.state.label(),
             7 | 8 => {
@@ -1582,6 +1714,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         } else if index == form.active {
             let options: Vec<&str> = match index {
                 4 => vec!["no", "yes"],
+                5 if form.values[1] == "improve" => vec![form.improve_category.label()],
                 5 => vec![form.work.category.label()],
                 6 => vec![form.work.state.label()],
                 _ => form.options().to_vec(),
@@ -1720,6 +1853,125 @@ mod tests {
             handle_key(app, KeyCode::Char(ch)).unwrap();
         }
         handle_key(app, KeyCode::Enter).unwrap();
+    }
+
+    #[test]
+    fn improve_categories_round_trip_filter_and_preserve_other_metadata() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        app.select_project(Some("improve"));
+        for (index, category) in ImproveCategory::ALL.into_iter().enumerate() {
+            handle_key(&mut app, KeyCode::Char('a')).unwrap();
+            assert_eq!(app.form.field_count(), 6);
+            assert_eq!(app.form.improve_category, ImproveCategory::Uncategorized);
+            app.form.values[0] = format!("Improve {}", category.label());
+            app.form.active = 5;
+            app.form.insert = false;
+            handle_key(&mut app, KeyCode::Char((b'1' + index as u8) as char)).unwrap();
+            assert!(app.form.has_changes(&app.initial_form));
+            write_and_quit(&mut app);
+            handle_key(&mut app, KeyCode::Char((b'1' + index as u8) as char)).unwrap();
+            assert_eq!(app.visible_tasks().len(), 1);
+            assert_eq!(app.selected_task().unwrap().task.improve_category, category);
+        }
+        let id = app.selected_task().unwrap().task.id;
+        handle_key(&mut app, KeyCode::Char('e')).unwrap();
+        app.form.improve_category = ImproveCategory::Td;
+        write_and_quit(&mut app);
+        handle_key(&mut app, KeyCode::Char('1')).unwrap();
+        assert_eq!(app.visible_tasks().len(), 2);
+        app.selected = app
+            .visible_tasks()
+            .iter()
+            .position(|view| view.task.id == id)
+            .unwrap();
+        handle_key(&mut app, KeyCode::Char('b')).unwrap();
+        assert_eq!(
+            load_tasks(&app.path).unwrap()[&id].improve_category,
+            ImproveCategory::Td
+        );
+        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        assert_eq!(app.visible_tasks().len(), 1);
+        assert_eq!(app.selected_task().unwrap().task.id, id);
+        handle_key(&mut app, KeyCode::Char('u')).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains("[1 td]"));
+        assert!(screen.contains("Category"));
+        app.select_project(Some("work"));
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        assert_eq!(app.form.field_count(), 10);
+        app.form.values[1] = "code".into();
+        assert_eq!(app.form.field_count(), 5);
+    }
+
+    #[test]
+    fn improve_legacy_tasks_default_without_rewriting_history() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("events.jsonl");
+        let id = Uuid::now_v7();
+        append_event(
+            &path,
+            &new_envelope(
+                id,
+                "test",
+                Event::TaskCreated {
+                    description: "Existing improve task".into(),
+                    project: Some("improve".into()),
+                    priority: None,
+                    estimate: None,
+                    blocked: false,
+                    imported_uuid: None,
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let mut app = App::new(path.clone()).unwrap();
+        app.select_project(Some("improve"));
+        handle_key(&mut app, KeyCode::Char('6')).unwrap();
+        assert_eq!(
+            app.selected_task().unwrap().task.improve_category,
+            ImproveCategory::Uncategorized
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        handle_key(&mut app, KeyCode::Char('1')).unwrap();
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        app.form.values[0] = "New uncategorized task".into();
+        save_form(&mut app, None).unwrap();
+        assert_eq!(app.improve_category, Some(ImproveCategory::Uncategorized));
+        assert_eq!(app.visible_tasks().len(), 2);
+        handle_key(&mut app, KeyCode::Char('e')).unwrap();
+        app.form.active = 5;
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains("Category: 1-6"));
+        assert!(screen.contains("6 Uncategorized"));
+        handle_key(&mut app, KeyCode::Right).unwrap();
+        assert_eq!(app.form.improve_category, ImproveCategory::Td);
+        assert!(app.form.has_changes(&app.initial_form));
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::ConfirmDiscard(_)));
+        handle_key(&mut app, KeyCode::Char('y')).unwrap();
+        handle_key(&mut app, KeyCode::Char('0')).unwrap();
+        assert_eq!(app.improve_category, None);
     }
 
     #[test]

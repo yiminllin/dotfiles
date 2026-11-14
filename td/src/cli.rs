@@ -170,6 +170,7 @@ pub fn run() -> Result<()> {
                     estimate: trim(fields.estimate),
                     blocked: fields.blocked,
                     work: None,
+                    improve_category: None,
                 },
             )
         }
