@@ -2,17 +2,47 @@
 
 A local replacement for `rpiv-todo`. The panel above the input pins a recognizable
 session title and genuine high-level outcomes, with the current milestone highlighted.
-Explicitly requested steps stay separate; there is no fixed top-level milestone limit.
-Related replies and detours keep the same roadmap. Pi asks for confirmation only when the title or goals are unclear.
+Aim for 3–5 broad outcomes, not a chronological activity log. This is not a quota or
+hard limit. Use short labels, usually 3–7 words, without repeating the session title.
+Explicitly requested steps remain represented as milestones or tasks.
+Related replies and detours keep the session goal, not a fixed milestone structure.
+Pi asks for confirmation only when the title or goals are unclear.
 
-Small refinements belong under an existing milestone when one fits. As related
-small items accumulate, Pi folds them into tasks under one new outcome-based
-milestone, such as `Polish review output`, preserving their status and meaningful
-detail. This is model-guided regrouping, not automatic label-based rewriting.
-Distinct deliverables are not merged just to shorten the panel.
+Top-level items are milestones with recognizable outcomes. Execution steps belong
+in `milestone.tasks`. As the conversation clarifies the work, Pi can rename, merge,
+split, or reorder milestones. Preserve explicit requirements, dependencies, and
+meaningful completion state, not fixed labels or a row for every past pass.
+Distinct deliverables remain identifiable.
 
-Each milestone can contain up to five optional `tasks`. Only the current milestone's
-tasks appear. Current work uses yellow, done uses green, pending uses muted text,
+Reuse and reopen milestones for repeated planning, implementation, cleanup,
+validation, restacking, and submission passes. Add a milestone when the evolving
+scope needs a separate outcome. Regroup an overgrown roadmap instead of continually
+appending rows. This is model-guided regrouping, not automatic label-based rewriting.
+
+For example, a PR-chain roadmap can keep these outcomes across repeated passes:
+
+- Implement the frontend and scenarios.
+- Validate behavior and simplify the API.
+- Organize buildable review commits and restack the chain.
+- Submit the chain and verify remote heads.
+
+Cleanup, boundary checks, and resubmission belong under these outcomes, not in
+new top-level rows each time.
+
+Each milestone can contain up to five optional `tasks`, but usually show only 1–3
+useful immediate steps. Five is a schema limit, not a target. Only the current
+milestone's tasks appear. Keep labels short, usually 3–7 words. Omit tasks that
+repeat the milestone or list routine formatting, review, and speculative future
+procedures. Group related checks as focused validation. Keep detailed procedures
+in conversation or hidden `now` context.
+
+Use `blocker` only for an actual obstacle to the current work, such as missing API
+issue details. State it briefly. Planning-only scope and unauthorized future
+actions are constraints, not blockers, unless the current agreed step needs that
+authorization. Keep constraints in conversation or hidden `now` context; they
+still apply even when absent from the panel.
+
+Current work uses yellow, done uses green, pending uses muted text,
 and blockers use red through the active theme. There are no separate Now or
 Block None rows. The optional `now` field remains available as hidden context.
 Each `progress set` supplies a complete snapshot; identical snapshots are ignored.
