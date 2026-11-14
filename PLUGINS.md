@@ -191,7 +191,7 @@
 | Pi Hermes Memory | Persistent memory, session search, and reusable skills | [pi/.pi/agent/hermes-memory-config.json](pi/.pi/agent/hermes-memory-config.json) |
 | Pi FFF | Fuzzy file/content search; initially tools-only | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi RPIV Ask User Question (`@juicesharp/rpiv-ask-user-question`) | Structured choices, custom answers, and decision dialogs for existing skills | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
-| Pi Progress (local extension) | Persistent session goals and nested tasks; colored pins in bordered, equal-sized, four-column Agent Board tiles with stable numbers (Python 3) | [pi/.pi/agent/extensions/progress](pi/.pi/agent/extensions/progress) |
+| Pi Progress (local extension) | Persistent session goals and nested tasks; colored pins in bordered, equal-sized, four-column Agent Board tiles with stable order and gap-free numbering (Python 3) | [pi/.pi/agent/extensions/progress](pi/.pi/agent/extensions/progress) |
 | Pi Compaction Inventory (local extension) | Externalize large file inventories during compaction and apply configured per-model compaction reserves | [pi/.pi/agent/extensions/compaction-inventory](pi/.pi/agent/extensions/compaction-inventory) |
 | keyd | Key remapping (Linux) | [install.sh](install.sh) (Fedora) |
 

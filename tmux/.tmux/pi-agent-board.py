@@ -202,21 +202,19 @@ def collect_agents():
                 tmux("set-option", "-pt", pane["pane_id"], "-u", "@pi_agent_slot")
         panes.sort(key=lambda pane: int(pane["pane_id"].lstrip("%")))
         occupied = set()
-        # Reserve all surviving slots before assigning any new ones.
+        # Read surviving slot order before assigning compact numbers.
         for pane in panes:
             slot = pane["@pi_agent_slot"]
             slot = int(slot) if slot.isdecimal() else 0
             pane["slot"] = slot if slot > 0 and slot not in occupied else 0
             if pane["slot"]:
                 occupied.add(slot)
+        # Keep survivor order, append new agents, and close gaps left by exits.
+        panes.sort(key=lambda pane: (not pane["slot"], pane["slot"]))
         agents = []
-        for pane in panes:
-            if not pane["slot"]:
-                slot = 1
-                while slot in occupied:
-                    slot += 1
-                pane["slot"] = slot
-                occupied.add(slot)
+        for slot, pane in enumerate(panes, 1):
+            pane["slot"] = slot
+            if pane["@pi_agent_slot"] != str(slot):
                 tmux("set-option", "-pt", pane["pane_id"], "@pi_agent_slot", str(slot))
             agents.append(Agent(
                 pane["pane_id"], pane["session_id"], pane["window_id"], pane["slot"],
@@ -348,16 +346,18 @@ def main():
     pane = os.environ.get("TMUX_PANE") or tmux("display-message", "-p", "#{pane_id}")
     client, current_window = context(pane)
     selected, offset, previous = None, 0, None
+    by_slot = {}
     saved_tty = termios.tcgetattr(sys.stdin) if sys.stdin.isatty() else None
     try:
         if saved_tty:
             tty.setcbreak(sys.stdin)
         sys.stdout.write("\033[?25l\033[?7l")
         while True:
+            selected_pane = by_slot[selected].pane if selected in by_slot else pane
             agents = collect_agents()
             by_slot = {agent.slot: agent for agent in agents}
-            if selected not in by_slot:
-                selected = next((a.slot for a in agents if a.pane == pane), min(by_slot, default=None))
+            selected = next((a.slot for a in agents if a.pane == selected_pane),
+                            next((a.slot for a in agents if a.pane == pane), min(by_slot, default=None)))
             columns, rows = os.get_terminal_size(sys.stdout.fileno())
             lines, block_height = render_grid(agents, columns, selected, current_window)
             available = max(1, rows - 1)

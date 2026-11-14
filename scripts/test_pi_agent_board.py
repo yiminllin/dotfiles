@@ -4,6 +4,7 @@
 from contextlib import contextmanager
 import fcntl
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -126,6 +127,27 @@ class GridTests(unittest.TestCase):
         finally:
             os.close(write_fd)
 
+    def test_selection_follows_session_when_slots_compact(self):
+        snapshots = [
+            [agent(1), agent(2), agent(3)],
+            [agent(1, pane="%2"), agent(2, pane="%3")],
+            [agent(1, pane="%2"), agent(2, pane="%3")],
+        ]
+        with patch.dict(os.environ, TMUX_PANE="%3"), \
+                patch.object(board, "context", return_value=("client", "@0")), \
+                patch.object(board, "collect_agents", side_effect=snapshots), \
+                patch.object(board, "read_key", side_effect=["", "A", "q"]), \
+                patch.object(board, "render_grid", return_value=([], 1)) as render, \
+                patch.object(board, "tmux") as tmux, \
+                patch.object(board.os, "get_terminal_size", return_value=(126, 35)), \
+                patch.object(board.signal, "signal"), \
+                patch.object(board.sys, "stdin", io.StringIO()), \
+                tempfile.TemporaryFile(mode="w+") as output, \
+                patch.object(board.sys, "stdout", output):
+            board.main()
+        self.assertEqual([call.args[2] for call in render.call_args_list], [3, 2, 2])
+        tmux.assert_called_once_with("set-option", "-pt", "%3", "@pi_agent_dimmed", "1")
+
     def test_empty_slots_do_not_move_later_blocks(self):
         lines, height = board.render_grid([agent(1), agent(4), agent(5)], 126, 1, "@0")
         self.assertIn("[4]", ANSI.sub("", lines[1])[96:])
@@ -181,7 +203,7 @@ class SlotTests(unittest.TestCase):
             if fd is not None:
                 os.close(fd)
 
-    def test_status_dimming_removal_and_new_agents_preserve_slots(self):
+    def test_status_and_dimming_preserve_order_but_removal_compacts_slots(self):
         with isolated_tmux() as (tmux, _base, command):
             first = tmux("display-message", "-p", "#{pane_id}")
             second = tmux("new-window", "-d", "-P", "-F", "#{pane_id}", command)
@@ -194,9 +216,12 @@ class SlotTests(unittest.TestCase):
                 self.assertEqual({a.pane: a.slot for a in board.collect_agents()}, original)
                 tmux("kill-pane", "-t", first)
                 remaining = {a.pane: a.slot for a in board.collect_agents()}
-                self.assertEqual(remaining, {second: 2, third: 3})
+                self.assertEqual(remaining, {second: 1, third: 2})
+                self.assertEqual(tmux("show-options", "-pqv", "-t", third, "@pi_agent_slot"), "2")
                 added = tmux("new-window", "-d", "-P", "-F", "#{pane_id}", command)
-                self.assertEqual({a.pane: a.slot for a in board.collect_agents()}, {added: 1, second: 2, third: 3})
+                self.assertEqual({a.pane: a.slot for a in board.collect_agents()}, {second: 1, third: 2, added: 3})
+                tmux("kill-pane", "-t", third)
+                self.assertEqual({a.pane: a.slot for a in board.collect_agents()}, {second: 1, added: 2})
 
 
 if __name__ == "__main__":
