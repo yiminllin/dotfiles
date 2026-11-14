@@ -1220,8 +1220,16 @@ fn append_selected(app: &mut App, event: Event) -> Result<()> {
         {
             return Ok(());
         }
-        append_event(&app.path, &new_envelope(task.task.id, "tui", event)?)?;
+        let id = task.task.id;
+        append_event(&app.path, &new_envelope(id, "tui", event)?)?;
         app.reload()?;
+        if let Some(index) = app
+            .visible_tasks()
+            .iter()
+            .position(|view| view.task.id == id)
+        {
+            app.selected = index;
+        }
     }
     Ok(())
 }
@@ -1569,7 +1577,12 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 )
                 .column_spacing(1)
                 .block(block)
-                .highlight_symbol("> ");
+                .highlight_symbol(Span::styled(
+                    "▶ ",
+                    Style::default()
+                        .add_modifier(Modifier::BOLD)
+                        .remove_modifier(Modifier::DIM),
+                ));
             frame.render_stateful_widget(table, chunks[1], &mut app.table_state);
         }
     }
@@ -2712,6 +2725,32 @@ mod tests {
     }
 
     #[test]
+    fn completion_and_reopening_keep_the_same_task_selected() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        for description in ["first task", "second task"] {
+            app.form.values[0] = description.to_string();
+            save_form(&mut app, None).unwrap();
+        }
+        app.selected = 1;
+        let id = app.selected_task().unwrap().task.id;
+        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        assert_eq!(app.selected, 0);
+        assert_eq!(app.selected_task().unwrap().task.id, id);
+        assert_eq!(
+            app.selected_task().unwrap().task.status,
+            TaskStatus::Completed
+        );
+        handle_key(&mut app, KeyCode::Char('u')).unwrap();
+        assert_eq!(app.selected, 1);
+        assert_eq!(app.selected_task().unwrap().task.id, id);
+        assert_eq!(
+            app.selected_task().unwrap().task.status,
+            TaskStatus::Pending
+        );
+    }
+
+    #[test]
     fn pending_view_includes_only_recent_completions_and_honors_filter() {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
@@ -2776,7 +2815,7 @@ mod tests {
             .unwrap()
             + 2;
         for row in &rows {
-            assert!(row[1..79]
+            assert!(row[3..79]
                 .iter()
                 .filter(|cell| Some(cell.bg) == background)
                 .all(|cell| cell.modifier.contains(Modifier::DIM)));
@@ -3089,7 +3128,7 @@ mod tests {
         assert!(buffer
             .content
             .iter()
-            .any(|cell| cell.symbol() == ">" && Some(cell.bg) == project_row_style("improve").bg));
+            .any(|cell| cell.symbol() == "▶" && Some(cell.bg) == project_row_style("improve").bg));
     }
 
     #[test]
@@ -3143,6 +3182,13 @@ mod tests {
                 && cell.modifier.contains(Modifier::BOLD)
                     == style.add_modifier.contains(Modifier::BOLD)));
         }
+        let marker = buffer
+            .content
+            .iter()
+            .find(|cell| cell.symbol() == "▶")
+            .unwrap();
+        assert!(marker.modifier.contains(Modifier::BOLD));
+        assert!(!marker.modifier.contains(Modifier::DIM));
         assert_eq!(app.table_state.selected(), Some(0));
     }
 

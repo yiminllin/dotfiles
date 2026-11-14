@@ -202,7 +202,12 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
             .highlight_spacing(ratatui::widgets::HighlightSpacing::Always)
             .column_spacing(1)
             .block(block)
-            .highlight_symbol("> "),
+            .highlight_symbol(Span::styled(
+                "▶ ",
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .remove_modifier(Modifier::DIM),
+            )),
         body,
         &mut app.table_state,
     );
@@ -811,6 +816,15 @@ mod tests {
         assert_eq!(app.selected_task().unwrap().task.work, work);
         let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let marker = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .find(|cell| cell.symbol() == "▶")
+            .unwrap();
+        assert!(marker.modifier.contains(Modifier::BOLD));
+        assert!(!marker.modifier.contains(Modifier::DIM));
         let green = Color::Rgb(232, 240, 228);
         assert!(terminal
             .backend()
