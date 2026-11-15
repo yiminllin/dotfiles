@@ -217,7 +217,7 @@ complete. Waiting rows are dimmed outside the state badge.
 ### Quick-add templates
 
 Press `A` from a task list, then choose `p` (PR review), `i` (Improvement),
-`f` (Feature work), or `d` (Document review). The picker shows these letter hints.
+`f` (Feature work), or `d` (Design doc review). The picker shows these letter hints.
 Numbers `1`–`4` or arrows and Enter also work. Each template shows only its required inputs:
 
 | Template | Inputs | Presets |
@@ -225,7 +225,7 @@ Numbers `1`–`4` or arrows and Enter also work. Each template shows only its re
 | PR review | One PR link or number, priority | Work / Reviews, M/H |
 | Improvement | Description, priority, category | Improve, A/Q |
 | Feature work | One Jira ticket link or key, priority | Work / Features, M/H |
-| Document review | Document link, priority | Work / Reviews, M/H |
+| Design doc review | Description, document list, priority | Work / Reviews, M/H |
 
 The last two preset letters mean priority / estimate. Work templates start with
 No state. Bare PR numbers use FlightSystems; bare Jira numbers use `FSW`.
@@ -233,18 +233,24 @@ Improvement category starts Uncategorized. Ordinary `a` keeps its existing defau
 
 Templates use the same editing keys as ordinary add. Type or paste the input;
 multiline pasted descriptions stay intact. Enter and Tab advance fields without
-saving; Shift-Tab moves back. Choose priority with A/H/M/L or Left/Right; choose
+saving; Shift-Tab moves back. Enter on Design docs opens its list editor; Tab
+accepts the current link and moves to Priority. Choose priority with A/H/M/L or Left/Right; choose
 an Improve category with `1`–`6` or arrows. Text fields support the same Vim keys.
 Esc leaves insert mode, then `:wq` and Enter save. `:q!` and Enter discard.
 Esc in normal/select mode cancels, with confirmation for unsaved changes.
 Ctrl-S does not save.
 
-Linked templates look up titles in the background: PRs use `gh`, configured-host
-Jira tickets use `jira issue view --raw`, and document pages use `curl` without
-browser authentication. These tools are optional for quick-add: lookup failure,
+PR and Feature templates look up titles in the background using `gh` and
+configured-host `jira issue view --raw`. These tools are optional: lookup failure,
 missing tools, or a five-second timeout uses the reference as the task description.
-The document URL is always kept in Work notes. Existing authentication is used;
-quick-add does not log in. Esc during lookup returns to the draft without saving.
+Existing authentication is used; quick-add does not log in. Esc during lookup
+returns to the draft without saving.
+
+Design doc review keeps your own Description. Add HTTP(S) links one at a time in
+Design docs, or paste several separated by spaces, commas, or newlines. This is
+an ordered list, not a PR chain. Edit, delete, and reorder entries with the usual
+reference keys. Saving does not wait for title lookup. The dashboard fetches
+linked document titles with `curl`; titles never replace your description.
 
 Saving opens the template's project/category and clears the text filter so the
 new task is visible. Use ordinary `e` afterward to change any other field.
@@ -273,7 +279,7 @@ Use `p`, then `w` to open Work. Other project views keep the original table.
 - Enter: open details; `j` / `k` scroll details; Esc returns to the dashboard
 - `a` / `e`: add / edit; ordinary add starts as Uncategorized / No state
 - `A`: quick-add from a template with a preset category
-- `r`: refresh the selected task's PR titles in the background (also in details)
+- `r`: refresh the selected task's PR and document titles in the background (also in details)
 - Tab: Pending / Done within the selected category
 - `/`: search descriptions and Work details
 - Esc from the dashboard: All projects; `q`: quit
@@ -296,7 +302,12 @@ short ID or a count for multiple tickets. Empty values show `-`. These columns
 use saved Work metadata, not links in descriptions. Full PR chain outlines,
 review time, and notes stay in details (Enter).
 
-### Cached PR titles
+When tasks have design documents, the PR column becomes Links. Documents show
+linked page titles, or short labels such as Google Doc 1, Confluence 1, and Doc 1
+when no title is available. Numbers follow each provider's saved order. Each
+wrapped line keeps its hyperlink. Details also show the document list.
+
+### Cached link titles
 
 Work refreshes missing titles and titles at least 10 minutes old in the background,
 using the existing `gh` authentication. It checks tasks in the current Work list,
@@ -311,24 +322,30 @@ PR URL, separately from the task event log. Cached titles appear immediately;
 first-time fetches do not block navigation, editing, saving, or quitting. Quitting
 cancels an active refresh. Missing, corrupt, or unwritable caches do not prevent
 task entry. Deleting the cache is safe. Task descriptions are never overwritten.
-This uses ordinary `gh` requests, not conditional ETag requests.
+PR lookup uses ordinary `gh` requests, not conditional ETag requests.
+Document titles share this cache and refresh policy. Public pages use `curl`
+without browser authentication. Confluence page links on `flyzipline.atlassian.net`
+use the read-only page API with existing `JIRA_API_USERNAME` and `JIRA_API_TOKEN`.
+Credentials pass through stdin, not command arguments; authenticated requests do
+not follow redirects or send credentials to other hosts. Missing credentials or
+failed lookups keep the short label. Private Google Docs may not provide a title.
 
 When testing with an isolated event log, also set `XDG_CACHE_HOME` to a temporary
 directory to keep test titles separate from your normal cache.
 
 ### Work item fields
 
-Selecting project `work` in the form reveals Category, Jira, PR chains, and Notes. Category always has a value. Ordinary add defaults to Uncategorized,
+Selecting project `work` in the form reveals Category, Jira, PR chains, Notes, and Design docs. Category always has a value. Ordinary add defaults to Uncategorized,
 even from a focused category view; quick-add templates supply their preset category.
 Category choices and the focused State field appear as indented rows with short explanations, muted text, and a dot on the selected
 choice. Choice rows have no bold text or colored backgrounds.
 Links and notes are optional.
 Use arrows, `j` / `k`, or Space for category/state; `f` / `r` / `d` / `a` / `u`
 selects a category, and `1`–`4` selects a state. Tab moves between fields.
-Enter on Jira or PR chains opens its list editor. Notes use the same Vim editing
+Enter on Jira, PR chains, or Design docs opens its list editor. Notes use the same Vim editing
 keys as Description. Press Esc to leave insert mode, then `:wq` and Enter to save.
 
-Jira and PR references are entered manually; background title refreshes do not
+Jira, PR, and design document references are entered manually; background title refreshes do not
 change them. In the list editor:
 
 - Type a Jira number, `FSW-12345`, PR number, `#123`, or full URL; Enter adds it.
@@ -339,6 +356,8 @@ change them. In the list editor:
   Duplicate URLs are ignored. Invalid input stays editable with an error.
 - Use arrows or `j`/`k` to select an entry. Enter edits it; `x` deletes it.
   `J`/`K` moves an entry down/up within its chain. Esc cancels the current input.
+- Design docs accepts multiple HTTP(S) URLs and preserves their queries and
+  fragments. Use the same add, edit, delete, and reorder keys as other references.
 - Select **Add chain**, then Enter to start an independent PR group. Add PRs in
   dependency order, with the base PR first. No separators need to be typed.
 - Tab accepts current input and returns to the next form field. Esc from the list
@@ -351,7 +370,7 @@ Opening a reference list does not write task data; saving the form commits chang
 
 #### Keyboard hyperlinks over SSH
 
-Each PR number in the table emits its own OSC 8 hyperlink. A Jira cell with one
+Each PR number and document title (or short fallback label) in the table emits its own OSC 8 hyperlink. A Jira cell with one
 recognized reference is also linked; a multiple-ticket count is not. Press Enter
 for individual Jira links and PR chain outlines in details. Wrapped detail links
 keep their target. Unknown reference text remains plain text.

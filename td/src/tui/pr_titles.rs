@@ -131,7 +131,12 @@ impl Cache {
         let worker_url = url.clone();
         let (sender, result) = mpsc::channel();
         thread::spawn(move || {
-            let entry = title_lookup::pr_title(&worker_url, &worker_request).map(|title| Entry {
+            let title = if hyperlinks::pr_links(&worker_url).is_empty() {
+                title_lookup::document_title(&worker_url, &worker_request)
+            } else {
+                title_lookup::pr_title(&worker_url, &worker_request)
+            };
+            let entry = title.map(|title| Entry {
                 title,
                 fetched_at: OffsetDateTime::now_utc().unix_timestamp(),
             });

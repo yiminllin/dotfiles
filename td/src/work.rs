@@ -40,6 +40,7 @@ pub struct WorkDetails {
     pub legacy_state: Option<crate::state::TaskState>,
     pub jira: String,
     pub prs: String,
+    pub design_docs: String,
     pub notes: String,
     pub reviewed_at: Option<String>,
 }

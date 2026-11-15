@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     io::{self, Write},
 };
 
@@ -82,6 +82,33 @@ pub(super) fn pr_links(value: &str) -> Vec<Reference> {
         };
         Some((format!("#{number}"), url))
     })
+}
+
+pub(super) fn document_links(value: &str) -> Vec<Reference> {
+    let mut links = references(value, |token| {
+        let rest = token
+            .strip_prefix("https://")
+            .or_else(|| token.strip_prefix("http://"))?;
+        if rest.is_empty() || rest.starts_with('/') || token.chars().any(char::is_control) {
+            return None;
+        }
+        Some((token.to_string(), token.to_string()))
+    });
+    let mut counts = BTreeMap::new();
+    for link in &mut links {
+        let rest = link.url.split_once("://").unwrap().1;
+        let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+        let kind = match host {
+            "docs.google.com" => "Google Doc",
+            "drive.google.com" => "Google Drive",
+            host if host.ends_with(".atlassian.net") && path.starts_with("wiki/") => "Confluence",
+            _ => "Doc",
+        };
+        let number = counts.entry(kind).or_insert(0);
+        *number += 1;
+        link.label = format!("{kind} {number}");
+    }
+    links
 }
 
 pub(super) fn normalize_jira(value: &str) -> String {
@@ -192,6 +219,36 @@ fn paint(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn document_labels_are_short_numbered_per_provider_and_keep_targets() {
+        let urls = [
+            "https://docs.google.com/document/d/a/edit?tab=notes",
+            "https://flyzipline.atlassian.net/wiki/spaces/FSW/pages/123/Design",
+            "https://docs.google.com/document/d/b/edit#section",
+            "https://example.com/long-design-document-name",
+            "https://docs.google.com/document/d/a/edit?tab=notes",
+        ];
+        let links = document_links(&urls.join(" "));
+        assert_eq!(
+            links
+                .iter()
+                .map(|link| link.label.as_str())
+                .collect::<Vec<_>>(),
+            ["Google Doc 1", "Confluence 1", "Google Doc 2", "Doc 1"]
+        );
+        assert_eq!(
+            links
+                .iter()
+                .map(|link| link.url.as_str())
+                .collect::<Vec<_>>(),
+            urls[..4]
+        );
+        assert_eq!(
+            document_links("https://docs.google.com.evil/document/a")[0].label,
+            "Doc 1"
+        );
+    }
 
     #[test]
     fn references_resolve_short_ids_and_preserve_full_urls() {

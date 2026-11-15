@@ -1,8 +1,15 @@
 use super::*;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Jira,
+    Pr,
+    Document,
+}
+
 #[derive(Clone)]
 pub(super) struct ReferenceEditor {
-    prs: bool,
+    kind: Kind,
     groups: Vec<Vec<String>>,
     selected: usize,
     draft: String,
@@ -41,7 +48,7 @@ impl ReferenceEditor {
             }]
         };
         let mut editor = Self {
-            prs,
+            kind: if prs { Kind::Pr } else { Kind::Jira },
             groups,
             selected: 0,
             draft: String::new(),
@@ -56,6 +63,17 @@ impl ReferenceEditor {
         editor
     }
 
+    pub(super) fn documents(value: &str) -> Self {
+        let mut editor = Self::new("", false);
+        editor.kind = Kind::Document;
+        editor.groups = vec![hyperlinks::document_links(value)
+            .into_iter()
+            .map(|link| link.url)
+            .collect()];
+        editor.selected = editor.groups[0].len();
+        editor
+    }
+
     // Each group has its entries followed by an Add row; PRs also have Add chain.
     fn rows(&self) -> Vec<(usize, usize)> {
         let mut rows: Vec<_> = self
@@ -64,7 +82,7 @@ impl ReferenceEditor {
             .enumerate()
             .flat_map(|(group, entries)| (0..=entries.len()).map(move |entry| (group, entry)))
             .collect();
-        if self.prs {
+        if self.kind == Kind::Pr {
             rows.push((self.groups.len(), 0));
         }
         rows
@@ -74,16 +92,16 @@ impl ReferenceEditor {
         self.groups
             .iter()
             .filter(|group| !group.is_empty())
-            .map(|group| group.join(if self.prs { " > " } else { " " }))
+            .map(|group| group.join(if self.kind == Kind::Pr { " > " } else { " " }))
             .collect::<Vec<_>>()
             .join("; ")
     }
 
     fn links(&self, value: &str) -> Vec<Reference> {
-        if self.prs {
-            pr_links(value)
-        } else {
-            jira_links(value)
+        match self.kind {
+            Kind::Pr => pr_links(value),
+            Kind::Jira => jira_links(value),
+            Kind::Document => hyperlinks::document_links(value),
         }
     }
 
@@ -99,7 +117,12 @@ impl ReferenceEditor {
             .filter(|token| !token.is_empty())
             .collect();
         if links.is_empty() || tokens.iter().any(|token| self.links(token).is_empty()) {
-            self.error = "Use a number, ID, or Jira/PR URL".into();
+            self.error = if self.kind == Kind::Document {
+                "Use an http:// or https:// document URL"
+            } else {
+                "Use a number, ID, or Jira/PR URL"
+            }
+            .into();
             return false;
         }
         let (group, entry) = self.rows()[self.selected];
@@ -109,10 +132,10 @@ impl ReferenceEditor {
         }
         let mut insert_at = entry.min(entries.len());
         for link in links {
-            let url = if self.prs {
-                hyperlinks::normalize_prs(&link.url)
-            } else {
-                hyperlinks::normalize_jira(&link.url)
+            let url = match self.kind {
+                Kind::Pr => hyperlinks::normalize_prs(&link.url),
+                Kind::Jira => hyperlinks::normalize_jira(&link.url),
+                Kind::Document => link.url,
             };
             if !entries.contains(&url)
                 && !self
@@ -238,10 +261,10 @@ impl ReferenceEditor {
             Constraint::Length(2),
         ])
         .areas(area);
-        let title = if self.prs {
-            "PR chains · base PR first"
-        } else {
-            "Jira tickets"
+        let title = match self.kind {
+            Kind::Pr => "PR chains · base PR first",
+            Kind::Jira => "Jira tickets",
+            Kind::Document => "Design documents",
         };
         let block = Block::default().title(title).borders(Borders::ALL);
         let inner = block.inner(body);
@@ -259,19 +282,25 @@ impl ReferenceEditor {
             let text = if group == self.groups.len() {
                 "+ Add chain".to_string()
             } else if entry == self.groups[group].len() {
-                if self.prs {
-                    format!("Chain {}  + Add PR", group + 1)
-                } else {
-                    "+ Add Jira".into()
+                match self.kind {
+                    Kind::Pr => format!("Chain {}  + Add PR", group + 1),
+                    Kind::Jira => "+ Add Jira".into(),
+                    Kind::Document => "+ Add document".into(),
                 }
             } else {
                 let value = &self.groups[group][entry];
-                let label = self
-                    .links(value)
-                    .first()
+                let links = if self.kind == Kind::Document {
+                    self.links(&self.value())
+                } else {
+                    self.links(value)
+                };
+                let label = links
+                    .iter()
+                    .find(|link| link.url == *value)
+                    .or_else(|| links.first())
                     .map(|link| link.label.clone())
                     .unwrap_or_else(|| value.clone());
-                if self.prs {
+                if self.kind == Kind::Pr {
                     if entry == 0 {
                         format!("Chain {}  {label}", group + 1)
                     } else {

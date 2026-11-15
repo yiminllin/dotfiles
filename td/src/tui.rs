@@ -171,7 +171,7 @@ impl Form {
 
     fn field_count(&self) -> usize {
         if self.values[1] == "work" {
-            9
+            10
         } else if self.values[1] == "improve" {
             6
         } else {
@@ -202,7 +202,7 @@ impl Form {
     fn help(&self) -> &'static str {
         if self.references.is_some() {
             "Enter add/edit  Tab back to form  Esc cancel input/back"
-        } else if matches!(self.active, 6 | 7) {
+        } else if matches!(self.active, 6 | 7 | 9) {
             "Enter manage references  Tab next  :wq save  Esc cancel"
         } else if !self.is_text() {
             "Arrows/Space cycle  Letter select  Enter/Tab next  :wq save  Esc cancel"
@@ -397,28 +397,34 @@ impl Form {
 
 fn open_reference_editor(form: &mut Form) {
     if form.references.is_none() {
-        form.references = Some(references::ReferenceEditor::new(
-            if form.active == 7 {
-                &form.work.prs
-            } else {
-                &form.work.jira
-            },
-            form.active == 7,
-        ));
+        form.references = Some(if form.active == 9 {
+            references::ReferenceEditor::documents(&form.work.design_docs)
+        } else {
+            references::ReferenceEditor::new(
+                if form.active == 7 {
+                    &form.work.prs
+                } else {
+                    &form.work.jira
+                },
+                form.active == 7,
+            )
+        });
     }
 }
 
 fn handle_reference_key(form: &mut Form, key: KeyCode) {
     if form.references.as_mut().unwrap().key(key) {
         let editor = form.references.take().unwrap();
-        if form.active == 7 {
+        if form.active == 9 {
+            form.work.design_docs = editor.value();
+        } else if form.active == 7 {
             form.work.prs = editor.value();
         } else {
             form.work.jira = editor.value();
         }
         if matches!(key, KeyCode::Tab | KeyCode::BackTab) {
             form.active = if key == KeyCode::Tab {
-                form.active + 1
+                (form.active + 1) % form.field_count()
             } else {
                 form.active - 1
             };
@@ -542,6 +548,7 @@ impl App {
                                 && ([
                                     &view.task.work.jira,
                                     &view.task.work.prs,
+                                    &view.task.work.design_docs,
                                     &view.task.work.notes,
                                 ]
                                 .iter()
@@ -573,7 +580,11 @@ impl App {
         {
             self.visible_tasks()
                 .iter()
-                .flat_map(|view| pr_links(&view.task.work.prs))
+                .flat_map(|view| {
+                    pr_links(&view.task.work.prs)
+                        .into_iter()
+                        .chain(hyperlinks::document_links(&view.task.work.design_docs))
+                })
                 .map(|reference| reference.url)
                 .collect()
         } else {
@@ -695,7 +706,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
             } else if matches!(app.mode, Mode::Search | Mode::Command(_)) {
                 app.input.push_str(value);
             } else if matches!(app.mode, Mode::Form(_)) {
-                if matches!(app.form.active, 6 | 7) {
+                if matches!(app.form.active, 6 | 7 | 9) {
                     open_reference_editor(&mut app.form);
                     app.form.references.as_mut().unwrap().paste(value);
                 } else if app.form.is_text() {
@@ -804,7 +815,12 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         app.g_pressed = false;
         let urls: Vec<_> = app
             .selected_task()
-            .map(|view| pr_links(&view.task.work.prs))
+            .map(|view| {
+                pr_links(&view.task.work.prs)
+                    .into_iter()
+                    .chain(hyperlinks::document_links(&view.task.work.design_docs))
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default()
             .into_iter()
             .map(|reference| reference.url)
@@ -829,7 +845,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                 handle_reference_key(&mut app.form, key);
                 return Ok(false);
             }
-            if matches!(app.form.active, 6 | 7)
+            if matches!(app.form.active, 6 | 7 | 9)
                 && (key == KeyCode::Enter || matches!(key, KeyCode::Char(ch) if ch != ':'))
             {
                 open_reference_editor(&mut app.form);
@@ -838,7 +854,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                 }
                 return Ok(false);
             }
-            if matches!(app.form.active, 6 | 7)
+            if matches!(app.form.active, 6 | 7 | 9)
                 && !matches!(
                     key,
                     KeyCode::Esc | KeyCode::Tab | KeyCode::BackTab | KeyCode::Char(':')
@@ -1190,7 +1206,12 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
     let is_work = project == "work";
     let is_improve = project == "improve";
     let mut work = app.form.work.clone();
-    for value in [&mut work.jira, &mut work.prs, &mut work.notes] {
+    for value in [
+        &mut work.jira,
+        &mut work.prs,
+        &mut work.design_docs,
+        &mut work.notes,
+    ] {
         *value = value.trim().to_string();
     }
     if is_work {
@@ -1766,6 +1787,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         4 => "State: 1-4 or arrows; Enter continues",
         6 => "Jira: Enter to manage tickets; Tab continues",
         7 => "PRs: Enter to manage chains; Tab continues",
+        9 => "Design docs: Enter to manage links; Tab continues",
         _ => "Description required | - means unset",
     };
     let block = Block::default()
@@ -1784,6 +1806,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         "Jira",
         "PR chains",
         "Notes",
+        "Design docs",
     ];
     let (description_lines, description_cursor) =
         wrapped_form_description(form, inner.width as usize);
@@ -1870,7 +1893,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                     let category = WorkCategory::ALL[choice];
                     let (shortcut, description) = match category {
                         WorkCategory::Feature => ('f', "Build, fix or investigate"),
-                        WorkCategory::Review => ('r', "Review a PR; track replies"),
+                        WorkCategory::Review => ('r', "Review PRs or design docs; track replies"),
                         WorkCategory::Design => ('d', "Explore ideas or learn"),
                         WorkCategory::Administrative => ('a', "Tickets, messages, housekeeping"),
                         WorkCategory::Uncategorized => ('u', "Decide later"),
@@ -1936,6 +1959,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                 }
             }
             8 => &form.work.notes,
+            9 => &form.work.design_docs,
             _ => &form.values[index],
         };
         if index == form.active && form.is_text() {
@@ -2170,7 +2194,7 @@ mod tests {
         assert!(screen.contains("Category"));
         app.select_project(Some("work"));
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
-        assert_eq!(app.form.field_count(), 9);
+        assert_eq!(app.form.field_count(), 10);
         app.form.values[1] = "code".into();
         assert_eq!(app.form.field_count(), 5);
     }

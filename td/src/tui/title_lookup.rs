@@ -1,5 +1,5 @@
 use std::{
-    io::Read,
+    io::{Read, Write},
     process::{Child, Command, Stdio},
     sync::{
         mpsc::{self, Receiver},
@@ -9,12 +9,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+use base64::{engine::general_purpose::STANDARD, Engine};
+
 use super::hyperlinks::jira_links;
 
 pub(super) enum Source {
     Pr,
     Jira,
-    Document,
 }
 
 pub(super) fn start(source: Source, reference: String) -> Receiver<Option<String>> {
@@ -62,25 +63,76 @@ fn lookup_title(source: Source, reference: &str) -> Option<String> {
                 .as_str()?
                 .to_string()
         }
-        Source::Document => {
-            command = Command::new("curl");
-            command.args([
-                "--fail",
-                "--silent",
-                "--location",
-                "--max-time",
-                "4",
-                "--proto",
-                "=http,https",
-                "--proto-redir",
-                "=http,https",
-                "--",
-                reference,
-            ]);
-            html_title(&bounded_output(command)?)?
-        }
     };
     clean_title(&output)
+}
+
+pub(super) fn document_title(reference: &str, request: &Request) -> Option<String> {
+    if let Some(page) = confluence_page_id(reference) {
+        return confluence_title(page, request);
+    }
+    let mut command = Command::new("curl");
+    command.args([
+        "--fail",
+        "--silent",
+        "--location",
+        "--max-time",
+        "4",
+        "--proto",
+        "=http,https",
+        "--proto-redir",
+        "=http,https",
+        "--",
+        reference,
+    ]);
+    clean_title(&html_title(&request.output(command)?)?)
+}
+
+fn confluence_page_id(reference: &str) -> Option<&str> {
+    let path = reference.strip_prefix("https://flyzipline.atlassian.net/wiki/")?;
+    let (path, query) = path.split_once('?').unwrap_or((path, ""));
+    let page = path
+        .split_once("/pages/")
+        .map(|(_, rest)| rest.split(['/', '#']).next().unwrap_or(""))
+        .or_else(|| {
+            (path == "pages/viewpage.action")
+                .then(|| {
+                    query
+                        .split(['&', '#'])
+                        .find_map(|part| part.strip_prefix("pageId="))
+                })
+                .flatten()
+        })?;
+    (!page.is_empty() && page.chars().all(|ch| ch.is_ascii_digit())).then_some(page)
+}
+
+fn confluence_title(page: &str, request: &Request) -> Option<String> {
+    let user = std::env::var("JIRA_API_USERNAME").ok()?;
+    let token = std::env::var("JIRA_API_TOKEN").ok()?;
+    let authorization = format!(
+        "Authorization: Basic {}\n",
+        STANDARD.encode(format!("{user}:{token}"))
+    );
+    let mut command = Command::new("curl");
+    // Keep credentials off argv and never forward them through redirects.
+    command.args([
+        "--disable",
+        "--fail",
+        "--silent",
+        "--max-time",
+        "4",
+        "--proto",
+        "=https",
+        "--header",
+        "@-",
+        "--header",
+        "Accept: application/json",
+        "--",
+        &format!("https://flyzipline.atlassian.net/wiki/api/v2/pages/{page}"),
+    ]);
+    let raw = request.output_with_input(command, Some(authorization.as_bytes()))?;
+    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    clean_title(value.get("title")?.as_str()?)
 }
 
 fn bounded_output(command: Command) -> Option<String> {
@@ -106,18 +158,33 @@ impl Request {
         }
     }
 
-    fn output(&self, mut command: Command) -> Option<String> {
+    fn output(&self, command: Command) -> Option<String> {
+        self.output_with_input(command, None)
+    }
+
+    fn output_with_input(&self, mut command: Command, input: Option<&[u8]>) -> Option<String> {
         let stdout = {
             let mut state = self.0.lock().ok()?;
             if state.cancelled {
                 return None;
             }
             let mut child = command
-                .stdin(Stdio::null())
+                .stdin(if input.is_some() {
+                    Stdio::piped()
+                } else {
+                    Stdio::null()
+                })
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
                 .ok()?;
+            if let Some(input) = input {
+                if child.stdin.take()?.write_all(input).is_err() {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
+                }
+            }
             let stdout = child.stdout.take()?;
             state.child = Some(child);
             stdout
@@ -191,6 +258,38 @@ fn html_title(html: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn confluence_page_ids_require_the_approved_host_and_numeric_ids() {
+        for (url, expected) in [
+            (
+                "https://flyzipline.atlassian.net/wiki/spaces/FSW/pages/123/Design?x=1#notes",
+                Some("123"),
+            ),
+            (
+                "https://flyzipline.atlassian.net/wiki/pages/viewpage.action?pageId=456&x=1",
+                Some("456"),
+            ),
+            (
+                "https://other.atlassian.net/wiki/spaces/FSW/pages/123/Design",
+                None,
+            ),
+            (
+                "https://flyzipline.atlassian.net.evil/wiki/spaces/FSW/pages/123/Design",
+                None,
+            ),
+            (
+                "http://flyzipline.atlassian.net/wiki/spaces/FSW/pages/123/Design",
+                None,
+            ),
+            (
+                "https://flyzipline.atlassian.net/wiki/spaces/FSW/pages/no-id/Design",
+                None,
+            ),
+        ] {
+            assert_eq!(confluence_page_id(url), expected);
+        }
+    }
 
     #[test]
     fn requests_cancel_before_spawn_and_during_a_slow_fetch() {

@@ -23,7 +23,7 @@ impl Template {
             Self::PrReview => "PR review",
             Self::Improvement => "Improvement",
             Self::Feature => "Feature work",
-            Self::DocumentReview => "Document review",
+            Self::DocumentReview => "Design doc review",
         }
     }
 
@@ -39,9 +39,8 @@ impl Template {
     fn lookup_source(self) -> Option<title_lookup::Source> {
         match self {
             Self::PrReview => Some(title_lookup::Source::Pr),
-            Self::Improvement => None,
+            Self::Improvement | Self::DocumentReview => None,
             Self::Feature => Some(title_lookup::Source::Jira),
-            Self::DocumentReview => Some(title_lookup::Source::Document),
         }
     }
 
@@ -50,7 +49,7 @@ impl Template {
             Self::PrReview => "PR link or number",
             Self::Improvement => "Description",
             Self::Feature => "Jira ticket link or key",
-            Self::DocumentReview => "Document link",
+            Self::DocumentReview => "Description",
         }
     }
 }
@@ -117,6 +116,8 @@ impl QuickAdd {
     fn fields(&self) -> &[usize] {
         if self.template == Template::Improvement {
             &[0, 2, 5]
+        } else if self.template == Template::DocumentReview {
+            &[0, 9, 2]
         } else {
             &[0, 2]
         }
@@ -145,13 +146,11 @@ impl QuickAdd {
                 single_reference(&input, false).ok_or("Enter one Jira ticket link or key.")?
             }
             Template::DocumentReview => {
-                if !web_url(&input) {
-                    return Err("Enter one http:// or https:// document link.");
+                if hyperlinks::document_links(&form.work.design_docs).is_empty() {
+                    return Err("Add at least one design document link.");
                 }
-                Reference {
-                    label: input.clone(),
-                    url: input,
-                }
+                form.values[0] = input;
+                return Ok((form, String::new()));
             }
         };
         match self.template {
@@ -163,11 +162,7 @@ impl QuickAdd {
                 form.work.jira = reference.url.clone();
                 form.values[0] = reference.label;
             }
-            Template::DocumentReview => {
-                form.values[0] = format!("Review {}", reference.url);
-                form.work.notes = reference.url.clone();
-            }
-            Template::Improvement => unreachable!(),
+            Template::Improvement | Template::DocumentReview => unreachable!(),
         }
         Ok((form, reference.url))
     }
@@ -207,6 +202,10 @@ pub(super) fn paste(app: &mut App, value: &str) {
         if !quick.confirm_discard && !quick.is_saving() {
             if let Some(command) = quick.command.as_mut() {
                 command.push_str(value);
+            } else if quick.form.active == 9 {
+                open_reference_editor(&mut quick.form);
+                quick.form.references.as_mut().unwrap().paste(value);
+                quick.error.clear();
             } else if quick.form.is_text() {
                 for ch in value.chars() {
                     quick.form.edit_description(KeyCode::Char(ch));
@@ -289,6 +288,36 @@ pub(super) fn handle_key(app: &mut App, key: KeyCode) -> Result<()> {
         }
         return Ok(());
     }
+    if quick.form.references.is_some() {
+        handle_reference_key(&mut quick.form, key);
+        if quick.form.references.is_none() && matches!(key, KeyCode::Tab | KeyCode::BackTab) {
+            let count = quick.fields().len();
+            let step = if key == KeyCode::BackTab {
+                count - 1
+            } else {
+                1
+            };
+            quick.focus((quick.active + step) % count);
+        }
+        return Ok(());
+    }
+    if quick.form.active == 9
+        && (key == KeyCode::Enter || matches!(key, KeyCode::Char(ch) if ch != ':'))
+    {
+        open_reference_editor(&mut quick.form);
+        if key != KeyCode::Enter {
+            handle_reference_key(&mut quick.form, key);
+        }
+        return Ok(());
+    }
+    if quick.form.active == 9
+        && !matches!(
+            key,
+            KeyCode::Esc | KeyCode::Tab | KeyCode::BackTab | KeyCode::Char(':')
+        )
+    {
+        return Ok(());
+    }
     match key {
         KeyCode::Esc if quick.form.is_text() && quick.form.insert => {
             quick.form.insert = false;
@@ -331,8 +360,16 @@ fn submit(app: &mut App) -> Result<()> {
         Ok(value) => value,
         Err(error) => {
             quick.error = error.into();
-            quick.focus(0);
-            quick.form.insert = true;
+            quick.focus(
+                if quick.template == Template::DocumentReview
+                    && !quick.form.values[0].trim().is_empty()
+                {
+                    1
+                } else {
+                    0
+                },
+            );
+            quick.form.insert = quick.form.is_text();
             return Ok(());
         }
     };
@@ -464,13 +501,28 @@ pub(super) fn draw(frame: &mut Frame, app: &App) {
         );
         return;
     }
+    if let Some(editor) = &quick.form.references {
+        editor.draw(
+            frame,
+            Rect::new(body.x, body.y, body.width, body.height + footer.height),
+        );
+        return;
+    }
     let mut form = quick.form.clone();
     form.active = if quick.active == 0 { 0 } else { 2 };
     let (mut lines, cursor) =
         wrapped_form_text(&form, body.width as usize, quick.template.input_label());
+    let documents_row = lines.len();
+    if quick.template == Template::DocumentReview {
+        let count = hyperlinks::document_links(&quick.form.work.design_docs).len();
+        lines.push(Line::from(format!(
+            "{} Design docs: {count} links · Enter to manage",
+            if quick.form.active == 9 { ">" } else { " " }
+        )));
+    }
     let priority_row = lines.len();
     let priority = &quick.form.values[2];
-    lines.push(if quick.active == 1 {
+    lines.push(if quick.form.active == 2 {
         form_choice_line("Priority", 2, priority, PRIORITIES)
     } else {
         Line::from(vec![
@@ -504,7 +556,8 @@ pub(super) fn draw(frame: &mut Frame, app: &App) {
     }
     let focus = match quick.active {
         0 => cursor.1,
-        1 => priority_row,
+        _ if quick.form.active == 9 => documents_row,
+        _ if quick.form.active == 2 => priority_row,
         _ => {
             let choice = if body.height as usize > ImproveCategory::ALL.len() {
                 ImproveCategory::ALL.len() - 1
@@ -585,7 +638,7 @@ mod tests {
                 Template::PrReview => "[P]R review",
                 Template::Improvement => "[I]mprovement",
                 Template::Feature => "[F]eature work",
-                Template::DocumentReview => "[D]ocument review",
+                Template::DocumentReview => "[D]esign doc review",
             };
             assert!(text.contains(label));
             super::super::handle_key(&mut app, KeyCode::Char(template.shortcut())).unwrap();
@@ -615,11 +668,6 @@ mod tests {
                 "66561",
                 "https://flyzipline.atlassian.net/browse/FSW-66561",
             ),
-            (
-                Template::DocumentReview,
-                "https://example.com/doc?q=1#section",
-                "https://example.com/doc?q=1#section",
-            ),
         ] {
             let mut quick = QuickAdd::new(template);
             quick.form.values[0] = input.into();
@@ -642,6 +690,45 @@ mod tests {
             quick.form.values[0] = input.into();
             assert!(quick.prepare().is_err(), "{input}");
         }
+    }
+
+    #[test]
+    fn document_template_saves_description_and_multiple_links_without_title_lookup() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        enter(&mut app, 'd', "Review the API and rollout plan");
+        assert!(
+            app.quick_add.as_ref().unwrap().prepare().is_err(),
+            "document links are required"
+        );
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        assert_eq!(app.quick_add.as_ref().unwrap().form.active, 9);
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        paste(&mut app, "https://example.com/design\nhttps://example.com/review#notes\nhttps://example.com/design");
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        assert_eq!(app.quick_add.as_ref().unwrap().form.active, 2);
+        assert!(app.quick_add.as_ref().unwrap().form.references.is_none());
+        handle_key(&mut app, KeyCode::Char('h')).unwrap();
+        handle_key(&mut app, KeyCode::BackTab).unwrap();
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        paste(&mut app, "file:///invalid");
+        assert!(app.quick_add.as_ref().unwrap().form.references.is_some());
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        run_command(&mut app, ":wq");
+        assert!(
+            app.quick_add.is_none(),
+            "saving does not wait for document title lookup"
+        );
+        let tasks = load_tasks(&app.path).unwrap();
+        let task = tasks.values().next().unwrap();
+        assert_eq!(task.description, "Review the API and rollout plan");
+        assert_eq!(
+            task.work.design_docs,
+            "https://example.com/design https://example.com/review#notes"
+        );
+        assert_eq!(task.priority.as_deref(), Some("H"));
+        assert!(task.work.notes.is_empty());
     }
 
     #[test]
@@ -682,6 +769,9 @@ mod tests {
                 )
                 .unwrap();
                 super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
+                if app.quick_add.as_ref().unwrap().form.references.is_some() {
+                    super::super::handle_key(&mut app, KeyCode::Tab).unwrap();
+                }
                 assert!(!app.quick_add.as_ref().unwrap().is_saving());
                 assert!(load_tasks(&app.path).unwrap().is_empty());
             }
@@ -761,18 +851,6 @@ mod tests {
             ('1', "42", None, "Review #42"),
             ('3', "FSW-123", Some("Feature summary"), "Feature summary"),
             ('3', "FSW-123", None, "FSW-123"),
-            (
-                '4',
-                "https://example.com/doc",
-                Some("Design document"),
-                "Review Design document",
-            ),
-            (
-                '4',
-                "https://example.com/doc",
-                None,
-                "Review https://example.com/doc",
-            ),
         ] {
             let dir = tempdir().unwrap();
             let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
@@ -804,7 +882,6 @@ mod tests {
                     assert!(task.work.jira.ends_with("/browse/FSW-123"));
                     assert_eq!(task.work.category, WorkCategory::Feature);
                 }
-                '4' => assert_eq!(task.work.notes, input),
                 _ => unreachable!(),
             }
         }
@@ -859,7 +936,7 @@ mod tests {
                 .iter()
                 .map(|cell| cell.symbol())
                 .collect();
-            assert!(text.contains("[D]ocument review"));
+            assert!(text.contains("[D]esign doc review"));
             for choice in ['1', '2', '3', '4'] {
                 app.mode = Mode::Templates;
                 super::super::handle_key(&mut app, KeyCode::Char(choice)).unwrap();
@@ -869,7 +946,7 @@ mod tests {
                 );
                 let fields = app.quick_add.as_ref().unwrap().fields().len();
                 for active in 0..fields {
-                    app.quick_add.as_mut().unwrap().active = active;
+                    app.quick_add.as_mut().unwrap().focus(active);
                     terminal
                         .draw(|frame| super::super::draw(frame, &mut app))
                         .unwrap();
@@ -880,12 +957,14 @@ mod tests {
                         .iter()
                         .map(|cell| cell.symbol())
                         .collect();
-                    if active == 1 {
-                        assert!(text.contains("Priority:"));
-                    }
-                    if active == 2 {
-                        assert!(text.contains("●"));
-                        assert!(text.contains("Uncategorized"));
+                    match app.quick_add.as_ref().unwrap().form.active {
+                        2 => assert!(text.contains("Priority:")),
+                        9 => assert!(text.contains("Design docs:")),
+                        5 => {
+                            assert!(text.contains("●"));
+                            assert!(text.contains("Uncategorized"));
+                        }
+                        _ => {}
                     }
                 }
             }

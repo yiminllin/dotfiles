@@ -51,7 +51,8 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
     let visible = app.visible_tasks();
     let has_titles = visible.iter().any(|view| {
         pr_links(&view.task.work.prs)
-            .iter()
+            .into_iter()
+            .chain(hyperlinks::document_links(&view.task.work.design_docs))
             .any(|reference| app.pr_titles.title(&reference.url).is_some())
     });
     let (priority_width, estimate_width, state_width, jira_width, mut prs_width) =
@@ -78,21 +79,39 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         Constraint::Length(5),
         Constraint::Min(if narrow { 4 } else { 8 }),
     ];
+    let has_documents = visible
+        .iter()
+        .any(|view| !view.task.work.design_docs.is_empty());
+    let reference_header = if has_documents { "Links" } else { "PRs" };
     let headers = if body.width >= 100 {
         [
-            "Priority", "Estimate", "Jira", "PRs", "State", "Agent", "Task",
+            "Priority",
+            "Estimate",
+            "Jira",
+            reference_header,
+            "State",
+            "Agent",
+            "Task",
         ]
     } else if body.width >= 70 {
-        ["Pri", "Est", "Jira", "PRs", "State", "Agent", "Task"]
+        [
+            "Pri",
+            "Est",
+            "Jira",
+            reference_header,
+            "State",
+            "Agent",
+            "Task",
+        ]
     } else {
-        ["P", "E", "Jira", "PRs", "State", "Agent", "Task"]
+        ["P", "E", "Jira", reference_header, "State", "Agent", "Task"]
     };
     let block = Block::default()
         .title(Line::from(vec![
             app.status_label(),
             Span::raw(format!(" | Work | filter: {}", app.filter)),
             Span::raw(if app.pr_titles.is_loading() {
-                " | refreshing PR titles"
+                " | refreshing link titles"
             } else {
                 ""
             }),
@@ -144,6 +163,26 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                 }
                 pr_lines.push(line);
             }
+        }
+        for reference in hyperlinks::document_links(&work.design_docs) {
+            let label = app
+                .pr_titles
+                .title(&reference.url)
+                .unwrap_or(&reference.label);
+            for line in wrap_description(label, columns[3].width as usize).lines {
+                row_links.push((
+                    start + pr_lines.len(),
+                    3,
+                    Reference {
+                        label: line.to_string(),
+                        url: reference.url.clone(),
+                    },
+                ));
+                pr_lines.push(line);
+            }
+        }
+        if pr_lines.is_empty() {
+            pr_lines.push(Line::from("-"));
         }
         let state_label = if narrow
             && task.status != TaskStatus::Completed
@@ -288,11 +327,11 @@ fn pr_title_lines(label: &str, title: Option<&str>, width: usize) -> Vec<Line<'s
 
 fn pr_labels(value: &str, references: &[Reference]) -> Vec<String> {
     if references.is_empty() {
-        vec![if value.trim().is_empty() {
-            "-".into()
+        if value.trim().is_empty() {
+            Vec::new()
         } else {
-            value.trim().into()
-        }]
+            vec![value.trim().into()]
+        }
     } else {
         references
             .iter()
@@ -469,6 +508,16 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
                 }
             }
         }
+        if !work.design_docs.is_empty() {
+            push("\nDESIGN DOCUMENTS", None);
+            for reference in hyperlinks::document_links(&work.design_docs) {
+                let label = app
+                    .pr_titles
+                    .title(&reference.url)
+                    .unwrap_or(&reference.label);
+                push(label, Some(&reference.url));
+            }
+        }
         if let Some(agent) = &task.agent {
             push(
                 &format!(
@@ -490,7 +539,11 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
         if !work.notes.is_empty() {
             push(&format!("\nNOTES\n{}", work.notes), None);
         }
-        if work.jira.is_empty() && work.prs.is_empty() && work.notes.is_empty() {
+        if work.jira.is_empty()
+            && work.prs.is_empty()
+            && work.design_docs.is_empty()
+            && work.notes.is_empty()
+        {
             push("\nPress e to add optional links or notes.", None);
         }
     }
@@ -547,7 +600,7 @@ mod tests {
         type_text(&mut app, "Review startup");
         handle_key(&mut app, KeyCode::Tab).unwrap();
         handle_key(&mut app, KeyCode::Char('w')).unwrap();
-        assert_eq!(app.form.field_count(), 9);
+        assert_eq!(app.form.field_count(), 10);
         for _ in 0..4 {
             handle_key(&mut app, KeyCode::Tab).unwrap();
         }
@@ -901,7 +954,7 @@ mod tests {
         );
         assert_eq!(jira_summary("FSW-12345; FSW-12346"), "2 tickets");
         let labels = |value: &str| pr_labels(value, &pr_links(value));
-        assert_eq!(labels(""), ["-"]);
+        assert!(labels("").is_empty());
         assert_eq!(
             labels("https://github.com/example/repo/pull/12345/files"),
             ["#12345"]
@@ -1039,6 +1092,74 @@ mod tests {
             "#73970"
         );
         assert_eq!(pr_title_lines("#73970", None, 27)[0].to_string(), "#73970");
+    }
+
+    #[test]
+    fn design_documents_round_trip_without_pr_placeholder_and_use_compact_fallbacks() {
+        let dir = tempfile::tempdir().unwrap();
+        let events = dir.path().join("events.jsonl");
+        let mut app = App::new(events.clone()).unwrap();
+        app.form.values = [
+            "Review designs".into(),
+            "work".into(),
+            "M".into(),
+            "H".into(),
+        ];
+        app.form.focus(9);
+        open_reference_editor(&mut app.form);
+        app.form.references.as_mut().unwrap().paste("https://example.com/design\nhttps://example.com/followup#notes\nhttps://example.com/design");
+        handle_reference_key(&mut app.form, KeyCode::Tab);
+        assert_eq!(
+            app.form.active, 0,
+            "last reference field wraps to description"
+        );
+        let docs = "https://example.com/design https://example.com/followup#notes";
+        assert_eq!(app.form.work.design_docs, docs);
+        save_form(&mut app, None).unwrap();
+        let mut app = App::new(events).unwrap();
+        app.select_project(Some("work"));
+        assert_eq!(app.selected_task().unwrap().task.work.design_docs, docs);
+        let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        assert_eq!(
+            app.row_heights,
+            [2],
+            "no empty PR placeholder before the two documents"
+        );
+        let path = dir.path().join("titles.json");
+        std::fs::write(&path, serde_json::to_vec(&serde_json::json!({
+            "https://example.com/design": {"title": "Design architecture 改善", "fetched_at": 1000}
+        })).unwrap()).unwrap();
+        app.pr_titles = pr_titles::Cache::load(path);
+        let before = std::fs::read_to_string(&app.path).unwrap();
+        for mode in [Mode::Normal, Mode::Detail] {
+            app.mode = mode;
+            let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let text: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(text.contains("Design architecture"));
+            assert!(text.contains("Doc 2"));
+            assert!(!text.contains("https://example.com"));
+            assert!(app
+                .hyperlinks
+                .iter()
+                .any(|link| link.url == "https://example.com/design"));
+            assert!(app
+                .hyperlinks
+                .iter()
+                .any(|link| link.url == "https://example.com/followup#notes"));
+            assert!(app
+                .hyperlinks
+                .iter()
+                .all(|link| link.area.right() <= 120 && link.area.bottom() <= 30));
+        }
+        assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
     }
 
     #[test]
