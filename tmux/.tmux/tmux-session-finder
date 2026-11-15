@@ -27,33 +27,59 @@ discover_repos() {
     } | awk '!/\/\./ && $0 !~ /^\/tmp(\/|$)/' | sort -u
 }
 
+discover_workspaces() {
+    local repo
+    while IFS= read -r repo; do
+        printf '%s\n' "$repo"
+        git -C "$repo" worktree list --porcelain 2>/dev/null |
+            awk '/^worktree / { sub(/^worktree /, ""); print }' || true
+    done < <(discover_repos)
+}
+
 main() {
+    if [[ $# -gt 1 || ( $# -eq 1 && $1 != --print ) ]]; then
+        echo "Usage: $(basename "$0") [--print]" >&2
+        return 1
+    fi
+    local print_only=${1:-}
     local workspaces workspace
     local -a fzf_args=(
         --cycle
         --border=bold
         --border-label ' Session Finder '
         --color 'light,bg:#fdf6e3,fg:#2e3440,bg+:#eee8d5,fg+:#2e3440,border:#ffd7af,label:#9c5f2d:bold,hl:#9c5f2d,hl+:#9c5f2d:bold,prompt:#9c5f2d,pointer:#9c5f2d,info:#657b83,footer:#657b83'
-        --footer 'Enter: open · Esc: cancel'
+        --footer 'Enter: select · Esc: cancel'
     )
 
     workspaces=$(
         printf '%s\n' '~'
-        discover_repos
+        discover_workspaces | sort -u
     )
 
-    if supports_fzf_tmux; then
+    if [[ $print_only == --print ]]; then
+        # td can already run in a popup; keep the picker in its current terminal.
+        fzf_args+=(--no-tmux --no-height)
+    elif supports_fzf_tmux; then
         fzf_args+=(--tmux=center,70%,65%)
     fi
 
-    workspace=$(printf '%s\n' "$workspaces" | fzf "${fzf_args[@]}" || true)
+    local status=0
+    workspace=$(printf '%s\n' "$workspaces" | fzf "${fzf_args[@]}") || status=$?
+    if [[ $status -ne 0 ]]; then
+        [[ $status -eq 1 || $status -eq 130 ]] && return 0
+        return "$status"
+    fi
     [[ -n $workspace ]] || exit 0
 
     if [[ $workspace == '~' ]]; then
         workspace=$HOME
     fi
 
-    exec "$script_dir/tmux-sessionizer" "$workspace"
+    if [[ $print_only == --print ]]; then
+        printf '%s\n' "$workspace"
+    else
+        exec "$script_dir/tmux-sessionizer" "$workspace"
+    fi
 }
 
 main "$@"

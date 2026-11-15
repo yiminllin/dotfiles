@@ -4,7 +4,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
     let [tabs, body, help] = Layout::vertical([
         Constraint::Length(2),
         Constraint::Min(1),
-        Constraint::Length(2),
+        Constraint::Length(3),
     ])
     .areas(frame.area());
     let categories = std::iter::once(None).chain(WorkCategory::ALL.into_iter().map(Some));
@@ -37,8 +37,16 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         Paragraph::new(Line::from(spans)).wrap(ratatui::widgets::Wrap { trim: true }),
         tabs,
     );
-    frame.render_widget(Paragraph::new("j/k move  Enter details  a add  A template  e edit  y copy  m mark  s state  S cycle  r refresh PRs  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit")
-        .style(Style::default().add_modifier(Modifier::DIM)), help);
+    let narrow = body.width < 70;
+    let hints = if narrow {
+        "c chat  C settings  Enter details  a add  e edit\nAgent: A active / I inactive / blank none\nj/k move  Tab view  p project  / search  q quit"
+    } else {
+        "c chat  C settings  Enter details  a add  A template  e edit\nj/k move  s state  S cycle  y copy  m merge  r refresh PRs  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit"
+    };
+    frame.render_widget(
+        Paragraph::new(hints).style(Style::default().add_modifier(Modifier::DIM)),
+        help,
+    );
 
     let visible = app.visible_tasks();
     let has_titles = visible.iter().any(|view| {
@@ -52,13 +60,13 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         } else if body.width >= 70 {
             (3, 3, 11, 11, 9)
         } else {
-            (1, 1, 11, 9, 6)
+            (1, 1, 9, 9, 6)
         };
     if has_titles {
-        // Leave at least eight columns for task text after table spacing.
+        // Reserve space for task text and the fixed metadata columns.
         let available = body
             .width
-            .saturating_sub(priority_width + estimate_width + jira_width + state_width + 17);
+            .saturating_sub(priority_width + estimate_width + jira_width + state_width + 23);
         prs_width = prs_width.max((body.width / 5 * 2).min(available));
     }
     let widths = [
@@ -67,14 +75,17 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         Constraint::Length(jira_width),
         Constraint::Length(prs_width),
         Constraint::Length(state_width),
-        Constraint::Min(8),
+        Constraint::Length(5),
+        Constraint::Min(if narrow { 4 } else { 8 }),
     ];
     let headers = if body.width >= 100 {
-        ["Priority", "Estimate", "Jira", "PRs", "State", "Task"]
+        [
+            "Priority", "Estimate", "Jira", "PRs", "State", "Agent", "Task",
+        ]
     } else if body.width >= 70 {
-        ["Pri", "Est", "Jira", "PRs", "State", "Task"]
+        ["Pri", "Est", "Jira", "PRs", "State", "Agent", "Task"]
     } else {
-        ["P", "E", "Jira", "PRs", "State", "Task"]
+        ["P", "E", "Jira", "PRs", "State", "Agent", "Task"]
     };
     let block = Block::default()
         .title(Line::from(vec![
@@ -94,7 +105,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         .flex(Flex::Start)
         .spacing(1)
         .split(columns_area);
-    let text_width = columns[5].width as usize;
+    let text_width = columns[6].width as usize;
     let mut rows = Vec::new();
     let mut row_links = Vec::new();
     let mut heights = Vec::new();
@@ -134,6 +145,14 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                 pr_lines.push(line);
             }
         }
+        let state_label = if narrow
+            && task.status != TaskStatus::Completed
+            && task.state == TaskState::InProgress
+        {
+            "In prog"
+        } else {
+            task.state_label()
+        };
         let description = wrap_description(&task.description, text_width);
         let height = description.lines.len().max(pr_lines.len());
         for index in 0..height {
@@ -158,13 +177,16 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                         String::new()
                     }),
                     Cell::from(pr_lines.get(index).cloned().unwrap_or_default()),
-                    Cell::from(if index == 0 { task.state_label() } else { "" }).style(
-                        if index == 0 {
-                            task_state_style(task)
-                        } else {
-                            Style::default()
-                        },
-                    ),
+                    Cell::from(if index == 0 { state_label } else { "" }).style(if index == 0 {
+                        task_state_style(task)
+                    } else {
+                        Style::default()
+                    }),
+                    if index == 0 {
+                        app.agents.cell(task)
+                    } else {
+                        Cell::default()
+                    },
                     Cell::from(line).style(description_style),
                 ])
                 .style(style),
@@ -175,6 +197,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
     if visible.is_empty() {
         for line in wrap_description("No tasks here. Press a to add one.", text_width).lines {
             rows.push(Row::new(vec![
+                Cell::default(),
                 Cell::default(),
                 Cell::default(),
                 Cell::default(),
@@ -446,6 +469,21 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
                 }
             }
         }
+        if let Some(agent) = &task.agent {
+            push(
+                &format!(
+                    "\nPI SESSION (c chat / C settings)\n{}\n{}\n{}",
+                    if agent.name.is_empty() {
+                        &task.description
+                    } else {
+                        &agent.name
+                    },
+                    agent.session_id,
+                    agent.worktree.display()
+                ),
+                None,
+            );
+        }
         if let Some(at) = &work.reviewed_at {
             push(&format!("\nLAST REVIEW ROUND\n{at}"), None);
         }
@@ -456,7 +494,7 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
             push("\nPress e to add optional links or notes.", None);
         }
     }
-    let help_text = "j/k scroll  e edit  y copy  s state  S cycle  r refresh PRs  Esc back  q quit";
+    let help_text = "c chat  C settings  j/k scroll  e edit  s state  r refresh  Esc back  q";
     let max_scroll = lines
         .len()
         .saturating_sub(inner.height as usize)
@@ -895,7 +933,8 @@ mod tests {
                 .map(|row| row.iter().map(|cell| cell.symbol()).collect())
                 .collect();
             let row = lines.iter().find(|line| line.contains("Item")).unwrap();
-            for expected in ["H", "D", "In progress", "FSW-12345", "#64310"] {
+            let state_label = if width < 70 { "In prog" } else { "In progress" };
+            for expected in ["H", "D", state_label, "FSW-12345", "#64310"] {
                 assert!(
                     row.contains(expected),
                     "missing {expected} at width {width}: {row}"
@@ -918,7 +957,7 @@ mod tests {
                 .map(|label| header.find(label).unwrap())
                 .collect();
             assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
-            let positions: Vec<_> = ["FSW-12345", "#64310", "In progress", "Item"]
+            let positions: Vec<_> = ["FSW-12345", "#64310", state_label, "Item"]
                 .iter()
                 .map(|value| row.find(value).unwrap())
                 .collect();
@@ -930,7 +969,8 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
         app.tasks[0].task.description = format!("{}LAST", "long wrapped description ".repeat(40));
         let mut small = Terminal::new(TestBackend::new(45, 12)).unwrap();
-        for _ in 0..100 {
+        small.draw(|frame| draw(frame, &mut app)).unwrap();
+        for _ in 0..app.row_heights[0] {
             small.draw(|frame| draw(frame, &mut app)).unwrap();
             handle_key_event(
                 &mut app,
@@ -1041,12 +1081,14 @@ mod tests {
             assert!(text.contains("#64310"));
             if width == 45 {
                 assert!(!text.contains("Camera"));
-                assert_eq!(app.row_heights, [2]);
+                assert_eq!(app.row_heights, [3]);
             } else {
                 assert!(text.contains("Camera"));
                 assert!(app.row_heights[0] > 2);
                 let pr_width = text.find("State").unwrap() - text.find("PRs").unwrap() - 1;
-                assert_eq!(pr_width, (width / 5 * 2) as usize);
+                assert!(pr_width <= (width / 5 * 2) as usize);
+                assert!(pr_width >= 12);
+                assert!(text.contains("Agent"));
             }
             for _ in 0..100 {
                 handle_key_event(

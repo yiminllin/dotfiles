@@ -34,7 +34,7 @@ test("progress publishes full snapshots without the dialog bridge", async (t) =>
   const loaded = await loadExtensions([progressSource], process.cwd());
   assert.deepEqual(loaded.errors, []);
   const branch = [];
-  const ctx = { mode: "tui", ui: { setWidget() {} }, sessionManager: { getBranch: () => branch } };
+  const ctx = { mode: "tui", ui: { setWidget() {} }, sessionManager: { getBranch: () => branch, getSessionId: () => "td-session-test", getCwd: () => process.cwd() } };
   loaded.runtime.appendEntry = (customType, data) => branch.push({ type: "custom", customType, data: structuredClone(data) });
   const extension = loaded.extensions[0];
   const event = async (name) => {
@@ -79,6 +79,8 @@ test("progress publishes full snapshots without the dialog bridge", async (t) =>
   const bridge = await loadExtensions([source], process.cwd(), bus);
   assert.deepEqual(bridge.errors, []);
   for (const handler of bridge.extensions[0].handlers.get("session_start")) await handler({}, ctx);
+  assert.equal(tmux("show-options", "-pqv", "-t", pane, "@pi_session_id"), "td-session-test");
+  assert.equal(tmux("show-options", "-pqv", "-t", pane, "@pi_session_owner"), String(process.pid));
   const wait = () => tmux("show-options", "-pqv", "-t", pane, "@pi_agent_input_wait");
   bus.emit("permissions:ui_prompt", { requestId: "p1" });
   bus.emit("rpiv:ask-user:blocked", { toolCallId: "q1", active: true });
@@ -86,4 +88,6 @@ test("progress publishes full snapshots without the dialog bridge", async (t) =>
   assert.equal(wait(), String(process.pid));
   bus.emit("rpiv:ask-user:blocked", { toolCallId: "q1", active: false });
   assert.equal(wait(), "");
+  for (const handler of bridge.extensions[0].handlers.get("session_shutdown")) await handler({}, ctx);
+  assert.equal(tmux("show-options", "-pqv", "-t", pane, "@pi_session_id"), "");
 });

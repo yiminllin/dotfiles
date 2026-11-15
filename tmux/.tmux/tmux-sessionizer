@@ -2,41 +2,70 @@
 
 set -euo pipefail
 
+ensure_only=0
+if [[ ${1:-} == --ensure ]]; then
+    ensure_only=1
+    shift
+fi
 if [[ $# -ne 1 ]]; then
-    echo "Usage: $(basename "$0") <path>" >&2
+    echo "Usage: $(basename "$0") [--ensure] <path>" >&2
     exit 1
 fi
 
-workspace=$1
-workspace_name=$(basename "$workspace" | tr . _)
+workspace=$(cd -- "$1" && pwd -P)
+workspace_name=$(basename "$workspace" | tr '.:' '__')
+workspace_id=
+created=0
+
+# Reuse the workspace even when its tmux session has a custom name.
+while IFS=$'\t' read -r session_id session_name session_path tagged_path; do
+    if [[ $tagged_path == "$workspace" || ( $session_name == "$workspace_name" && $session_path == "$workspace" && -z $tagged_path ) ]]; then
+        workspace_id=$session_id
+        break
+    fi
+done < <(tmux list-sessions -F $'#{session_id}\t#{session_name}\t#{session_path}\t#{@workspace_path}' 2>/dev/null || true)
 
 shell_window=" shell"
 agent_window="󰚩 agent"
 code_window=" code"
 
+if [[ -z $workspace_id ]]; then
+    base_name=$workspace_name
+    index=2
+    while tmux has-session -t="${workspace_name}" 2>/dev/null; do
+        workspace_name="$base_name-$index"
+        index=$((index + 1))
+    done
+    workspace_id=$(tmux new-session -d -P -F '#{session_id}' -s "$workspace_name" -n "$shell_window" -c "$workspace")
+    created=1
+fi
+tmux set-option -t "$workspace_id" @workspace_path "$workspace"
+
+if [[ $ensure_only == 1 ]]; then
+    printf '%s\n' "$workspace_id"
+    exit 0
+fi
+
 create_window() {
     local name=$1
     local command=${2:-}
 
-    tmux new-window -t "$workspace_name" -n "$name" -c "$workspace"
-
-    if [[ -n "$command" ]]; then
-        tmux send-keys -t "$workspace_name:$name" "$command" C-m
+    tmux new-window -t "$workspace_id:" -n "$name" -c "$workspace"
+    if [[ -n $command ]]; then
+        tmux send-keys -t "$workspace_id:$name" "$command" C-m
     fi
 }
 
-if ! tmux has-session -t="$workspace_name" 2>/dev/null; then
-    tmux new-session -ds "$workspace_name" -n "$shell_window" -c "$workspace"
+if [[ $created == 1 ]]; then
     create_window "$agent_window"
-    tmux set-option -pt "$workspace_name:$agent_window" @pi_agent_name "$workspace_name"
-    tmux send-keys -t "$workspace_name:$agent_window" 'pi' C-m
+    tmux set-option -pt "$workspace_id:$agent_window" @pi_agent_name "$workspace_name"
+    tmux send-keys -t "$workspace_id:$agent_window" 'pi' C-m
     create_window "$code_window"
-
-    tmux select-window -t "$workspace_name:$agent_window"
+    tmux select-window -t "$workspace_id:$agent_window"
 fi
 
 if [[ -n ${TMUX:-} ]]; then
-    tmux switch-client -t "$workspace_name"
+    tmux switch-client -t "$workspace_id"
 else
-    tmux attach-session -t "$workspace_name"
+    tmux attach-session -t "$workspace_id"
 fi

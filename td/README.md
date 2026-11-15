@@ -52,6 +52,93 @@ creations, and updates without a preceding task creation.
 `~/.cargo/bin` with `cargo install --path "$SCRIPT_DIR/td" --root "$HOME/.cargo" --locked`.
 It does not use sudo or install a crates.io package named `td`.
 
+## Task agents
+
+Save a task, then press `c` (chat) to open its Pi agent. On first use, this opens
+settings without a picker. `C` opens the same settings later; there is no separate
+`E` action. Names default to `review-123` for PR reviews or the first two task-title
+words (up to 24 characters).
+
+`Tab` changes fields:
+- **Worktree:** `Enter` opens Session Finder. `F2` or `Ctrl-P` also browses;
+  you can type a path instead.
+- **Session ID:** `Enter` opens Agent Board to link a running session. Use arrows
+  and `Enter`, or a number `1`–`9`, to choose. `Esc` or `q` returns to settings
+  without changes. Selection saves its exact ID, worktree, and displayed name,
+  then returns to settings. It does not launch, move, rename, or jump to Pi.
+- **Session ID with a saved link:** `dd` immediately unlinks it and clears the
+  field and Agent column. Pi keeps running, and its history stays intact.
+- **Agent name:** `Enter` focuses **Save settings**. Saving validates the path and
+  name and stores a session ID without launching Pi. Press `c` afterward to launch,
+  resume, or jump. `C` never launches Pi.
+
+Leave Session ID blank for a new session, or paste a full, exact session ID.
+`Ctrl-U` clears a field. `Esc` closes settings and discards draft edits; applied
+links and unlinks remain saved. To jump to a linked agent, close settings and
+press `c`. If identity metadata is missing, run `/reload` in that Pi session.
+
+The picker uses `~/.tmux/tmux-session-finder --print` with `fd` and `fzf`. It runs
+in the current terminal, including inside the td popup; it does not open a nested
+popup, invoke sessionizer, or create workspace windows.
+
+Each task saves one Pi session ID, worktree path, and agent name. Subsequent `c`
+presses jump to the live Pi pane or reopen it without setup prompts. This works
+from every dashboard. With prefix + `T`, the popup closes after a successful
+launch or jump so the destination is visible.
+
+New windows go into the selected worktree's tmux workspace, not the calling
+session. `tmux-sessionizer --ensure` reuses a workspace by path or creates a tmux
+session with one shell window. It creates no Git worktree or extra Pi agent.
+Workspace names start with the directory name; different paths with the same
+name get separate sessions. Existing running agents are reused in place.
+
+Generic tasks open `pi --session-id <id> --name <name>` without an initial task
+message. PR-review tasks with one PR run Fish `review <PR-number-or-URL>` instead:
+Diffview and its Pi assistant share the review window. This uses the review CLI's
+normal bootstrap and preserves the task's Pi session ID and name. Saving the PR
+review template never launches anything; press `c` when ready.
+
+Agent Board shows the confirmed name. Windows use `󰚩 agent-1`, `󰚩 review-1`, etc.,
+choosing the first free number in the destination workspace. Older unnamed links
+use the short default. Existing windows are not renamed when jumping.
+
+Every dashboard, including **All projects**, shows **Agent** immediately after
+**State**. It refreshes about once per second:
+- **A** (green): the linked Pi session is running in tmux.
+- **I** (amber): a session is saved but not detected running in tmux.
+- **Blank**: no session is linked.
+
+Narrow Work dashboards shorten **In progress** to **In prog** to keep PR IDs and
+the **Agent** header readable.
+
+Run `td` inside tmux. This does not create Git worktrees or switch branches.
+The review CLI may fetch the PR and base refs. Existing Pi sessions need `/reload`
+once to publish their identity for jumps and Active status.
+
+### Completing a task with an agent
+
+`d` (or `td done <task-id>`) asks before completing an item with a running Pi in
+its current tmux server. Confirming closes its td-created window, including
+Diffview and every other pane. This interrupts Pi and can discard unsaved work.
+Without td's ownership tag, only the Pi pane closes. This includes older td
+windows and externally created windows.
+
+Cancel leaves the task and session unchanged. Inactive sessions need no prompt.
+Completion keeps the saved session ID and history so `c` can reopen it. If closing
+fails after completion was saved, td reports that the item is Done but the agent
+could not be closed.
+
+```bash
+td agent <task-id> --worktree /path/to/worktree --name "Review startup" # create and open
+td agent <task-id>                              # jump or resume
+td agent <task-id> --worktree /path/to/worktree --session <pi-session-id> --link-only
+td agent <task-id> --unlink                     # keep session files
+```
+
+Associations use append-only events. Rebuild older `td` binaries before they read
+logs containing these events. Completion can close a confirmed live agent, but it
+never deletes session history.
+
 ## Urgency and ordering
 
 CLI lists and every TUI Pending view sort by Done → In progress → Next →
@@ -80,6 +167,8 @@ Update `src/urgency.rs` to change the weights.
 - `a`: open the add form
 - `A` (Shift+a): add from a preset template
 - `e`: open the edit form for the selected task
+- `c`: open or jump to the task's Pi chat
+- `C`: agent settings; Session ID + Enter links through Agent Board, `dd` unlinks
 - `y`: copy the selected task's full description to the clipboard (also in Work details).
   Uses tmux clipboard forwarding inside tmux, or OSC 52 otherwise. Your terminal
   must allow clipboard writes; this also works over SSH.

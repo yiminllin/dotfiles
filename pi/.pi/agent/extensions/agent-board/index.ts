@@ -37,11 +37,33 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", (_event, ctx) => {
     active = ctx.mode === "tui";
     pending.clear();
+    if (active) {
+      try {
+        execFileSync("tmux", [
+          "set-option", "-pt", pane, "@pi_session_id", ctx.sessionManager.getSessionId(), ";",
+          "set-option", "-pt", pane, "@pi_session_owner", String(process.pid), ";",
+          "set-option", "-pt", pane, "@pi_session_cwd", ctx.sessionManager.getCwd(),
+        ], { stdio: "ignore", timeout: 1000 });
+      } catch {
+        // Task navigation must not prevent Pi startup.
+      }
+    }
     publish();
   });
   pi.on("session_shutdown", () => {
     pending.clear();
     publish();
+    if (active) {
+      try {
+        execFileSync("tmux", [
+          "set-option", "-pt", pane, "-u", "@pi_session_id", ";",
+          "set-option", "-pt", pane, "-u", "@pi_session_owner", ";",
+          "set-option", "-pt", pane, "-u", "@pi_session_cwd",
+        ], { stdio: "ignore", timeout: 1000 });
+      } catch {
+        // The pane may already be gone.
+      }
+    }
     active = false;
   });
 }

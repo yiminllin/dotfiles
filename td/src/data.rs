@@ -53,6 +53,9 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         improve_category: Option<crate::improve::ImproveCategory>,
     },
+    TaskAgentLinked {
+        agent: Option<crate::agent::AgentSession>,
+    },
     TaskCompleted,
     TaskDeleted,
     TaskRestored,
@@ -91,6 +94,7 @@ pub struct Task {
     pub deleted_at: Option<String>,
     pub imported_uuid: Option<String>,
     pub event_count: usize,
+    pub agent: Option<crate::agent::AgentSession>,
     pub work: crate::work::WorkDetails,
     pub improve_category: crate::improve::ImproveCategory,
 }
@@ -363,6 +367,7 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
                     deleted_at: None,
                     imported_uuid: imported_uuid.clone(),
                     event_count: 1,
+                    agent: None,
                     work: crate::work::WorkDetails::default(),
                     improve_category: crate::improve::ImproveCategory::default(),
                 },
@@ -397,6 +402,13 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
                     task.work.clone_from(work);
                     task.work.legacy_state = None;
                 }
+                task.modified_at = Some(envelope.at.clone());
+                task.event_count += 1;
+            }
+        }
+        Event::TaskAgentLinked { agent } => {
+            if let Some(task) = tasks.get_mut(&envelope.task_id) {
+                task.agent.clone_from(agent);
                 task.modified_at = Some(envelope.at.clone());
                 task.event_count += 1;
             }

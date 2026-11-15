@@ -65,7 +65,7 @@
 | du-dust | Disk usage analyzer | [Cargofile](Cargofile) |
 | tokei | Line counter | [Cargofile](Cargofile) |
 | vivid | LS_COLORS generator | [Cargofile](Cargofile) |
-| td | Local JSONL task CLI/TUI | [install.sh](install.sh), [td/README.md](td/README.md) |
+| td | Local task CLI/TUI with linked Pi agents and PR reviews in worktree tmux workspaces | [install.sh](install.sh), [td/README.md](td/README.md) |
 
 ### Python Tools
 

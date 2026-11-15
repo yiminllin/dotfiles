@@ -27,12 +27,17 @@ function __review_open_pi_pane --argument-names repo_root title bootstrap_path b
 
     set -l guide_path (path dirname "$bootstrap_path")/guide.json
     set -l prompt "/skill:pr-human-review-guide The user explicitly authorizes creating and updating $guide_path and $guide_path.tmp, including outside $repo_root, for this review session. This is prior permission for those two files only; do not request it again. The requested guide also authorizes read-only GitHub queries and needed PR/base-ref fetches for this review in its repository using existing authentication, without another approval prompt. It does not authorize other writes, login, credential inspection, unrelated network access, or source/GitHub changes. Read and execute this review bootstrap, then stay in review assistant mode: $bootstrap_path"
-    set -l panes (command tmux list-panes -s -t "$caller" -F '#{pane_id}|#{@pi_agent_name}|#{@pi_review_repo}|#{pane_current_command}|#{pane_start_command}|#{pane_current_path}')
+    set -l panes (command tmux list-panes -s -t "$caller" -F '#{pane_id}|#{@pi_agent_name}|#{@pi_review_repo}|#{pane_current_command}|#{pane_start_command}|#{pane_current_path}|#{@pi_session_id}')
     for pane in $panes
         set -l fields (string split '|' -- "$pane")
         if test "$fields[2]" = "$title"; and begin
                 test "$fields[3]" = "$repo_root"; or begin
                     test -z "$fields[3]"; and test "$fields[6]" = "$repo_root"
+                end
+            end
+            if set -q TD_PI_SESSION_ID; and test -n "$TD_PI_SESSION_ID"
+                if test "$fields[7]" != "$TD_PI_SESSION_ID"
+                    continue
                 end
             end
             if test "$fields[4]" = pi; or begin
@@ -59,7 +64,11 @@ function __review_open_pi_pane --argument-names repo_root title bootstrap_path b
 
     set -l title_arg (__review_shell_string "$title")
     set -l prompt_arg (__review_shell_string "$prompt")
-    set -l launch "tmux set-option -pt \"\$TMUX_PANE\" allow-passthrough off; tmux set-option -pt \"\$TMUX_PANE\" @pi_agent_name $title_arg; tmux select-pane -t \"\$TMUX_PANE\" -T $title_arg; exec pi --name $title_arg $prompt_arg"
+    set -l session_arg
+    if set -q TD_PI_SESSION_ID; and test -n "$TD_PI_SESSION_ID"
+        set session_arg "--session-id "(__review_shell_string "$TD_PI_SESSION_ID")
+    end
+    set -l launch "tmux set-option -pt \"\$TMUX_PANE\" allow-passthrough off; tmux set-option -pt \"\$TMUX_PANE\" @pi_agent_name $title_arg; tmux select-pane -t \"\$TMUX_PANE\" -T $title_arg; exec pi --name $title_arg $session_arg $prompt_arg"
     set -l pane_id (command tmux split-window -t "$caller" -v -l 40% -d -P -F '#{pane_id}' -c "$repo_root" "$launch")
     or return 1
     command tmux set-option -pt "$pane_id" @pi_review_repo "$repo_root"
@@ -176,6 +185,9 @@ function review --description "Open Diffview immediately with a visible Pi revie
         set guide_dir "$HOME/notes/projects/$repo_key/pr-reviews/$label"
     end
     set -l title "review-$label"
+    if set -q TD_PI_AGENT_NAME; and test -n "$TD_PI_AGENT_NAME"
+        set title "$TD_PI_AGENT_NAME"
+    end
     set -l guide "$guide_dir/guide.json"
     set -l bootstrap "$guide_dir/assistant-bootstrap.md"
     set -l source_path (path resolve (status filename))

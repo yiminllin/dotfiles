@@ -22,6 +22,7 @@ FIELDS = (
     "@pi_agent_name", "pane_title", "pane_current_command", "pane_start_command",
     "@pi_agent_status", "@pi_agent_status_owner", "pane_pipe", "@pi_agent_input_wait",
     "@pi_agent_dimmed", "@pi_agent_slot", "@pi_agent_progress",
+    "@pi_session_id", "@pi_session_cwd", "@pi_session_owner",
 )
 COLORS = {"RUN": "31", "WAIT": "32", "BLOCKED": "33", "ERR": "31", "UNKNOWN": "33"}
 DIMMED_STYLE = "2;90"
@@ -178,6 +179,9 @@ class Agent:
     state: str
     dimmed: bool
     pin: list
+    pi_id: str = ""
+    worktree: str = ""
+    owner: str = ""
 
 
 def collect_agents():
@@ -220,6 +224,7 @@ def collect_agents():
                 pane["pane_id"], pane["session_id"], pane["window_id"], pane["slot"],
                 clean(pane["@pi_agent_name"] or pane["pane_title"] or f"UNNAMED {pane['pane_id']}"),
                 agent_state(pane), pane["@pi_agent_dimmed"] == "1", pin_lines(pane["@pi_agent_progress"]),
+                pane["@pi_session_id"], pane["@pi_session_cwd"], pane["@pi_session_owner"],
             ))
         return sorted(agents, key=lambda agent: agent.slot)
     finally:
@@ -338,7 +343,7 @@ def read_key():
     return key.replace("\033O", "\033[")
 
 
-def main():
+def main(select_session=False):
     def terminate(_signum, _frame):
         raise SystemExit(0)
 
@@ -346,32 +351,37 @@ def main():
     pane = os.environ.get("TMUX_PANE") or tmux("display-message", "-p", "#{pane_id}")
     client, current_window = context(pane)
     selected, offset, previous = None, 0, None
+    notice = ""
+    output = sys.stderr if select_session else sys.stdout
     by_slot = {}
     saved_tty = termios.tcgetattr(sys.stdin) if sys.stdin.isatty() else None
     try:
         if saved_tty:
             tty.setcbreak(sys.stdin)
-        sys.stdout.write("\033[?25l\033[?7l")
+        output.write("\033[?25l\033[?7l")
         while True:
             selected_pane = by_slot[selected].pane if selected in by_slot else pane
             agents = collect_agents()
             by_slot = {agent.slot: agent for agent in agents}
             selected = next((a.slot for a in agents if a.pane == selected_pane),
                             next((a.slot for a in agents if a.pane == pane), min(by_slot, default=None)))
-            columns, rows = os.get_terminal_size(sys.stdout.fileno())
+            columns, rows = os.get_terminal_size(output.fileno())
             lines, block_height = render_grid(agents, columns, selected, current_window)
             available = max(1, rows - 1)
             offset = max(0, min(offset, max(0, len(lines) - available)))
-            footer = "1–9 jump · arrows select · Enter jump · A dim · j/k/PgUp/PgDn scroll · q close"
+            footer = notice or ("1–9 link · arrows select · Enter link · j/k scroll · Esc/q cancel" if select_session
+                                else "1–9 jump · arrows select · Enter jump · A dim · j/k/PgUp/PgDn scroll · q close")
             screen = lines[offset:offset + available]
             screen += [""] * (available - len(screen))
             screen += [style(wrap(footer, max(1, columns))[0], DIMMED_STYLE)]
             content = "\r\n".join(screen)
             if (columns, rows, content) != previous:
-                sys.stdout.write("\033[H\033[J" + content)
-                sys.stdout.flush()
+                output.write("\033[H\033[J" + content)
+                output.flush()
                 previous = (columns, rows, content)
             key = read_key()
+            if key:
+                notice = ""
             if key in ("q", "\033", "\x04"):
                 return
             if key in ("j", "k", "\033[5~", "\033[6~"):
@@ -386,17 +396,23 @@ def main():
                     top = ((selected - 1) // 4) * block_height
                     if top < offset or top >= offset + available:
                         offset = top
-            elif selected and key == "A":
+            elif not select_session and selected and key == "A":
                 agent = by_slot[selected]
                 tmux("set-option", "-pt", agent.pane, "@pi_agent_dimmed", "0" if agent.dimmed else "1")
             elif (key in ("\r", "\n") and selected) or (key in "123456789" and len(key) == 1):
                 target = selected if key in ("\r", "\n") else int(key)
                 if target in by_slot:
-                    jump(by_slot[target], client)
-                    return
+                    agent = by_slot[target]
+                    if select_session:
+                        if agent.pi_id and agent.worktree and alive(agent.owner):
+                            return {"session_id": agent.pi_id, "worktree": agent.worktree, "name": agent.name}
+                        notice = "Run /reload in that Pi session, then select it again."
+                    else:
+                        jump(agent, client)
+                        return
     finally:
-        sys.stdout.write("\033[0m\033[?7h\033[?25h")
-        sys.stdout.flush()
+        output.write("\033[0m\033[?7h\033[?25h")
+        output.flush()
         if saved_tty:
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, saved_tty)
 
@@ -405,6 +421,10 @@ if __name__ == "__main__":
     try:
         if sys.argv[1:2] == ["--popup"]:
             open_popup(*sys.argv[2:])
+        elif sys.argv[1:2] == ["--select-session"]:
+            selected = main(select_session=True)
+            if selected:
+                print(json.dumps(selected))
         else:
             main()
     except (KeyboardInterrupt, BrokenPipeError):

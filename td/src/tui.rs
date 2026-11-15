@@ -29,6 +29,7 @@ use crate::improve::ImproveCategory;
 use crate::state::TaskState;
 use crate::work::{WorkCategory, WorkDetails};
 
+mod agent;
 mod clipboard;
 mod hyperlinks;
 mod pr_titles;
@@ -89,6 +90,9 @@ struct App {
     initial_form: Form,
     template_selected: usize,
     quick_add: Option<templates::QuickAdd>,
+    agent_form: agent::AgentForm,
+    agents: agent::Sessions,
+    close_target: Option<crate::agent::CloseTarget>,
     pr_titles: pr_titles::Cache,
     hyperlinks: Vec<Hyperlink>,
     clipboard: Option<String>,
@@ -450,9 +454,11 @@ enum Mode {
     Normal,
     Templates,
     QuickAdd,
+    Agent,
     Form(Option<Uuid>),
     Command(Option<Uuid>),
     ConfirmDiscard(Option<Uuid>),
+    ConfirmDone(Uuid),
     Merge,
     Search,
     Project,
@@ -484,6 +490,9 @@ impl App {
             initial_form: Form::default(),
             template_selected: 0,
             quick_add: None,
+            agent_form: agent::AgentForm::default(),
+            agents: agent::Sessions::default(),
+            close_target: None,
             pr_titles: pr_titles::Cache::default(),
             hyperlinks: Vec::new(),
             clipboard: None,
@@ -649,6 +658,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 .as_ref()
                 .is_some_and(templates::QuickAdd::is_saving);
         redraw |= app.update_pr_titles();
+        let has_agents = app.tasks.iter().any(|view| view.task.agent.is_some());
+        redraw |= app.agents.refresh(has_agents);
         if redraw {
             let painted = terminal.draw(|frame| draw(frame, &mut app))?;
             let output = hyperlinks::encode(painted.buffer, &linked_rows, &app.hyperlinks)?;
@@ -664,7 +675,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 .is_some_and(templates::QuickAdd::is_saving)
         {
             Some(std::time::Duration::from_millis(50))
-        } else if app.project == Some("work") {
+        } else if app.project == Some("work") || has_agents {
             Some(std::time::Duration::from_secs(1))
         } else {
             None
@@ -677,7 +688,9 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
         let event = event::read()?;
         redraw = true;
         if let TerminalEvent::Paste(value) = &event {
-            if matches!(app.mode, Mode::QuickAdd) {
+            if matches!(app.mode, Mode::Agent) {
+                agent::paste(&mut app, value);
+            } else if matches!(app.mode, Mode::QuickAdd) {
                 templates::paste(&mut app, value);
             } else if matches!(app.mode, Mode::Search | Mode::Command(_)) {
                 app.input.push_str(value);
@@ -699,6 +712,28 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 } else if handle_key_event(&mut app, key)? {
                     return Ok(());
                 }
+                let link_session = std::mem::take(&mut app.agent_form.link_requested);
+                let pick_worktree = std::mem::take(&mut app.agent_form.pick_requested);
+                if link_session || pick_worktree {
+                    disable_raw_mode()?;
+                    execute!(
+                        terminal.backend_mut(),
+                        DisableBracketedPaste,
+                        LeaveAlternateScreen
+                    )?;
+                    if link_session {
+                        agent::pick_session(&mut app)?;
+                    } else {
+                        agent::pick_worktree(&mut app);
+                    }
+                    execute!(
+                        terminal.backend_mut(),
+                        EnterAlternateScreen,
+                        EnableBracketedPaste
+                    )?;
+                    enable_raw_mode()?;
+                    terminal.clear()?;
+                }
                 if let Some(description) = app.clipboard.take() {
                     clipboard::copy(terminal.backend_mut(), &description)?;
                 }
@@ -710,6 +745,14 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Result<bool> {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         app.g_pressed = false;
+        if matches!(app.mode, Mode::Agent) {
+            app.agent_form.unlink_pending = false;
+            match key.code {
+                KeyCode::Char('u') => agent::clear_field(app),
+                KeyCode::Char('p') => app.agent_form.pick_requested = true,
+                _ => {}
+            }
+        }
         if matches!(app.mode, Mode::Normal | Mode::Merge) {
             match key.code {
                 KeyCode::Char('u' | 'U') => app.move_half_page(false),
@@ -723,6 +766,37 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Result<bool> {
 }
 
 fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
+    if let Mode::ConfirmDone(id) = app.mode {
+        match key {
+            KeyCode::Char('y' | 'Y') => {
+                if let Some(task) = app.tasks.iter().find(|view| view.task.id == id) {
+                    crate::agent::complete(
+                        &app.path,
+                        &task.task,
+                        app.close_target.as_ref(),
+                        "tui",
+                    )?;
+                }
+                app.close_target = None;
+                app.reload()?;
+                app.mode = Mode::Normal;
+            }
+            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('n' | 'N') => {
+                app.close_target = None;
+                app.mode = Mode::Normal;
+            }
+            _ => {}
+        }
+        return Ok(false);
+    }
+    if matches!(app.mode, Mode::Agent) {
+        agent::handle_key(app, key)?;
+        return Ok(false);
+    }
+    if matches!(app.mode, Mode::Normal | Mode::Detail) && matches!(key, KeyCode::Char('c' | 'C')) {
+        let opened = agent::begin(app, key == KeyCode::Char('C'))?;
+        return Ok(opened && std::env::var("TD_POPUP").is_ok_and(|value| value == "1"));
+    }
     if key == KeyCode::Char('r')
         && app.project == Some("work")
         && matches!(app.mode, Mode::Normal | Mode::Detail)
@@ -924,6 +998,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             KeyCode::Down | KeyCode::Up | KeyCode::Char('j' | 'k' | 'g' | 'G') => {}
             _ => return Ok(false),
         },
+        Mode::Agent | Mode::ConfirmDone(_) => unreachable!(),
         Mode::Normal => {}
     }
     let double_g = app.g_pressed && key == KeyCode::Char('g');
@@ -1221,7 +1296,16 @@ fn append_selected(app: &mut App, event: Event) -> Result<()> {
             return Ok(());
         }
         let id = task.task.id;
-        append_event(&app.path, &new_envelope(id, "tui", event)?)?;
+        if matches!(event, Event::TaskCompleted) {
+            if let Some(target) = crate::agent::close_target(&task.task)? {
+                app.close_target = Some(target);
+                app.mode = Mode::ConfirmDone(id);
+                return Ok(());
+            }
+            crate::agent::complete(&app.path, &task.task, None, "tui")?;
+        } else {
+            append_event(&app.path, &new_envelope(id, "tui", event)?)?;
+        }
         app.reload()?;
         if let Some(index) = app
             .visible_tasks()
@@ -1299,6 +1383,17 @@ fn open_state_picker(app: &mut App, detail: bool) {
 
 fn draw(frame: &mut Frame, app: &mut App) {
     app.hyperlinks.clear();
+    if matches!(app.mode, Mode::Agent) {
+        agent::draw(frame, app);
+        return;
+    }
+    if let Mode::ConfirmDone(id) = app.mode {
+        app.mode = Mode::Normal;
+        draw(frame, app);
+        app.mode = Mode::ConfirmDone(id);
+        agent::draw_done_confirmation(frame, app);
+        return;
+    }
     if matches!(app.mode, Mode::Templates | Mode::QuickAdd) {
         templates::draw(frame, app);
         return;
@@ -1326,13 +1421,17 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 !matches!(app.mode, Mode::Normal) || app.project == Some("improve"),
             )),
             Constraint::Min(1),
-            Constraint::Length(1),
+            Constraint::Length(if matches!(app.mode, Mode::Normal) {
+                2
+            } else {
+                1
+            }),
         ])
         .split(frame.area());
     let (mode, help) = match app.mode {
         Mode::Normal => (
             "",
-            "Tab view  j/k gg/G ^u/^d move  a add  A template  e edit  y copy  m mark  s state  S cycle  d done  u reopen  x delete  p project  / filter  Esc all  q",
+            "c chat  C settings  a add  A template  e edit  s state  d done  / filter\nj/k move  Tab view  p project  y copy  m merge  S cycle  u reopen  x delete  q quit",
         ),
         Mode::Form(id) => (
             if app.merge_ids.len() >= 2 {
@@ -1362,7 +1461,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
             },
             "Enter runs :wq save or :q! discard  Esc returns to the form",
         ),
-        Mode::Detail | Mode::State(_) | Mode::Templates | Mode::QuickAdd => unreachable!(),
+        Mode::Detail | Mode::State(_) | Mode::Templates | Mode::QuickAdd | Mode::Agent | Mode::ConfirmDone(_) => unreachable!(),
         Mode::Search => ("FILTER", "Enter apply  Esc cancel"),
         Mode::Project => (
             "PROJECT VIEWS: [i]mprove [w]ork [c]ode [n]ote [r]ead [o]pensource [-] no project [a]ll",
@@ -1418,7 +1517,12 @@ fn draw(frame: &mut Frame, app: &mut App) {
         chunks[2],
     );
     match app.mode {
-        Mode::Detail | Mode::State(_) | Mode::Templates | Mode::QuickAdd => {
+        Mode::Detail
+        | Mode::State(_)
+        | Mode::Templates
+        | Mode::QuickAdd
+        | Mode::Agent
+        | Mode::ConfirmDone(_) => {
             unreachable!()
         }
         Mode::Form(_) | Mode::ConfirmDiscard(_) => draw_form(frame, &app.form, chunks[1]),
@@ -1427,11 +1531,27 @@ fn draw(frame: &mut Frame, app: &mut App) {
         Mode::Normal | Mode::Project | Mode::Merge => {
             app.half_page = (chunks[1].height.saturating_sub(4) as usize / 2).max(1);
             let compact = chunks[1].width < 80;
+            let narrow = chunks[1].width < 60;
             let widths = [
-                Constraint::Length(if compact { 3 } else { 8 }),
-                Constraint::Length(if compact { 3 } else { 8 }),
+                Constraint::Length(if narrow {
+                    1
+                } else if compact {
+                    3
+                } else {
+                    8
+                }),
+                Constraint::Length(if narrow {
+                    1
+                } else if compact {
+                    3
+                } else {
+                    8
+                }),
                 Constraint::Length(11),
-                Constraint::Length(if app.project == Some("improve") && !compact {
+                Constraint::Length(5),
+                Constraint::Length(if narrow {
+                    10
+                } else if app.project == Some("improve") && !compact {
                     13
                 } else {
                     12
@@ -1476,7 +1596,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
                         ""
                     };
                     let width =
-                        (columns[4].width as usize).saturating_sub(if completed { 2 } else { 0 });
+                        (columns[5].width as usize).saturating_sub(if completed { 2 } else { 0 });
                     let mut description =
                         wrap_description(&format!("{prefix}{}", view.task.description), width);
                     if completed {
@@ -1497,6 +1617,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 .zip(descriptions)
                 .flat_map(|(view, description)| {
                     let task = &view.task;
+                    let agent = app.agents.cell(task);
                     let mut row_style = project_row_style(task.project.as_deref().unwrap_or(""));
                     if task.status == TaskStatus::Completed || task.state.is_waiting() {
                         row_style = row_style.add_modifier(Modifier::DIM);
@@ -1508,6 +1629,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
                         .map(move |(index, line)| {
                             if index > 0 {
                                 return Row::new(vec![
+                                    Cell::default(),
                                     Cell::default(),
                                     Cell::default(),
                                     Cell::default(),
@@ -1530,6 +1652,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
                                 .style(enum_style(3, estimate)),
                                 Cell::from(task.state_label())
                                     .style(work_view::task_state_style(task)),
+                                agent.clone(),
                                 Cell::from(
                                     if is_improve {
                                         task.improve_category.label()
@@ -1562,9 +1685,22 @@ fn draw(frame: &mut Frame, app: &mut App) {
             let table = Table::new(rows, widths)
                 .header(
                     Row::new([
-                        if compact { "Pri" } else { "Priority" },
-                        if compact { "Est" } else { "Estimate" },
+                        if narrow {
+                            "P"
+                        } else if compact {
+                            "Pri"
+                        } else {
+                            "Priority"
+                        },
+                        if narrow {
+                            "E"
+                        } else if compact {
+                            "Est"
+                        } else {
+                            "Estimate"
+                        },
                         "State",
+                        "Agent",
                         if app.project == Some("improve") {
                             "Category"
                         } else {

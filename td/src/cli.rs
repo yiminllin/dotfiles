@@ -61,6 +61,20 @@ enum Command {
         #[command(flatten)]
         fields: Fields,
     },
+    /// Open the task's Pi session, or link one with --worktree first.
+    Agent {
+        id: String,
+        #[arg(long)]
+        worktree: Option<PathBuf>,
+        #[arg(long, requires = "worktree", conflicts_with = "unlink")]
+        session: Option<String>,
+        #[arg(long, requires = "worktree", conflicts_with = "unlink")]
+        name: Option<String>,
+        #[arg(long, conflicts_with = "worktree")]
+        unlink: bool,
+        #[arg(long, conflicts_with = "unlink")]
+        link_only: bool,
+    },
     Done {
         id: String,
     },
@@ -132,6 +146,31 @@ pub fn run() -> Result<()> {
             }
             return Ok(());
         }
+        Command::Agent {
+            id,
+            worktree,
+            session,
+            name,
+            unlink,
+            link_only,
+        } => {
+            let id = lookup_task_id(&tasks, &id)?;
+            let task = &tasks[&id];
+            if unlink {
+                return crate::agent::save_link(&path, id, None);
+            }
+            if link_only {
+                let worktree =
+                    worktree.ok_or_else(|| anyhow::anyhow!("--link-only needs --worktree"))?;
+                let agent = crate::agent::AgentSession::new(
+                    worktree,
+                    session,
+                    name.unwrap_or_else(|| crate::agent::default_name(task)),
+                )?;
+                return crate::agent::save_link(&path, id, Some(agent));
+            }
+            return crate::agent::open(&path, task, worktree, session, name);
+        }
         Command::Show { id } => {
             let id = lookup_task_id(&tasks, &id)?;
             return print_json(&sorted_task_views([tasks[&id].clone()])[0]);
@@ -178,7 +217,32 @@ pub fn run() -> Result<()> {
                 },
             )
         }
-        Command::Done { id } => (lookup_task_id(&tasks, &id)?, Event::TaskCompleted),
+        Command::Done { id } => {
+            use std::io::Write;
+            let id = lookup_task_id(&tasks, &id)?;
+            let task = &tasks[&id];
+            let target = if task.status == TaskStatus::Pending {
+                crate::agent::close_target(task)?
+            } else {
+                None
+            };
+            if let Some(target) = &target {
+                eprint!(
+                    "Complete {:?} and close {}? This interrupts Pi; unsaved work may be lost. [y/N] ",
+                    task.description,
+                    target.label()
+                );
+                std::io::stderr().flush()?;
+                let mut answer = String::new();
+                std::io::stdin().read_line(&mut answer)?;
+                if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+                    bail!("completion cancelled");
+                }
+            }
+            crate::agent::complete(&path, task, target.as_ref(), "cli")?;
+            println!("{id}");
+            return Ok(());
+        }
         Command::Delete { id } => (lookup_task_id(&tasks, &id)?, Event::TaskDeleted),
         Command::Import {
             command: ImportCommand::Taskwarrior { export, dry_run },

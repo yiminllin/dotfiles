@@ -154,6 +154,37 @@ class GridTests(unittest.TestCase):
         self.assertTrue(ANSI.sub("", lines[height + 1]).startswith("┃ [5]"))
 
 
+class SelectionTests(unittest.TestCase):
+    def test_selection_returns_identity_without_jumping_or_dimming(self):
+        class TerminalOutput(io.StringIO):
+            def fileno(self):
+                return 2
+
+        for session_id, owner, expected in [
+            ("pi-session", str(os.getpid()), {"session_id": "pi-session", "worktree": "/work/tree", "name": "Existing agent"}),
+            ("", str(os.getpid()), None),
+            ("pi-session", "999999999", None),
+        ]:
+            output, stdout = TerminalOutput(), io.StringIO()
+            selected = agent(1, name="Existing agent", pi_id=session_id, worktree="/work/tree", owner=owner)
+            keys = ["A", "\r"] + (["\x1b"] if expected is None else [])
+            with patch.dict(os.environ, TMUX_PANE="%1"), \
+                 patch.object(board, "context", return_value=("client", "@0")), \
+                 patch.object(board, "collect_agents", return_value=[selected]), \
+                 patch.object(board, "read_key", side_effect=keys), \
+                 patch.object(board, "jump") as jump, patch.object(board, "tmux") as tmux, \
+                 patch.object(board.signal, "signal"), \
+                 patch.object(board.os, "get_terminal_size", return_value=os.terminal_size((120, 30))), \
+                 patch.object(sys, "stdin", io.StringIO()), \
+                 patch.object(sys, "stdout", stdout), patch.object(sys, "stderr", output):
+                self.assertEqual(board.main(select_session=True), expected)
+                jump.assert_not_called()
+                tmux.assert_not_called()
+            self.assertEqual(stdout.getvalue(), "")
+            if expected is None:
+                self.assertIn("Run /reload", output.getvalue())
+
+
 class SlotTests(unittest.TestCase):
     def test_actual_binding_highlights_non_first_agent_in_one_and_two_rows(self):
         binding = shlex.split(next(line for line in (SOURCE.parent.parent / ".tmux.conf").read_text().splitlines()

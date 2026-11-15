@@ -55,6 +55,8 @@ class ReviewCLI(unittest.TestCase):
         self.env = dict(os.environ, HOME=str(self.directory),
                         PATH=str(bin_dir) + os.pathsep + os.environ["PATH"],
                         REVIEW_ROOT=str(ROOT), CALLS=str(self.calls), TMUX="fixture", TMUX_PANE="%1")
+        for key in ("TD_PI_SESSION_ID", "TD_PI_AGENT_NAME"):
+            self.env.pop(key, None)
 
     def run_fish(self, command, *args):
         result = subprocess.run(["fish", "-c", 'source "$argv[1]"; ' + command,
@@ -114,6 +116,25 @@ class ReviewCLI(unittest.TestCase):
         self.assertNotIn("vim.system", nvim[2])
         self.assertIn("Diffview only", result.stderr)
         self.assertFalse((self.directory / "notes").exists())
+
+    def test_td_review_preserves_session_identity_and_name(self):
+        self.env.update(TD_PI_SESSION_ID="td-session", TD_PI_AGENT_NAME="camera")
+        self.run_fish("review 42")
+        context, _ = self.context()
+        self.assertEqual(context["assistant_name"], "camera")
+        self.calls.write_text("")
+        self.env["PANES"] = f"%9|camera|{ROOT}|pi|exec pi|{ROOT}|another-session"
+        self.run_fish('__review_open_pi_pane $argv[2..-1]', str(ROOT), "camera",
+                      "/fixture/bootstrap.md", BASE + ".." + HEAD, "0")
+        calls = self.recorded()
+        launch = next(call[-1] for call in calls if "split-window" in call)
+        self.assertIn("--session-id 'td-session'", launch)
+        self.calls.write_text("")
+        self.env.update(PANES=f"%9|camera|{ROOT}|node|exec pi --session-id td-session|{ROOT}|td-session",
+                        BOUNDARY=BASE + ".." + HEAD, SAME_WINDOW="1")
+        self.run_fish('__review_open_pi_pane $argv[2..-1]', str(ROOT), "camera",
+                      "/fixture/bootstrap.md", BASE + ".." + HEAD, "0")
+        self.assertFalse(any("split-window" in call for call in self.recorded()))
 
     def test_existing_agent_is_reused_and_refresh_is_explicit(self):
         self.env["PANES"] = "%9|review-42|" + str(ROOT) + "|pi|exec pi --name review-42"
