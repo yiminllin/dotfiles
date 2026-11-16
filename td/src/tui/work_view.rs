@@ -61,13 +61,13 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         } else if body.width >= 70 {
             (3, 3, 11, 11, 9)
         } else {
-            (1, 1, 9, 9, 6)
+            (1, 1, 8, 9, 6)
         };
     if has_titles {
         // Reserve space for task text and the fixed metadata columns.
         let available = body
             .width
-            .saturating_sub(priority_width + estimate_width + jira_width + state_width + 23);
+            .saturating_sub(priority_width + estimate_width + jira_width + state_width + 24);
         prs_width = prs_width.max((body.width / 5 * 2).min(available));
     }
     let widths = [
@@ -119,7 +119,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         .borders(Borders::ALL)
         .border_style(Style::default().add_modifier(Modifier::DIM));
     let [_, columns_area] =
-        Layout::horizontal([Constraint::Length(2), Constraint::Fill(0)]).areas(block.inner(body));
+        Layout::horizontal([Constraint::Length(3), Constraint::Fill(0)]).areas(block.inner(body));
     let columns = Layout::horizontal(widths)
         .flex(Flex::Start)
         .spacing(1)
@@ -252,42 +252,58 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
     app.selected_line = app.selected_line.min(height.saturating_sub(1));
     let selected_row = heights.iter().take(app.selected).sum::<usize>() + app.selected_line;
     app.row_heights = heights;
-    app.half_page = (body.height.saturating_sub(3) as usize / 2).max(1);
+    app.half_page = (body.height.saturating_sub(4) as usize / 2).max(1);
     app.table_state.select((!is_empty).then_some(selected_row));
     let inner = block.inner(body);
+    let rows_area = Rect::new(
+        body.x,
+        inner.y + 2,
+        body.width,
+        inner.height.saturating_sub(2),
+    );
+    let border = TaskBorder::new(&app.row_heights, app.selected);
     frame.render_stateful_widget(
-        Table::new(rows, widths)
+        Table::new(border.rows(rows), widths)
             .header(
-                Row::new(headers).style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
+                Row::new(
+                    headers
+                        .into_iter()
+                        .zip(["🚩", "⏳", "🎫", "🔗", "🔄", "🤖", "📝"])
+                        .map(|(label, icon)| {
+                            let icon = if matches!(label, "P" | "E") { "" } else { icon };
+                            Cell::from(format!("{icon}\n{label}"))
+                        }),
+                )
+                .height(2)
+                .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
             )
             .flex(Flex::Start)
             .highlight_spacing(ratatui::widgets::HighlightSpacing::Always)
             .column_spacing(1)
             .block(block)
             .highlight_symbol(Span::styled(
-                "▶ ",
+                "█▶ ",
                 Style::default()
+                    .fg(Color::Rgb(0, 51, 153))
                     .add_modifier(Modifier::BOLD)
                     .remove_modifier(Modifier::DIM),
             )),
         body,
         &mut app.table_state,
     );
+    border.draw(frame, rows_area, app.table_state.offset());
     for (row, column, reference) in row_links {
-        if let Some(relative) = row.checked_sub(app.table_state.offset()) {
-            if relative < inner.height.saturating_sub(1) as usize {
-                let area = Rect::new(
-                    columns[column].x,
-                    inner.y + 1 + relative as u16,
-                    (Line::from(reference.label.as_str()).width() as u16)
-                        .min(columns[column].width),
-                    1,
-                );
-                app.hyperlinks.push(Hyperlink {
-                    area,
-                    url: reference.url,
-                });
-            }
+        if let Some(y) = border.row_y(row, app.table_state.offset(), rows_area) {
+            let area = Rect::new(
+                columns[column].x,
+                y,
+                (Line::from(reference.label.as_str()).width() as u16).min(columns[column].width),
+                1,
+            );
+            app.hyperlinks.push(Hyperlink {
+                area,
+                url: reference.url,
+            });
         }
     }
 }
@@ -914,6 +930,7 @@ mod tests {
             .iter()
             .find(|cell| cell.symbol() == "▶")
             .unwrap();
+        assert_eq!(marker.fg, Color::Rgb(0, 51, 153));
         assert!(marker.modifier.contains(Modifier::BOLD));
         assert!(!marker.modifier.contains(Modifier::DIM));
         let green = Color::Rgb(232, 240, 228);
@@ -985,6 +1002,13 @@ mod tests {
                 .chunks(width as usize)
                 .map(|row| row.iter().map(|cell| cell.symbol()).collect())
                 .collect();
+            let icons = lines.iter().find(|line| line.contains("🎫")).unwrap();
+            for icon in ["🎫", "🔗", "🔄", "🤖", "📝"] {
+                assert!(icons.contains(icon), "missing {icon} at width {width}");
+            }
+            if width >= 70 {
+                assert!(icons.contains("🚩") && icons.contains("⏳"));
+            }
             let row = lines.iter().find(|line| line.contains("Item")).unwrap();
             let state_label = if width < 70 { "In prog" } else { "In progress" };
             for expected in ["H", "D", state_label, "FSW-12345", "#64310"] {
@@ -1369,7 +1393,11 @@ mod tests {
             .iter()
             .position(|line| line.contains("Reply to team message"))
             .unwrap();
-        assert_eq!(second, first + 1, "no blank separator between tasks");
+        assert_eq!(
+            second,
+            first + 2,
+            "only the selected task's border separates tasks"
+        );
         assert!(lines.iter().any(|line| line.contains("[4 Admin]")));
         handle_key(&mut app, KeyCode::Char('j')).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
@@ -1542,8 +1570,12 @@ mod tests {
             })
             .collect();
         assert!(
-            positions.windows(2).all(|pair| pair[1] == pair[0] + 3),
-            "three PR lines per task, without category headers or extra separators"
+            positions.windows(2).enumerate().all(|(index, pair)| {
+                let borders =
+                    usize::from(index == app.selected) + usize::from(index + 1 == app.selected);
+                pair[1] == pair[0] + 3 + borders
+            }),
+            "three PR lines per task, with borders only around the selected task"
         );
         for header in [
             "Features (1)",

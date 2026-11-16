@@ -1598,7 +1598,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 .borders(Borders::ALL)
                 .border_style(Style::default().add_modifier(Modifier::DIM));
             let [_, columns_area] =
-                Layout::horizontal([Constraint::Length(2), Constraint::Fill(0)])
+                Layout::horizontal([Constraint::Length(3), Constraint::Fill(0)])
                     .areas(block.inner(chunks[1]));
             let columns = Layout::horizontal(widths)
                 .flex(Flex::Start)
@@ -1703,44 +1703,135 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 app.row_heights.iter().take(app.selected).sum::<usize>() + app.selected_line;
             app.table_state
                 .select(if is_empty { None } else { Some(selected_row) });
-            let table = Table::new(rows, widths)
+            let border = TaskBorder::new(&app.row_heights, app.selected);
+            let rows_area = Rect::new(
+                chunks[1].x,
+                chunks[1].y + 3,
+                chunks[1].width,
+                chunks[1].height.saturating_sub(4),
+            );
+            let table = Table::new(border.rows(rows), widths)
                 .header(
-                    Row::new([
-                        if narrow {
-                            "P"
-                        } else if compact {
-                            "Pri"
-                        } else {
-                            "Priority"
-                        },
-                        if narrow {
-                            "E"
-                        } else if compact {
-                            "Est"
-                        } else {
-                            "Estimate"
-                        },
-                        "State",
-                        "Agent",
-                        if app.project == Some("improve") {
-                            "Category"
-                        } else {
-                            "Project"
-                        },
-                        "Description",
-                    ])
-                    .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))
-                    .bottom_margin(1),
+                    Row::new(
+                        [
+                            if narrow {
+                                "P"
+                            } else if compact {
+                                "Pri"
+                            } else {
+                                "Priority"
+                            },
+                            if narrow {
+                                "E"
+                            } else if compact {
+                                "Est"
+                            } else {
+                                "Estimate"
+                            },
+                            "State",
+                            "Agent",
+                            if app.project == Some("improve") {
+                                "Category"
+                            } else {
+                                "Project"
+                            },
+                            "Description",
+                        ]
+                        .into_iter()
+                        .zip(["🚩", "⏳", "🔄", "🤖", "📁", "📝"])
+                        .map(|(label, icon)| {
+                            let icon = if narrow && matches!(label, "P" | "E") {
+                                ""
+                            } else {
+                                icon
+                            };
+                            Cell::from(format!("{icon}\n{label}"))
+                        }),
+                    )
+                    .height(2)
+                    .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
                 )
                 .column_spacing(1)
                 .block(block)
                 .highlight_symbol(Span::styled(
-                    "▶ ",
+                    "█▶ ",
                     Style::default()
+                        .fg(Color::Rgb(0, 51, 153))
                         .add_modifier(Modifier::BOLD)
                         .remove_modifier(Modifier::DIM),
                 ));
             frame.render_stateful_widget(table, chunks[1], &mut app.table_state);
+            border.draw(frame, rows_area, app.table_state.offset());
+        }
+    }
+}
+
+struct TaskBorder {
+    start: usize,
+    end: usize,
+}
+
+impl TaskBorder {
+    fn new(heights: &[usize], selected: usize) -> Self {
+        let start = heights.iter().take(selected).sum();
+        Self {
+            start,
+            end: start + heights.get(selected).copied().unwrap_or(0),
+        }
+    }
+
+    fn rows<'a>(&self, rows: Vec<Row<'a>>) -> Vec<Row<'a>> {
+        rows.into_iter()
+            .enumerate()
+            .map(|(index, row)| {
+                row.top_margin(u16::from(index == self.start))
+                    .bottom_margin(u16::from(index + 1 == self.end))
+            })
+            .collect()
+    }
+
+    fn row_y(&self, index: usize, offset: usize, area: Rect) -> Option<u16> {
+        let relative = index.checked_sub(offset)?
+            + usize::from(self.start >= offset && index >= self.start)
+            + usize::from(self.end > offset && index >= self.end);
+        let height = 1 + usize::from(index + 1 == self.end);
+        (relative + height <= area.height as usize).then_some(area.y + relative as u16)
+    }
+
+    fn draw(&self, frame: &mut Frame, area: Rect, offset: usize) {
+        if self.start == self.end || self.end <= offset || area.width < 2 {
+            return;
+        }
+        let top = self
+            .start
+            .checked_sub(offset)
+            .map(|row| area.y as usize + row);
+        let bottom = area.y as usize + self.end - offset + usize::from(top.is_some());
+        let style = Style::default()
+            .fg(Color::Rgb(0, 51, 153))
+            .remove_modifier(Modifier::DIM | Modifier::CROSSED_OUT);
+        let buffer = frame.buffer_mut();
+        for y in area.y..area.bottom() {
+            let horizontal = if top == Some(y as usize) {
+                Some(("┏", "┓"))
+            } else if bottom == y as usize {
+                Some(("┗", "┛"))
+            } else {
+                None
+            };
+            if let Some((left, right)) = horizontal {
+                for x in area.x + 1..area.right() - 1 {
+                    buffer[(x, y)].set_symbol("━").set_style(style);
+                }
+                buffer[(area.x, y)].set_symbol(left).set_style(style);
+                buffer[(area.right() - 1, y)]
+                    .set_symbol(right)
+                    .set_style(style);
+            } else if top.is_none_or(|top| y as usize > top) && (y as usize) < bottom {
+                for x in [area.x, area.right() - 1] {
+                    buffer[(x, y)].set_symbol("┃").set_style(style);
+                }
+            }
         }
     }
 }
@@ -2966,7 +3057,7 @@ mod tests {
         let rows: Vec<_> = buffer
             .content
             .chunks(80)
-            .filter(|row| Some(row[1].bg) == background)
+            .filter(|row| Some(row[1].bg) == background && row[0].symbol() != "┗")
             .collect();
         assert!(rows.len() > 1);
         let description_start = rows[0]
@@ -2975,7 +3066,7 @@ mod tests {
             .unwrap()
             + 2;
         for row in &rows {
-            assert!(row[3..79]
+            assert!(row[4..79]
                 .iter()
                 .filter(|cell| Some(cell.bg) == background)
                 .all(|cell| cell.modifier.contains(Modifier::DIM)));
@@ -3266,7 +3357,7 @@ mod tests {
         }
         assert_eq!(project_row_style(""), Style::default());
         assert_eq!(project_row_style("custom"), Style::default());
-        let mut terminal = Terminal::new(TestBackend::new(80, 32)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(80, 40)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         let buffer = terminal.backend().buffer();
         let state_background = work_view::task_state_style(&app.tasks[0].task).bg;
@@ -3289,6 +3380,49 @@ mod tests {
             .content
             .iter()
             .any(|cell| cell.symbol() == "▶" && Some(cell.bg) == project_row_style("improve").bg));
+    }
+
+    #[test]
+    fn selected_task_border_follows_selection_and_encloses_wrapped_lines() {
+        for project in ["code", "work"] {
+            for width in [45, 80, 100] {
+                let dir = tempdir().unwrap();
+                let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+                for description in ["first task", "second task with wrapped text"] {
+                    app.form.values = [description.into(), project.into(), "H".into(), "D".into()];
+                    save_form(&mut app, None).unwrap();
+                }
+                app.select_project(Some(project));
+                let mut terminal = Terminal::new(TestBackend::new(width, 30)).unwrap();
+                for selected in [0, 1, 0] {
+                    app.selected = selected;
+                    app.selected_line = 0;
+                    terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+                    let buffer = terminal.backend().buffer();
+                    let corner_y = |symbol| {
+                        (0..30)
+                            .filter(|&y| {
+                                let cell = &buffer[(0, y)];
+                                cell.symbol() == symbol && cell.fg == Color::Rgb(0, 51, 153)
+                            })
+                            .collect::<Vec<_>>()
+                    };
+                    let top = corner_y("┏");
+                    let bottom = corner_y("┗");
+                    assert_eq!(top.len(), 1);
+                    assert_eq!(bottom.len(), 1);
+                    assert_eq!(bottom[0] - top[0] - 1, app.row_heights[selected] as u16);
+                    for y in top[0] + 1..bottom[0] {
+                        for x in [0, width - 1] {
+                            assert_eq!(buffer[(x, y)].symbol(), "┃");
+                            assert_eq!(buffer[(x, y)].fg, Color::Rgb(0, 51, 153));
+                        }
+                    }
+                    let marker_y = (0..30).find(|&y| buffer[(2, y)].symbol() == "▶").unwrap();
+                    assert!(top[0] < marker_y && marker_y < bottom[0]);
+                }
+            }
+        }
     }
 
     #[test]
@@ -3326,7 +3460,19 @@ mod tests {
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         let buffer = terminal.backend().buffer();
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        for header in ["Priority", "Estimate", "State", "Project", "Description"] {
+        for header in [
+            "🚩",
+            "⏳",
+            "🔄",
+            "🤖",
+            "📁",
+            "📝",
+            "Priority",
+            "Estimate",
+            "State",
+            "Project",
+            "Description",
+        ] {
             assert!(text.contains(header), "missing {header}");
         }
         assert!(!text.contains("TASK LIST"));
@@ -3347,6 +3493,7 @@ mod tests {
             .iter()
             .find(|cell| cell.symbol() == "▶")
             .unwrap();
+        assert_eq!(marker.fg, Color::Rgb(0, 51, 153));
         assert!(marker.modifier.contains(Modifier::BOLD));
         assert!(!marker.modifier.contains(Modifier::DIM));
         assert_eq!(app.table_state.selected(), Some(0));
