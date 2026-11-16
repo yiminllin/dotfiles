@@ -57,7 +57,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
     });
     let (priority_width, estimate_width, state_width, jira_width, mut prs_width) =
         if body.width >= 100 {
-            (8, 8, 12, 12, 12)
+            (3, 3, 12, 10, 10)
         } else if body.width >= 70 {
             (3, 3, 11, 11, 9)
         } else {
@@ -68,43 +68,33 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         let available = body
             .width
             .saturating_sub(priority_width + estimate_width + jira_width + state_width + 24);
-        prs_width = prs_width.max((body.width / 5 * 2).min(available));
+        prs_width = prs_width.max((body.width * 2 / 5).min(available));
     }
     let widths = [
         Constraint::Length(priority_width),
         Constraint::Length(estimate_width),
         Constraint::Length(jira_width),
-        Constraint::Length(prs_width),
         Constraint::Length(state_width),
         Constraint::Length(5),
         Constraint::Min(if narrow { 4 } else { 8 }),
+        Constraint::Length(prs_width),
     ];
     let has_documents = visible
         .iter()
         .any(|view| !view.task.work.design_docs.is_empty());
     let reference_header = if has_documents { "Links" } else { "PRs" };
-    let headers = if body.width >= 100 {
-        [
-            "Priority",
-            "Estimate",
-            "Jira",
-            reference_header,
-            "State",
-            "Agent",
-            "Task",
-        ]
-    } else if body.width >= 70 {
+    let headers = if body.width >= 70 {
         [
             "Pri",
             "Est",
             "Jira",
-            reference_header,
             "State",
             "Agent",
             "Task",
+            reference_header,
         ]
     } else {
-        ["P", "E", "Jira", reference_header, "State", "Agent", "Task"]
+        ["P", "E", "Jira", "State", "Agent", "Task", reference_header]
     };
     let block = Block::default()
         .title(Line::from(vec![
@@ -124,15 +114,15 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         .flex(Flex::Start)
         .spacing(1)
         .split(columns_area);
-    let text_width = columns[6].width as usize;
+    let text_width = columns[5].width as usize;
     let mut rows = Vec::new();
     let mut row_links = Vec::new();
     let mut heights = Vec::new();
-    for view in &visible {
+    for (task_index, view) in visible.iter().enumerate() {
         let task = &view.task;
         let work = &task.work;
         let start = rows.len();
-        let mut style = project_row_style("work");
+        let mut style = task_row_style("work", task_index).fg(Color::Rgb(104, 116, 124));
         if task.state.is_waiting() || task.status == TaskStatus::Completed {
             style = style.add_modifier(Modifier::DIM);
         }
@@ -150,11 +140,11 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         for (index, label) in pr_labels(&work.prs, &prs).into_iter().enumerate() {
             let reference = prs.get(index);
             let title = reference.and_then(|reference| app.pr_titles.title(&reference.url));
-            for line in pr_title_lines(&label, title, columns[3].width as usize) {
+            for line in pr_title_lines(&label, title, columns[6].width as usize) {
                 if let Some(reference) = reference {
                     row_links.push((
                         start + pr_lines.len(),
-                        3,
+                        6,
                         Reference {
                             label: line.to_string(),
                             url: reference.url.clone(),
@@ -169,10 +159,10 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                 .pr_titles
                 .title(&reference.url)
                 .unwrap_or(&reference.label);
-            for line in wrap_description(label, columns[3].width as usize).lines {
+            for line in wrap_description(label, columns[6].width as usize).lines {
                 row_links.push((
                     start + pr_lines.len(),
-                    3,
+                    6,
                     Reference {
                         label: line.to_string(),
                         url: reference.url.clone(),
@@ -215,7 +205,6 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                     } else {
                         String::new()
                     }),
-                    Cell::from(pr_lines.get(index).cloned().unwrap_or_default()),
                     Cell::from(if index == 0 { state_label } else { "" }).style(if index == 0 {
                         task_state_style(task)
                     } else {
@@ -226,7 +215,12 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                     } else {
                         Cell::default()
                     },
-                    Cell::from(line).style(description_style),
+                    Cell::from(line).style(task_description_style(description_style)),
+                    Cell::from(pr_lines.get(index).cloned().unwrap_or_default()).style(
+                        Style::default()
+                            .fg(Color::Rgb(114, 125, 134))
+                            .remove_modifier(Modifier::BOLD),
+                    ),
                 ])
                 .style(style),
             );
@@ -241,8 +235,8 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                 Cell::default(),
                 Cell::default(),
                 Cell::default(),
-                Cell::default(),
                 Cell::from(line),
+                Cell::default(),
             ]));
         }
     }
@@ -268,7 +262,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                 Row::new(
                     headers
                         .into_iter()
-                        .zip(["🚩", "⏳", "🎫", "🔗", "🔄", "🤖", "📝"])
+                        .zip(["🚩", "⏳", "🎫", "🔄", "🤖", "📝", "🔗"])
                         .map(|(label, icon)| {
                             let icon = if matches!(label, "P" | "E") { "" } else { icon };
                             Cell::from(format!("{icon}\n{label}"))
@@ -291,7 +285,28 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         body,
         &mut app.table_state,
     );
-    border.draw(frame, rows_area, app.table_state.offset());
+    border.draw(
+        frame,
+        rows_area,
+        app.table_state.offset(),
+        task_row_style("work", app.selected)
+            .bg
+            .unwrap_or(Color::Reset),
+    );
+    if columns[6].width > 0 {
+        let separator_x = columns[6].x - 1;
+        for row in 0..app.row_heights.iter().sum() {
+            if let Some(y) = border.row_y(row, app.table_state.offset(), rows_area) {
+                frame.buffer_mut()[(separator_x, y)]
+                    .set_symbol("│")
+                    .set_style(
+                        Style::default()
+                            .fg(Color::Rgb(157, 169, 178))
+                            .remove_modifier(Modifier::BOLD),
+                    );
+            }
+        }
+    }
     for (row, column, reference) in row_links {
         if let Some(y) = border.row_y(row, app.table_state.offset(), rows_area) {
             let area = Rect::new(
@@ -322,9 +337,16 @@ fn jira_summary(value: &str) -> String {
 }
 
 fn pr_title_lines(label: &str, title: Option<&str>, width: usize) -> Vec<Line<'static>> {
+    let number_style = Style::default()
+        .fg(Color::Rgb(76, 91, 98))
+        .remove_modifier(Modifier::BOLD);
     let indent = Line::from(label).width() + 2;
     let Some(title) = title.filter(|_| width > indent) else {
-        return wrap_description(label, width).lines;
+        return wrap_description(label, width)
+            .lines
+            .into_iter()
+            .map(|line| line.style(number_style))
+            .collect();
     };
     wrap_description(title, width - indent)
         .lines
@@ -336,7 +358,10 @@ fn pr_title_lines(label: &str, title: Option<&str>, width: usize) -> Vec<Line<'s
             } else {
                 " ".repeat(indent)
             };
-            Line::from(format!("{prefix}{line}"))
+            Line::from(vec![
+                Span::styled(prefix, number_style),
+                Span::raw(line.to_string()),
+            ])
         })
         .collect()
 }
@@ -1029,18 +1054,18 @@ mod tests {
                 .iter()
                 .find(|line| line.contains("Task") && line.contains("State"))
                 .unwrap();
-            let positions: Vec<_> = ["Jira", "PRs", "State", "Task"]
+            let positions: Vec<_> = ["Jira", "State", "Task", "PRs"]
                 .iter()
                 .map(|label| header.find(label).unwrap())
                 .collect();
             assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
-            let positions: Vec<_> = ["FSW-12345", "#64310", state_label, "Item"]
+            let positions: Vec<_> = ["FSW-12345", state_label, "Item", "#64310"]
                 .iter()
                 .map(|value| row.find(value).unwrap())
                 .collect();
             assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
             if width == 100 {
-                assert!(header.contains("Priority") && header.contains("Estimate"));
+                assert!(header.contains("Pri") && header.contains("Est"));
             }
         }
         assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
@@ -1168,6 +1193,17 @@ mod tests {
                 .map(|cell| cell.symbol())
                 .collect();
             assert!(text.contains("Design architecture"));
+            if matches!(mode, Mode::Normal) {
+                for link in &app.hyperlinks {
+                    let cell = &terminal.backend().buffer()[(link.area.x, link.area.y)];
+                    assert_eq!(cell.fg, Color::Rgb(114, 125, 134));
+                    assert!(!cell.modifier.contains(Modifier::BOLD));
+                    assert_eq!(
+                        terminal.backend().buffer()[(link.area.x - 1, link.area.y)].symbol(),
+                        "│"
+                    );
+                }
+            }
             assert!(text.contains("Doc 2"));
             assert!(!text.contains("https://example.com"));
             assert!(app
@@ -1229,9 +1265,30 @@ mod tests {
                 assert_eq!(app.row_heights, [3]);
             } else {
                 assert!(text.contains("Camera"));
+                let link = &app.hyperlinks[0];
+                let buffer = terminal.backend().buffer();
+                let number = &buffer[(link.area.x, link.area.y)];
+                let title = &buffer[(link.area.x + 8, link.area.y)];
+                assert_eq!(number.fg, Color::Rgb(76, 91, 98));
+                assert_eq!(title.fg, Color::Rgb(114, 125, 134));
+                assert!(!number.modifier.contains(Modifier::BOLD));
+                assert!(!title.modifier.contains(Modifier::BOLD));
+                assert_eq!(title.bg, project_row_style("work").bg.unwrap());
                 assert!(app.row_heights[0] > 2);
-                let pr_width = text.find("State").unwrap() - text.find("PRs").unwrap() - 1;
-                assert!(pr_width <= (width / 5 * 2) as usize);
+                let header_start = terminal
+                    .backend()
+                    .buffer()
+                    .content
+                    .windows(3)
+                    .position(|cells| {
+                        cells[0].symbol() == "P"
+                            && cells[1].symbol() == "R"
+                            && cells[2].symbol() == "s"
+                    })
+                    .unwrap()
+                    % width as usize;
+                let pr_width = width as usize - header_start - 1;
+                assert!(pr_width <= (width * 2 / 5) as usize);
                 assert!(pr_width >= 12);
                 assert!(text.contains("Agent"));
             }
@@ -1251,6 +1308,11 @@ mod tests {
                 .hyperlinks
                 .iter()
                 .all(|link| link.area.right() <= width && link.area.bottom() <= 12));
+            for link in &app.hyperlinks {
+                let separator = &terminal.backend().buffer()[(link.area.x - 1, link.area.y)];
+                assert_eq!(separator.symbol(), "│");
+                assert_eq!(separator.fg, Color::Rgb(157, 169, 178));
+            }
             assert_eq!(app.selected_task().unwrap().task.id, id);
         }
         handle_key(&mut app, KeyCode::Char('r')).unwrap();
@@ -1396,7 +1458,7 @@ mod tests {
         assert_eq!(
             second,
             first + 2,
-            "only the selected task's border separates tasks"
+            "only the selection border separates adjacent tasks"
         );
         assert!(lines.iter().any(|line| line.contains("[4 Admin]")));
         handle_key(&mut app, KeyCode::Char('j')).unwrap();
@@ -1575,7 +1637,7 @@ mod tests {
                     usize::from(index == app.selected) + usize::from(index + 1 == app.selected);
                 pair[1] == pair[0] + 3 + borders
             }),
-            "three PR lines per task, with borders only around the selected task"
+            "three PR lines per task, plus the selection border"
         );
         for header in [
             "Features (1)",

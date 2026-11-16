@@ -140,6 +140,18 @@ fn project_row_style(project: &str) -> Style {
     Style::default().bg(background).fg(Color::Rgb(76, 91, 98))
 }
 
+fn task_row_style(project: &str, index: usize) -> Style {
+    let style = project_row_style(project);
+    match style.bg {
+        Some(Color::Rgb(r, g, b)) if index % 2 == 1 => style.bg(Color::Rgb(
+            r.saturating_sub(8),
+            g.saturating_sub(8),
+            b.saturating_sub(8),
+        )),
+        _ => style,
+    }
+}
+
 #[derive(Clone, Default)]
 struct Form {
     values: [String; 4],
@@ -1606,6 +1618,12 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 .split(columns_area);
             let is_improve = app.project == Some("improve");
             let visible = app.visible_tasks();
+            let border_background = visible
+                .get(app.selected)
+                .and_then(|view| {
+                    task_row_style(view.task.project.as_deref().unwrap_or(""), app.selected).bg
+                })
+                .unwrap_or(Color::Reset);
             let is_empty = visible.is_empty();
             let descriptions: Vec<_> = visible
                 .iter()
@@ -1636,10 +1654,15 @@ fn draw(frame: &mut Frame, app: &mut App) {
             let rows: Vec<_> = visible
                 .iter()
                 .zip(descriptions)
-                .flat_map(|(view, description)| {
+                .enumerate()
+                .flat_map(|(task_index, (view, description))| {
                     let task = &view.task;
                     let agent = app.agents.cell(task);
-                    let mut row_style = project_row_style(task.project.as_deref().unwrap_or(""));
+                    let mut row_style =
+                        task_row_style(task.project.as_deref().unwrap_or(""), task_index);
+                    if row_style.bg.is_some() {
+                        row_style = row_style.fg(Color::Rgb(104, 116, 124));
+                    }
                     if task.status == TaskStatus::Completed || task.state.is_waiting() {
                         row_style = row_style.add_modifier(Modifier::DIM);
                     }
@@ -1655,7 +1678,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
                                     Cell::default(),
                                     Cell::default(),
                                     Cell::default(),
-                                    Cell::from(line),
+                                    Cell::from(line).style(task_description_style(row_style)),
                                 ])
                                 .style(row_style);
                             }
@@ -1685,7 +1708,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
                                     .to_string(),
                                 )
                                 .style(enum_style(1, project)),
-                                Cell::from(line),
+                                Cell::from(line).style(task_description_style(row_style)),
                             ])
                             .style(row_style)
                         })
@@ -1761,7 +1784,12 @@ fn draw(frame: &mut Frame, app: &mut App) {
                         .remove_modifier(Modifier::DIM),
                 ));
             frame.render_stateful_widget(table, chunks[1], &mut app.table_state);
-            border.draw(frame, rows_area, app.table_state.offset());
+            border.draw(
+                frame,
+                rows_area,
+                app.table_state.offset(),
+                border_background,
+            );
         }
     }
 }
@@ -1798,7 +1826,7 @@ impl TaskBorder {
         (relative + height <= area.height as usize).then_some(area.y + relative as u16)
     }
 
-    fn draw(&self, frame: &mut Frame, area: Rect, offset: usize) {
+    fn draw(&self, frame: &mut Frame, area: Rect, offset: usize, background: Color) {
         if self.start == self.end || self.end <= offset || area.width < 2 {
             return;
         }
@@ -1809,6 +1837,7 @@ impl TaskBorder {
         let bottom = area.y as usize + self.end - offset + usize::from(top.is_some());
         let style = Style::default()
             .fg(Color::Rgb(0, 51, 153))
+            .bg(background)
             .remove_modifier(Modifier::DIM | Modifier::CROSSED_OUT);
         let buffer = frame.buffer_mut();
         for y in area.y..area.bottom() {
@@ -1833,6 +1862,15 @@ impl TaskBorder {
                 }
             }
         }
+    }
+}
+
+fn task_description_style(style: Style) -> Style {
+    let style = style.add_modifier(Modifier::BOLD);
+    if style.bg.is_some() {
+        style.fg(Color::Rgb(15, 23, 32))
+    } else {
+        style
     }
 }
 
@@ -3057,7 +3095,7 @@ mod tests {
         let rows: Vec<_> = buffer
             .content
             .chunks(80)
-            .filter(|row| Some(row[1].bg) == background && row[0].symbol() != "┗")
+            .filter(|row| Some(row[1].bg) == background && !matches!(row[0].symbol(), "┏" | "┗"))
             .collect();
         assert!(rows.len() > 1);
         let description_start = rows[0]
@@ -3343,6 +3381,12 @@ mod tests {
             let Some(Color::Rgb(r, g, b)) = style.bg else {
                 panic!("expected project background");
             };
+            assert_eq!(task_row_style(project, 0), style);
+            assert_eq!(task_row_style(project, 2), style);
+            assert_eq!(
+                task_row_style(project, 1).bg,
+                Some(Color::Rgb(r - 8, g - 8, b - 8))
+            );
             assert!(r.min(g).min(b) > 210);
             assert!(r.max(g).max(b) - r.min(g).min(b) < 40);
             assert!(!backgrounds.contains(&style.bg));
@@ -3361,7 +3405,8 @@ mod tests {
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         let buffer = terminal.backend().buffer();
         let state_background = work_view::task_state_style(&app.tasks[0].task).bg;
-        for background in backgrounds {
+        for (index, view) in app.visible_tasks().iter().enumerate() {
+            let background = task_row_style(view.task.project.as_deref().unwrap_or(""), index).bg;
             let rows: Vec<_> = buffer
                 .content
                 .chunks(80)
@@ -3388,11 +3433,20 @@ mod tests {
             for width in [45, 80, 100] {
                 let dir = tempdir().unwrap();
                 let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
-                for description in ["first task", "second task with wrapped text"] {
+                for description in ["first task", "second task\nwith wrapped text"] {
                     app.form.values = [description.into(), project.into(), "H".into(), "D".into()];
+                    if project == "work" {
+                        app.form.work.jira = "FSW-12345".into();
+                        app.form.work.prs = "#64310".into();
+                    }
                     save_form(&mut app, None).unwrap();
                 }
                 app.select_project(Some(project));
+                let second_index = app
+                    .visible_tasks()
+                    .iter()
+                    .position(|view| view.task.description.starts_with("second task"))
+                    .unwrap();
                 let mut terminal = Terminal::new(TestBackend::new(width, 30)).unwrap();
                 for selected in [0, 1, 0] {
                     app.selected = selected;
@@ -3412,14 +3466,53 @@ mod tests {
                     assert_eq!(top.len(), 1);
                     assert_eq!(bottom.len(), 1);
                     assert_eq!(bottom[0] - top[0] - 1, app.row_heights[selected] as u16);
+                    for y in [top[0], bottom[0]] {
+                        for x in 0..width {
+                            assert_eq!(
+                                Some(buffer[(x, y)].bg),
+                                task_row_style(project, selected).bg
+                            );
+                        }
+                    }
                     for y in top[0] + 1..bottom[0] {
                         for x in [0, width - 1] {
                             assert_eq!(buffer[(x, y)].symbol(), "┃");
                             assert_eq!(buffer[(x, y)].fg, Color::Rgb(0, 51, 153));
+                            assert_eq!(
+                                Some(buffer[(x, y)].bg),
+                                task_row_style(project, selected).bg
+                            );
                         }
                     }
                     let marker_y = (0..30).find(|&y| buffer[(2, y)].symbol() == "▶").unwrap();
                     assert!(top[0] < marker_y && marker_y < bottom[0]);
+                    if width >= 80 {
+                        for label in ["second task", "with wrapped text"] {
+                            let cells = buffer
+                                .content
+                                .windows(label.len())
+                                .find(|cells| {
+                                    cells.iter().map(|cell| cell.symbol()).collect::<String>()
+                                        == label
+                                })
+                                .unwrap();
+                            assert!(cells.iter().all(|cell| {
+                                cell.fg == Color::Rgb(15, 23, 32)
+                                    && Some(cell.bg) == task_row_style(project, second_index).bg
+                                    && cell.modifier.contains(Modifier::BOLD)
+                                    && !cell.modifier.contains(Modifier::DIM)
+                            }));
+                        }
+                    }
+                    for link in &app.hyperlinks {
+                        let label: String = (link.area.x..link.area.right())
+                            .map(|x| buffer[(x, link.area.y)].symbol())
+                            .collect();
+                        assert!(matches!(label.as_str(), "FSW-12345" | "#64310"));
+                    }
+                    if project == "work" {
+                        assert_eq!(app.hyperlinks.len(), 4);
+                    }
                 }
             }
         }
