@@ -20,7 +20,7 @@ const require = createRequire(join(sdk, "package.json"));
 const { visibleWidth } = await import(pathToFileURL(require.resolve("@earendil-works/pi-tui")));
 const { Check } = await import(pathToFileURL(require.resolve("typebox/value")));
 const source = fileURLToPath(new URL("index.ts", import.meta.url));
-const theme = { fg: (_color, text) => text };
+const theme = { fg: (_color, text) => text, bold: (text) => text };
 const plan = {
   action: "set",
   goal: "Make startup reliable",
@@ -83,7 +83,13 @@ test("compact hierarchy preserves goals, colors, and nested tasks through replay
   assert.match(output, /│   ▶ Detail 1/);
   assert.doesNotMatch(output, /Detail [02]|Now|Block None|Progress ·/);
   const colors = [];
-  f.lines(ctx, 80, { fg(color, text) { colors.push([color, text]); return text; } });
+  const bold = [];
+  f.lines(ctx, 80, {
+    fg(color, text) { colors.push([color, text]); return text; },
+    bold(text) { bold.push(text); return text; },
+  });
+  for (const text of ["✓", "▶", "○", "Fix readiness handling"]) assert.ok(bold.includes(text));
+  assert.ok(!bold.includes("Identify the failure"), "Only the current label is bold");
   for (const [color, label] of [["success", "Identify"], ["warning", "Fix readiness"], ["muted", "Verify startup"]]) {
     assert.ok(colors.some(([c, text]) => c === color && text.includes(label)));
   }
@@ -100,7 +106,7 @@ test("compact hierarchy preserves goals, colors, and nested tasks through replay
   }] }));
   await f.call(ctx, { ...snapshot, blocker: "Approval" });
   const blocked = [];
-  f.lines(ctx, 80, { fg(color, text) { blocked.push([color, text]); return text; } });
+  f.lines(ctx, 80, { ...theme, fg(color, text) { blocked.push([color, text]); return text; } });
   assert.ok(blocked.some(([c, text]) => c === "error" && text.includes("Blocked: Approval")));
   for (const width of [1, 3, 12, 30]) {
     for (const line of f.lines(ctx, width)) assert.ok(visibleWidth(line) <= width);
@@ -183,7 +189,14 @@ test("collapse keeps blockers visible; headless sessions do not overwrite the pa
 test("rendering fits narrow terminals, Unicode, and long content", async () => {
   const f = await fixture();
   const ctx = f.makeContext();
-  await f.call(ctx, { ...plan, now: "检查启动状态 👩‍💻 ".repeat(8), blocker: "A long blocker ".repeat(8) });
+  await f.call(ctx, {
+    ...plan,
+    milestones: plan.milestones.map((milestone) => ({ ...milestone, label: `📦 ${milestone.label}` })),
+    now: "检查启动状态 👩‍💻 ".repeat(8),
+    blocker: "A long blocker ".repeat(8),
+  });
+  assert.match(f.lines(ctx).join("\n"), /▶ 📦 Fix readiness handling/);
+  assert.doesNotMatch(f.lines(ctx).join("\n"), /检查启动状态/);
   for (const width of [1, 2, 3, 12, 30, 80, 160]) {
     for (const line of f.lines(ctx, width)) assert.ok(visibleWidth(line) <= width, `${width}: ${line}`);
   }

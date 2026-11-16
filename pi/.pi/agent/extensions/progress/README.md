@@ -2,14 +2,19 @@
 
 A local replacement for `rpiv-todo`. The panel above the input pins a recognizable
 session title and genuine high-level outcomes, with the current milestone highlighted.
-Aim for 3–5 broad outcomes, not a chronological activity log. This is not a quota or
-hard limit. Use short labels, usually 3–7 words, without repeating the session title.
-Explicitly requested steps remain represented as milestones or tasks.
+Keep pins as short as possible for Agent Board scanning, not full plans.
+Use a descriptive 4–7 word title: topic plus intended outcome. Show a few brief
+user-visible outcomes, not engineering phases or an activity log.
+Use only these milestone emoji: 🔍 planning/investigation, 📦 deliverables,
+👀 review, 🚀 verification/submission, and 📝 documentation. Not every category
+needs a row. No emoji in titles or nested tasks. Keep ○ / ▶ / ✓ for status.
+Describe what the user gains, not how we implement it. Keep requested deliverables
+identifiable; track procedural requirements in hidden `now` context.
 Related replies and detours keep the session goal, not a fixed milestone structure.
 Pi asks for confirmation only when the title or goals are unclear.
 
-Top-level items are milestones with recognizable outcomes. Execution steps belong
-in `milestone.tasks`. As the conversation clarifies the work, Pi can rename, merge,
+Top-level items are recognizable user outcomes. Implementation details belong in
+hidden `now` context, not visible nested tasks. Pi can rename, merge,
 split, or reorder milestones. Preserve explicit requirements, dependencies, and
 meaningful completion state, not fixed labels or a row for every past pass.
 Distinct deliverables remain identifiable.
@@ -21,20 +26,26 @@ appending rows. This is model-guided regrouping, not automatic label-based rewri
 
 For example, a PR-chain roadmap can keep these outcomes across repeated passes:
 
-- Implement the frontend and scenarios.
-- Validate behavior and simplify the API.
-- Organize buildable review commits and restack the chain.
-- Submit the chain and verify remote heads.
+```text
+Frontend — independent generation and execution
+✓ 🔍 Scope agreed
+▶ 📦 Independent generation
+    ✓ Standalone output
+    ▶ Existing workflow support
+○ 📦 Independent execution
+○ 👀 Review complete
+○ 🚀 Verified and submitted
+```
 
-Cleanup, boundary checks, and resubmission belong under these outcomes, not in
-new top-level rows each time.
+Formatting, API wiring, build checks, restacking, and remote-head checks are
+implementation details, not visible milestones or nested tasks. Track an
+engineering step visibly only when the user explicitly asks to follow it.
 
-Each milestone can contain up to five optional `tasks`, but usually show only 1–3
-useful immediate steps. Five is a schema limit, not a target. Only the current
-milestone's tasks appear. Keep labels short, usually 3–7 words. Omit tasks that
-repeat the milestone or list routine formatting, review, and speculative future
-procedures. Group related checks as focused validation. Keep detailed procedures
-in conversation or hidden `now` context.
+Omit `tasks` by default. When nesting is essential to understand progress, show
+only one or two short user-relevant sub-outcomes or decisions, without emoji.
+The schema still accepts up to five tasks; only the current milestone's tasks
+appear. Completed milestones hide their nested tasks. Keep procedures in hidden `now` context
+and explain them in conversation only when useful or requested.
 
 Use `blocker` only for an actual obstacle to the current work, such as missing API
 issue details. State it briefly. Planning-only scope and unauthorized future
@@ -42,8 +53,10 @@ actions are constraints, not blockers, unless the current agreed step needs that
 authorization. Keep constraints in conversation or hidden `now` context; they
 still apply even when absent from the panel.
 
+Status markers ○ / ▶ / ✓ are bold. The current label is also bold.
 Current work uses yellow, done uses green, pending uses muted text,
-and blockers use red through the active theme. There are no separate Now or
+and blockers use red through the active theme. Agent Board uses bold status rows
+with the same colors; dimmed agents keep their dimmed style. There are no separate Now or
 Block None rows. The optional `now` field remains available as hidden context.
 Each `progress set` supplies a complete snapshot; identical snapshots are ignored.
 

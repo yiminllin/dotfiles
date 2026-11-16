@@ -232,7 +232,7 @@ def collect_agents():
 
 
 def progress_color(line):
-    return {"✓": "32", "▶": "33", "○": "90", "!": "31"}.get(line.lstrip()[:1], "39")
+    return {"✓": "1;32", "▶": "1;33", "○": "1;90", "!": "31"}.get(line.lstrip()[:1], "39")
 
 
 def render_grid(agents, columns, selected, current_window):

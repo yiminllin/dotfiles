@@ -73,7 +73,7 @@ class GridTests(unittest.TestCase):
             self.assertIn("\x1b[1;7m[1]", lines[1])
             self.assertIn("\x1b[1;38;5;235;48;2;238;220;182;4m", lines[1])
             self.assertIn("\x1b[1;4;38;5;24mGoal 1", lines[3])
-            for code, text in (("32", "✓ Inspect"), ("33", "▶ Implement"), ("90", "○ Verify"), ("31", "! Blocked: Input")):
+            for code, text in (("1;32", "✓ Inspect"), ("1;33", "▶ Implement"), ("1;90", "○ Verify"), ("31", "! Blocked: Input")):
                 self.assertIn(f"\x1b[{code}m{text}", "\n".join(lines))
             self.assertIn("┗", plain[height - 2])
 
@@ -98,7 +98,7 @@ class GridTests(unittest.TestCase):
             self.assertNotIn("\x1b[1;31m", "\n".join(lines))
             self.assertNotIn("\x1b[1;4;38;5;24m", "\n".join(lines))
             self.assertNotIn("48;2;238;220;182", "\n".join(lines))
-            for code in ("32", "33", "31"):
+            for code in ("1;32", "1;33", "1;90", "31"):
                 self.assertNotIn(f"\x1b[{code}m", "\n".join(lines))
         self.assertTrue(all(board.width(line) <= 8 for line in board.wrap("检查 👩‍💻 e\u0301 " * 8, 8)))
         self.assertTrue(board.wrap("  ▶ Nested task", 12)[0].startswith("  ▶"))
