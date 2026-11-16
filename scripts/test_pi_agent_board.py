@@ -213,12 +213,17 @@ class SlotTests(unittest.TestCase):
                             output += os.read(fd, 65536)
                     return output
                 drain(0.3)
-                for count in (3, 5):
+                for count in (3, 5, 8):
                     while len(panes) < count:
                         panes.append(tmux("new-window", "-d", "-P", "-F", "#{pane_id}", str(command)))
-                    target = panes[-1]
+                    target = panes[4] if count == 8 else panes[-1]
+                    tmux("set-option", "-pt", target, "-u", "@pi_agent_dimmed")
                     window = tmux("display-message", "-p", "-t", target, "#{window_id}")
                     tmux("select-window", "-t", window)
+                    if count == 8:
+                        # Opening from a sibling shell must select this window's Pi.
+                        shell = tmux("split-window", "-t", target, "-P", "-F", "#{pane_id}", "sleep 300")
+                        tmux("select-pane", "-t", shell)
                     os.write(fd, b"\x02a")
                     self.assertIn(b"Progress unavailable", drain(1.0))
                     os.write(fd, b"A")

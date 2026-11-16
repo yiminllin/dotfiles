@@ -364,7 +364,8 @@ def main(select_session=False):
             agents = collect_agents()
             by_slot = {agent.slot: agent for agent in agents}
             selected = next((a.slot for a in agents if a.pane == selected_pane),
-                            next((a.slot for a in agents if a.pane == pane), min(by_slot, default=None)))
+                            next((a.slot for a in agents if a.pane == pane),
+                                 next((a.slot for a in agents if a.window == current_window), min(by_slot, default=None))))
             columns, rows = os.get_terminal_size(output.fileno())
             lines, block_height = render_grid(agents, columns, selected, current_window)
             available = max(1, rows - 1)
