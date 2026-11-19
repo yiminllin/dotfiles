@@ -1,12 +1,12 @@
 {
   "theme": "light",
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-6.1-sol",
+  "defaultModel": "gpt-6.2-sol",
   "defaultThinkingLevel": "medium",
   "compaction": {
     "reserveTokens": 16384,
     "modelOverrides": {
-      "openai-codex/gpt-6.1-sol": {
+      "openai-codex/gpt-6.2-sol": {
         "reserveTokens": 200000
       },
       "openai-codex/gpt-6-luna": {
@@ -15,7 +15,7 @@
     }
   },
   "enabledModels": [
-    "openai-codex/gpt-6.1-sol",
+    "openai-codex/gpt-6.2-sol",
     "openai-codex/gpt-6-luna"
   ],
   "packages": [
@@ -30,10 +30,13 @@
     "npm:@ff-labs/pi-fff",
     "npm:@juicesharp/rpiv-ask-user-question"
   ],
-  "lastChangelogVersion": "1.4.0",
+  "lastChangelogVersion": "1.5.2",
   "hideThinkingBlock": true,
   "quietStartup": "header",
   "defaultTools": [
     "+codemode"
-  ]
+  ],
+  "extensionChangelogVersions": {
+    "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.48.0"
+  }
 }
