@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import termios
+import time
 import tty
 import unicodedata
 from dataclasses import dataclass
@@ -22,8 +23,10 @@ FIELDS = (
     "@pi_agent_name", "pane_title", "pane_current_command", "pane_start_command",
     "@pi_agent_status", "@pi_agent_status_owner", "pane_pipe", "@pi_agent_input_wait",
     "@pi_agent_dimmed", "@pi_agent_slot", "@pi_agent_progress",
-    "@pi_session_id", "@pi_session_cwd", "@pi_session_owner",
+    "@pi_session_id", "@pi_session_cwd", "@pi_session_owner", "@pi_agent_last_message",
 )
+PANE_FORMAT = SEPARATOR.join("#{" + field + "}" for field in FIELDS)
+STALE_AFTER_MS = 24 * 60 * 60 * 1000
 COLORS = {"RUN": "31", "WAIT": "32", "BLOCKED": "33", "ERR": "31", "UNKNOWN": "33"}
 DIMMED_STYLE = "2;90"
 HEADING_STYLE = "1;38;5;235;48;2;238;220;182"
@@ -146,6 +149,41 @@ def agent_state(pane):
     return "WAIT" if "──" in content else "UNKNOWN"
 
 
+def stale_message(pane, state, now_ms):
+    if state != "WAIT":
+        return ""
+    raw = pane["@pi_agent_last_message"]
+    try:
+        if 0 < int(raw) < now_ms - STALE_AFTER_MS and alive(pane["@pi_session_owner"]):
+            return raw
+    except ValueError:
+        pass
+    return ""
+
+
+def is_dimmed(manual, stale):
+    return manual == "1" or bool(stale and manual != f"bright:{stale}")
+
+
+def toggle_dim(pane, dimmed, stale):
+    # A bright override lasts only for this conversation timestamp.
+    if stale:
+        value = f"bright:{stale}" if dimmed else "0"
+    else:
+        value = "0" if dimmed else "1"
+    tmux("set-option", "-pt", pane, "@pi_agent_dimmed", value)
+
+
+def toggle_pane_dim(pane_id):
+    row = tmux("display-message", "-p", "-t", pane_id, PANE_FORMAT)
+    values = row.split(SEPARATOR)
+    if len(values) != len(FIELDS):
+        return
+    pane = dict(zip(FIELDS, values))
+    stale = stale_message(pane, agent_state(pane), time.time() * 1000)
+    toggle_dim(pane_id, is_dimmed(pane["@pi_agent_dimmed"], stale), stale)
+
+
 def pin_lines(raw):
     try:
         snapshot = json.loads(raw)
@@ -182,6 +220,7 @@ class Agent:
     pi_id: str = ""
     worktree: str = ""
     owner: str = ""
+    stale: str = ""
 
 
 def collect_agents():
@@ -189,7 +228,7 @@ def collect_agents():
     lock = "pi_agent_board_slots"
     tmux("wait-for", "-L", lock)
     try:
-        snapshot = tmux("list-panes", "-a", "-F", SEPARATOR.join("#{" + field + "}" for field in FIELDS))
+        snapshot = tmux("list-panes", "-a", "-F", PANE_FORMAT)
         ancestors = pi_ancestors()
         panes = []
         for line in snapshot.splitlines():
@@ -216,15 +255,18 @@ def collect_agents():
         # Keep survivor order, append new agents, and close gaps left by exits.
         panes.sort(key=lambda pane: (not pane["slot"], pane["slot"]))
         agents = []
+        now_ms = time.time() * 1000
         for slot, pane in enumerate(panes, 1):
             pane["slot"] = slot
             if pane["@pi_agent_slot"] != str(slot):
                 tmux("set-option", "-pt", pane["pane_id"], "@pi_agent_slot", str(slot))
+            state = agent_state(pane)
+            stale = stale_message(pane, state, now_ms)
             agents.append(Agent(
                 pane["pane_id"], pane["session_id"], pane["window_id"], pane["slot"],
                 clean(pane["@pi_agent_name"] or pane["pane_title"] or f"UNNAMED {pane['pane_id']}"),
-                agent_state(pane), pane["@pi_agent_dimmed"] == "1", pin_lines(pane["@pi_agent_progress"]),
-                pane["@pi_session_id"], pane["@pi_session_cwd"], pane["@pi_session_owner"],
+                state, is_dimmed(pane["@pi_agent_dimmed"], stale), pin_lines(pane["@pi_agent_progress"]),
+                pane["@pi_session_id"], pane["@pi_session_cwd"], pane["@pi_session_owner"], stale,
             ))
         return sorted(agents, key=lambda agent: agent.slot)
     finally:
@@ -417,7 +459,7 @@ def main(select_session=False):
                         offset = top
             elif not select_session and selected and key == "A":
                 agent = by_slot[selected]
-                tmux("set-option", "-pt", agent.pane, "@pi_agent_dimmed", "0" if agent.dimmed else "1")
+                toggle_dim(agent.pane, agent.dimmed, agent.stale)
             elif key in ("\r", "\n"):
                 target = selected
             elif len(key) == 1 and key in "123456789":
@@ -442,6 +484,8 @@ if __name__ == "__main__":
     try:
         if sys.argv[1:2] == ["--popup"]:
             open_popup(*sys.argv[2:])
+        elif sys.argv[1:2] == ["--toggle-dim"]:
+            toggle_pane_dim(sys.argv[2])
         elif sys.argv[1:2] == ["--select-session"]:
             selected = main(select_session=True)
             if selected:

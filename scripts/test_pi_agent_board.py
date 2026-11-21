@@ -260,6 +260,37 @@ class SlotTests(unittest.TestCase):
             if fd is not None:
                 os.close(fd)
 
+    def test_idle_agent_auto_dims_and_can_be_restored(self):
+        with isolated_tmux() as (tmux, _base, _command):
+            pane = tmux("display-message", "-p", "#{pane_id}")
+            now = 1700000000
+            old = str(now * 1000 - board.STALE_AFTER_MS - 1)
+            with patch.object(board, "tmux", tmux), \
+                    patch.object(board.time, "time", return_value=now), \
+                    patch.object(board, "agent_state", return_value="WAIT") as state:
+                def dimmed():
+                    return board.collect_agents()[0].dimmed
+
+                tmux("set-option", "-pt", pane, "@pi_agent_last_message", old)
+                self.assertFalse(dimmed(), "An unowned timestamp is ignored")
+                tmux("set-option", "-pt", pane, "@pi_session_owner", str(os.getpid()))
+                self.assertTrue(dimmed())
+                for status in ("RUN", "BLOCKED", "ERR"):
+                    state.return_value = status
+                    self.assertFalse(dimmed(), status)
+                state.return_value = "WAIT"
+                board.toggle_pane_dim(pane)
+                self.assertFalse(dimmed())
+                board.toggle_pane_dim(pane)
+                self.assertTrue(dimmed())
+                board.toggle_pane_dim(pane)
+                tmux("set-option", "-pt", pane, "@pi_agent_last_message", str(int(old) - 1))
+                self.assertTrue(dimmed(), "A bright override does not carry over to another timestamp")
+                tmux("set-option", "-pt", pane, "@pi_agent_last_message", str(int(old) + 1))
+                self.assertFalse(dimmed(), "Exactly 24 hours old is not stale")
+                board.toggle_pane_dim(pane)
+                self.assertTrue(dimmed(), "Manual dimming still works on fresh conversations")
+
     def test_status_and_dimming_preserve_order_but_removal_compacts_slots(self):
         with isolated_tmux() as (tmux, _base, command):
             first = tmux("display-message", "-p", "#{pane_id}")

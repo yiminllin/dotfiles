@@ -78,7 +78,30 @@ test("progress publishes full snapshots without the dialog bridge", async (t) =>
   const bus = createEventBus();
   const bridge = await loadExtensions([source], process.cwd(), bus);
   assert.deepEqual(bridge.errors, []);
-  for (const handler of bridge.extensions[0].handlers.get("session_start")) await handler({}, ctx);
+  const old = 1700000000000;
+  const first = { id: "user", parentId: null, type: "message", message: { role: "user", timestamp: old } };
+  const toolResult = { id: "tool", parentId: first.id, type: "message", message: { role: "toolResult", timestamp: old + 1 } };
+  let leaf = toolResult;
+  Object.assign(ctx.sessionManager, {
+    getLeafEntry: () => leaf,
+    getEntry: (id) => id === first.id ? first : undefined,
+  });
+  const bridgeEvent = async (name, data = {}) => {
+    for (const handler of bridge.extensions[0].handlers.get(name)) await handler(data, ctx);
+  };
+  const lastMessage = () => tmux("show-options", "-pqv", "-t", pane, "@pi_agent_last_message");
+  await bridgeEvent("session_start");
+  assert.equal(lastMessage(), String(old));
+  await bridgeEvent("message_end", { message: toolResult.message });
+  assert.equal(lastMessage(), String(old));
+  await bridgeEvent("message_end", { message: { role: "assistant", timestamp: old + 2 } });
+  assert.equal(lastMessage(), String(old + 2));
+  await bridgeEvent("session_tree");
+  assert.equal(lastMessage(), String(old), "Tree navigation restores the selected branch timestamp");
+  leaf = undefined;
+  await bridgeEvent("session_tree");
+  assert.equal(lastMessage(), "");
+  await bridgeEvent("message_end", { message: { role: "user", timestamp: old + 3 } });
   assert.equal(tmux("show-options", "-pqv", "-t", pane, "@pi_session_id"), "td-session-test");
   assert.equal(tmux("show-options", "-pqv", "-t", pane, "@pi_session_owner"), String(process.pid));
   const wait = () => tmux("show-options", "-pqv", "-t", pane, "@pi_agent_input_wait");
@@ -88,6 +111,7 @@ test("progress publishes full snapshots without the dialog bridge", async (t) =>
   assert.equal(wait(), String(process.pid));
   bus.emit("rpiv:ask-user:blocked", { toolCallId: "q1", active: false });
   assert.equal(wait(), "");
-  for (const handler of bridge.extensions[0].handlers.get("session_shutdown")) await handler({}, ctx);
+  await bridgeEvent("session_shutdown");
+  assert.equal(lastMessage(), "");
   assert.equal(tmux("show-options", "-pqv", "-t", pane, "@pi_session_id"), "");
 });
