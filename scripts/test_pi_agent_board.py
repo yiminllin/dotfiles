@@ -166,8 +166,8 @@ class SelectionTests(unittest.TestCase):
             ("pi-session", "999999999", None),
         ]:
             output, stdout = TerminalOutput(), io.StringIO()
-            selected = agent(1, name="Existing agent", pi_id=session_id, worktree="/work/tree", owner=owner)
-            keys = ["A", "\r"] + (["\x1b"] if expected is None else [])
+            selected = agent(12, name="Existing agent", pi_id=session_id, worktree="/work/tree", owner=owner)
+            keys = ["A", "g", "1", "2", "\r"] + (["\x1b"] if expected is None else [])
             with patch.dict(os.environ, TMUX_PANE="%1"), \
                  patch.object(board, "context", return_value=("client", "@0")), \
                  patch.object(board, "collect_agents", return_value=[selected]), \
@@ -186,7 +186,7 @@ class SelectionTests(unittest.TestCase):
 
 
 class SlotTests(unittest.TestCase):
-    def test_actual_binding_highlights_non_first_agent_in_one_and_two_rows(self):
+    def test_actual_popup_highlights_source_and_jumps_to_numbered_slots(self):
         binding = shlex.split(next(line for line in (SOURCE.parent.parent / ".tmux.conf").read_text().splitlines()
                                   if line.startswith("bind-key a ")))
         client = None
@@ -199,6 +199,7 @@ class SlotTests(unittest.TestCase):
                 for _ in range(2):
                     panes.append(tmux("new-window", "-d", "-P", "-F", "#{pane_id}", str(command)))
                 tmux(*binding)
+                tmux("set-option", "-s", "escape-time", "0")
                 tmux("select-window", "-t", "test:2")
                 client, fd = pty.fork()
                 if client == 0:
@@ -233,6 +234,26 @@ class SlotTests(unittest.TestCase):
                     os.write(fd, b"q")
                     drain(0.2)
                     os.kill(original_pid, 0)
+
+                while len(panes) < 12:
+                    panes.append(tmux("new-window", "-d", "-P", "-F", "#{pane_id}", command))
+                os.write(fd, b"\x02a")
+                self.assertIn(b"g slot Enter", drain(1.0))
+                os.write(fd, b"g99\r")
+                self.assertIn(b"No agent in slot 99", drain(0.4))
+                os.write(fd, b"g1")
+                self.assertIn(b"Jump to slot: 1", drain(0.4))
+                os.write(fd, b"\x1b")
+                self.assertIn(b"g slot Enter", drain(1.2))
+                os.write(fd, b"g19\x7f0\r")
+                drain(0.4)
+                self.assertEqual(tmux("display-message", "-p", "#{pane_id}"), panes[9])
+                os.write(fd, b"\x02a")
+                self.assertIn(b"g slot Enter", drain(1.0))
+                os.write(fd, b"9")
+                drain(0.4)
+                self.assertEqual(tmux("display-message", "-p", "#{pane_id}"), panes[8])
+                os.kill(original_pid, 0)
         finally:
             if client:
                 os.waitpid(client, 0)

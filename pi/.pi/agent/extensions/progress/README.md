@@ -74,7 +74,8 @@ Each `progress set` supplies a complete snapshot; identical snapshots are ignore
   screen; one grid row opens shorter than two. Widen terminals below 54 columns.
 - Agent numbers and positions stay fixed across status changes, dimming, and
   closing another agent. New agents take the first free slot. **1–9** jumps directly;
-  **arrows** select any agent, **Enter** jumps, and **Shift+A** dims the selection.
+  **g → slot number → Enter** jumps to any slot (for example, **g → 12 → Enter**).
+  **Arrows** select any agent, **Enter** jumps, and **Shift+A** dims the selection.
   The selected number is highlighted; current-window headings stay underlined.
 - Agent Board needs Python 3. Pins publish directly from this extension to tmux.
   Existing Pi sessions keep extension code in memory: run **`/reload` once per

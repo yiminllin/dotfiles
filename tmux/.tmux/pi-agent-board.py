@@ -351,7 +351,10 @@ def main(select_session=False):
     pane = os.environ.get("TMUX_PANE") or tmux("display-message", "-p", "#{pane_id}")
     client, current_window = context(pane)
     selected, offset, previous = None, 0, None
-    notice = ""
+    notice, slot_input = "", None
+    action = "link" if select_session else "jump"
+    help_text = f"1–9 {action} · g slot Enter · arrows select · Enter {action}"
+    help_text += " · j/k scroll · Esc/q cancel" if select_session else " · A dim · j/k/PgUp/PgDn scroll · q close"
     output = sys.stderr if select_session else sys.stdout
     by_slot = {}
     saved_tty = termios.tcgetattr(sys.stdin) if sys.stdin.isatty() else None
@@ -370,8 +373,8 @@ def main(select_session=False):
             lines, block_height = render_grid(agents, columns, selected, current_window)
             available = max(1, rows - 1)
             offset = max(0, min(offset, max(0, len(lines) - available)))
-            footer = notice or ("1–9 link · arrows select · Enter link · j/k scroll · Esc/q cancel" if select_session
-                                else "1–9 jump · arrows select · Enter jump · A dim · j/k/PgUp/PgDn scroll · q close")
+            footer = (f"{action.capitalize()} to slot: {slot_input} · Enter confirm · Esc cancel"
+                      if slot_input is not None else notice or help_text)
             screen = lines[offset:offset + available]
             screen += [""] * (available - len(screen))
             screen += [style(wrap(footer, max(1, columns))[0], DIMMED_STYLE)]
@@ -383,9 +386,24 @@ def main(select_session=False):
             key = read_key()
             if key:
                 notice = ""
-            if key in ("q", "\033", "\x04"):
+            target = None
+            if slot_input is not None and key not in ("q", "\x04"):
+                if key == "\033":
+                    slot_input = None
+                elif key in ("\x7f", "\b"):
+                    slot_input = slot_input[:-1]
+                elif len(key) == 1 and key in "0123456789":
+                    slot_input += key
+                elif key in ("\r", "\n") and slot_input:
+                    target = next((slot for slot in by_slot if str(slot) == slot_input.lstrip("0")), None)
+                    if target is None:
+                        notice = f"No agent in slot {slot_input}. Press g to try again."
+                    slot_input = None
+            elif key in ("q", "\033", "\x04"):
                 return
-            if key in ("j", "k", "\033[5~", "\033[6~"):
+            elif key == "g":
+                slot_input = ""
+            elif key in ("j", "k", "\033[5~", "\033[6~"):
                 offset += {"j": 1, "k": -1, "\033[5~": -available, "\033[6~": available}[key]
             elif selected and key in ("\033[A", "\033[B", "\033[C", "\033[D"):
                 step = {"\033[A": -4, "\033[B": 4, "\033[C": 1, "\033[D": -1}[key]
@@ -400,17 +418,19 @@ def main(select_session=False):
             elif not select_session and selected and key == "A":
                 agent = by_slot[selected]
                 tmux("set-option", "-pt", agent.pane, "@pi_agent_dimmed", "0" if agent.dimmed else "1")
-            elif (key in ("\r", "\n") and selected) or (key in "123456789" and len(key) == 1):
-                target = selected if key in ("\r", "\n") else int(key)
-                if target in by_slot:
-                    agent = by_slot[target]
-                    if select_session:
-                        if agent.pi_id and agent.worktree and alive(agent.owner):
-                            return {"session_id": agent.pi_id, "worktree": agent.worktree, "name": agent.name}
-                        notice = "Run /reload in that Pi session, then select it again."
-                    else:
-                        jump(agent, client)
-                        return
+            elif key in ("\r", "\n"):
+                target = selected
+            elif len(key) == 1 and key in "123456789":
+                target = int(key)
+            if target in by_slot:
+                agent = by_slot[target]
+                if select_session:
+                    if agent.pi_id and agent.worktree and alive(agent.owner):
+                        return {"session_id": agent.pi_id, "worktree": agent.worktree, "name": agent.name}
+                    notice = "Run /reload in that Pi session, then select it again."
+                else:
+                    jump(agent, client)
+                    return
     finally:
         output.write("\033[0m\033[?7h\033[?25h")
         output.flush()
