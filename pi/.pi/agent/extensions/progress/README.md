@@ -3,8 +3,9 @@
 A local replacement for `rpiv-todo`. The panel above the input pins a recognizable
 session title and genuine high-level outcomes, with the current milestone highlighted.
 Keep pins as short as possible for Agent Board scanning, not full plans.
-Use a descriptive 4–7 word title: topic plus intended outcome. Show a few brief
-user-visible outcomes, not engineering phases or an activity log.
+Use plain English. Write a 4–7 word title that names the topic and result.
+Use common words and concrete verbs in short outcome labels and blockers.
+For example, write “Test new drafts for all 273 PRs,” not “Replay full PR corpus.”
 Use only these milestone emoji: 🔍 planning/investigation, 📦 deliverables,
 👀 review, 🚀 verification/submission, and 📝 documentation. Not every category
 needs a row. No emoji in titles or nested tasks. Keep ○ / ▶ / ✓ for status.

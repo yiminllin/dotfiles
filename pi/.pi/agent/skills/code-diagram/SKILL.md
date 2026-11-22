@@ -9,13 +9,9 @@ Explain one coherent code mechanism with a readable, source-backed ASCII diagram
 
 ## 1. Agree on the view
 
-Establish purpose, format, scope, and detail level. Reuse decisions the user already supplied. Ask only about missing choices that materially affect the result. Propose source-informed scope instead of requiring unfamiliar file names. Use `ask_user_question` when available; use small script-rendered previews for visual choices. Otherwise ask briefly and stop.
+Follow [Explanation choices](../code-explainer/choices.md). Ask for the diagram template, source scope and detail in one menu, unless already resolved by the user or the calling skill. Offer a box flow, before/after boxes, numbered overview or tree. The user chooses; do not ask about highlight styling.
 
-Default to two stages:
-1. Render a concise, source-backed draft with short component and relationship labels. Show it and wait for explicit scope/layout approval.
-2. Preserve approved node identities, connections, and lane order while adding verified symbols and messages. If source inspection requires a material structural change, show a revised draft first.
-
-Silence is not approval. A request for a draft gets only a draft. An explicit one-shot request may skip the checkpoint. Invoke the bundled renderer for every architecture diagram; copy its output unchanged. Never hand-space a replacement to bypass a layout error.
+Use [diagram templates](layout.md#templates) to produce a complete first draft at the selected detail. Reuse approved geometry and stable stage identities when the scope still matches. Invoke the bundled renderer and copy its output unchanged; correct the spec rather than hand-spacing output. Only stage a layout checkpoint if requested.
 
 ## 2. Establish source and scope
 
@@ -23,7 +19,7 @@ For a PR, obtain the actual head/base SHAs and changed-file list from metadata, 
 
 For an aggregate/stack PR, inspect the integrated commit range, not just its final commit. Verify ancestry and individual PR attribution before calling a stage "Built by #...". A PR tree can include future descendants. Mark those as future/context; a commit list is not an architecture diagram.
 
-Write down the **changed mechanism, enabling input, and observable effect** before selecting layout. Include the principal consumer or consequence inside the diagram. Keep additional verified context only when it explains that story. Do not invent edges, corresponding stages, output values, or concrete topic examples.
+Write down the **changed mechanism, enabling input, and observable effect** before selecting layout. For a workflow, trace the affected path from a recognizable entry point through the relevant stages to the consumer or observable result. Include verified, unchanged stages when a reviewer would otherwise have to guess how the workflow starts, where the change fits, or where its output goes. Leave unchanged context unhighlighted; reserve change callouts and highlighting for the actual delta. Omit unrelated paths. Do not invent edges, corresponding stages, output values, or concrete topic examples.
 
 | Purpose | Required explanation |
 |---|---|
@@ -69,12 +65,12 @@ Read [layout.md](layout.md) for schemas and examples:
 - `flow`: one linear transfer or error-return path.
 - `graph`: branches, parallel lanes, shared owners, and separate request/response connectors. Explicit IDs, rectangles, ports, and orthogonal routes.
 - `tree`: hierarchy with optional node-ID-aligned annotations.
-- `before_after`: two flows, or two trees aligned by verified common node IDs. Flow stages align by position; use trees or separate figures when stages do not correspond.
+- `before_after`: stacked graph panels, two positional flows, or two trees aligned by verified common node IDs. Use graph panels when positional flows would imply a false match.
 - `routes`: independent boxed linear paths only. Mark repeated owners as the same instance; prefer `graph` for a real shared boundary.
 
 Use concise component labels and one responsibility per box. Put actual relationships/messages beside important arrows. Preserve full concrete topics; wrap at spaces or `.` boundaries, never `_`. If a long symbol overwhelms a box, use a nearby unambiguous symbol legend. Short message keys require an immediate legend identifying the exact envelope/topic; do not replace important concrete conflicts with generic aliases. Keep keys consistent across figures.
 
-Prefer top-to-bottom for long names and left-to-right for short pipelines. Put labels close to their own connectors. Prefer labels above horizontal arrows. The graph renderer rejects collisions, false junctions, detached labels, and unresolved label ambiguity. Correct the specification rather than editing output. Nested ownership boxes are not supported; use an ownership tree or explicit ownership links instead of pretending a containing boundary exists.
+Prefer left-to-right for pipelines. Use a vertical flow or split view when exact labels cannot fit clearly. Put labels close to their own connectors. Prefer labels above horizontal arrows. The graph renderer rejects collisions, false junctions, detached labels, and unresolved label ambiguity. Correct the specification rather than editing output. Nested ownership boxes are not supported; use an ownership tree or explicit ownership links instead of pretending a containing boundary exists.
 
 Aim for 25–35 rows and at most about 100 columns. Above roughly 45 rows, shorten optional detail, draw a shared tail once, or split named figures without dropping central edges. Trees and comparisons have a 120-column hard limit. Do not invent nodes just to align views.
 
@@ -92,4 +88,4 @@ Use the complete agreed PR-description corpus for reference review, not only the
 
 Fresh generation must receive no PR descriptions, reference diagrams, READMEs, prior answers, or evaluation artifacts. Use comment-filtered implementation/test views so embedded architecture drawings do not leak through source comments. Audit both prompt inputs and all attempted tool accesses; surviving files or clean fetch traces alone are insufficient. If a reference drawing was exposed, do not call that run diagram-blind.
 
-For staged tests, capture actual approval rather than fabricating feedback. For explicitly one-shot tests, skip the checkpoint. Save specifications and reproduce every displayed diagram exactly. After generation, reveal references and score requested form, geometry, source accuracy, scope coverage, and readability separately. Accept useful verified additions and document stale-reference conflicts. Local tests prove renderer/checker behavior, not FlightSystems runtime correctness or model robustness.
+Capture the menu, actual choices (or label scripted choices), and the first complete draft. Do not fabricate approval or count later corrections as first-draft quality. Save specifications and reproduce every displayed diagram exactly. After generation, reveal references and score requested form, geometry, source accuracy, scope coverage, and readability separately. Accept useful verified additions and document stale-reference conflicts. Local tests prove renderer/checker behavior, not runtime correctness or model robustness.

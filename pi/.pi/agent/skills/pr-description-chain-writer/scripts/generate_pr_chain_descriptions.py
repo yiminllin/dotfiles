@@ -1998,8 +1998,8 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--repo",
-        default="ZiplineTeam/FlightSystems",
-        help="GitHub repo in OWNER/REPO format (default: ZiplineTeam/FlightSystems).",
+        required=True,
+        help="GitHub repo in OWNER/REPO format.",
     )
     parser.add_argument(
         "--style-pr",

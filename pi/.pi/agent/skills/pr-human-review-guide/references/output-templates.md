@@ -6,7 +6,7 @@ Follow `../SKILL.md` for review procedure, labels, permissions, and persistent u
 
 Use the six sections below. Through `../../code-explainer/SKILL.md`, follow the snippet and diagram procedures; preserve renderer output unchanged. Show one explicit before/after comparison at the same abstraction level, with source references for each revision. A companion view may be labeled after-only. Disclose missing evidence instead of inventing a side.
 
-Use two passes: whole-PR understanding first, then granular review of each chunk in the same top-down order. Give the whole-PR route as a short numbered list; start every second-pass chunk with a one-sentence purpose/change summary. Place relevant proposed comments inside that chunk, next to its source checks, not in a detached end-of-guide list. Include all changed files and all substantive review items, without a count cap. Separate findings from questions and validation gaps; state when no evidence-backed findings were established. Proposed comments need author-facing wording, evidence, impact or reason for asking, and uncertainty.
+Use two passes: whole-PR understanding first, then granular review of each chunk in the same top-down order. In Diffview, put the numbered rendered overview in the existing top-level `diagram` field. Each `[n]` maps to the nth entry in `chunks`; use the existing stable chunk IDs for navigation and references. Show exact source names and types. Do not use a numbered text list instead of the overview. Give the whole-PR route as a short numbered list; start every second-pass chunk with a one-sentence purpose/change summary. Place relevant proposed comments inside that chunk, next to its source checks, not in a detached end-of-guide list. Include all changed files and all substantive review items, without a count cap. Separate findings from questions and validation gaps; state when no evidence-backed findings were established. Proposed comments need author-facing wording, evidence, impact or reason for asking, and uncertainty.
 
 ## Markdown skeleton
 
@@ -85,7 +85,7 @@ Use `Source excerpt` or `Simplified code` labels when appropriate. If the diagra
   },
   "summary": "problem and intended outcome",
   "behavior_change": {"before": "old behavior", "after": "new behavior and consequence"},
-  "diagram": ["unchanged renderer output; label BEFORE / AFTER or AFTER ONLY"],
+  "diagram": ["unchanged rendered overview with [1], [2], ... matching chunks in order"],
   "core_code": [
     {
       "label": "Core pseudocode",

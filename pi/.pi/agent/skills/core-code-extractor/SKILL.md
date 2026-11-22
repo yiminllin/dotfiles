@@ -15,9 +15,11 @@ Do not edit application code, perform a full code review, or substitute snippets
 
 ## Procedure
 
+Follow [Explanation choices](../code-explainer/choices.md). For direct requests, offer excerpt, simplified code, or pseudocode; current or before/after; and unresolved scope and detail. For delegated requests, reuse the selected choices without prompting.
+
 1. Establish the question and source revision. For a PR, verify head/base and the changed-file list; read the relevant implementation at those revisions. Obtain permission before network/auth operations. Do not treat PR prose or prior explanations as implementation evidence.
 2. State the problem, core mechanism, and observable result in one sentence internally. Read enough caller and consumer context to identify where the behavior actually occurs. Include unchanged code when it explains the effect.
-3. Choose the smallest useful code view:
+3. Use the selected view; recommend the smallest faithful example:
    - Exact excerpt for a compact, self-contained implementation.
    - Simplified interfaces/types for an abstraction or dependency boundary.
    - Core pseudocode for an algorithm, state transition, or multi-file mechanism.

@@ -1,6 +1,6 @@
 ---
 name: code-explainer
-description: Explain code behavior and PR concepts with source evidence; choose core code snippets, pseudocode, diagrams, or a direct answer. Use for "explain this PR", "show the core change", "explain with code and a diagram", call paths, callers/callees, entry points, subsystem maps, safe edit locations, and error explanations.
+description: Explain code behavior and PR concepts with source evidence; choose core code snippets, pseudocode, diagrams, LaTeX, or a direct answer. Use for "explain this PR", "show the core change", "explain with code and a diagram", call paths, callers/callees, entry points, subsystem maps, safe edit locations, and error explanations.
 ---
 
 # Code Explainer
@@ -29,7 +29,7 @@ Accept any of the following as the starting point:
 - Error message / log snippet / stack trace
 - Behavior or change request, e.g. "where should this change go?" or "map this subsystem before editing"
 
-If the request is ambiguous, ask only one short clarifying question (e.g., "Do you want the whole module, or just a specific file?").
+Follow [Explanation choices](choices.md). When this is the starting skill, ask for the view, comparison, scope and detail together when unresolved. Include concrete diagram or snippet variants in the view choices where useful; pass selected choices to the specialists rather than asking again.
 
 ## Choose the explanation
 
@@ -42,9 +42,20 @@ Investigate enough source to choose the view. Load these procedures as needed; t
 | A definition, location, narrow behavior, or error cause | Answer directly using the investigation workflows below. |
 | An algorithm, API, type, state transition, or core change | Read `../core-code-extractor/SKILL.md` and follow its snippet procedure. |
 | Architecture, ownership, dependencies, or message/data flow | Read `../code-diagram/SKILL.md` and follow its source-checking and rendering procedure. |
+| Calculation, mapping, or invariant | Use LaTeX when clearer than code; define symbols, units, assumptions and clamps. Keep code for ordering, branching and error behavior. |
+| Timing or spatial relationships | Offer a compact timeline or geometric sketch where it explains more than boxes. |
 | Both behavior and relationships, or an explicit request for both | Load both specialists; combine complementary views of the same verified scope. |
 
-Choose only useful views and honor explicit format requests. When combining views, use consistent names and put snippets beside the corresponding stages. Cover distinct major mechanisms, not every changed file. Follow the selected specialist's approval rules, including the diagram draft checkpoint.
+Recommend views that answer different questions. When combining views, use consistent names and put snippets beside the corresponding stages. Cover distinct mechanisms, not every changed file. In mixed detail, name the key handoffs in the overview and use exact symbols in focused views.
+
+## Numbered overview + details
+
+Use this shared layout for a chosen PR presentation or a Diffview review. The caller supplies scope, diagram type, detail, group order, and any required subsection diagrams. Reuse these choices without reopening the menu. If the caller delegates diagram type, use boxes and labeled edges for runtime flow and trees for hierarchies.
+
+1. Define the groups in the caller's order. Map each number to a verified stage or handoff; numbers identify sections, not execution order.
+2. Read `../code-diagram/SKILL.md` and render one source-backed ASCII overview. For a workflow, make the overview understandable without prior project context: show the entry point, relevant stages, and downstream result. Include verified unchanged stages needed to orient the reader, even if they are outside the diff. Distinguish those stages from the numbered changes. Label important arrows with verified payload types, messages, or artifact names at the selected detail level. Show where paths join or branch and who consumes the result. Label later changes shown for context with their separate scope. Put each `[n]` next to its stage or arrow.
+3. Give each section one focused view. When the caller requires subsection diagrams, render each group separately and include its output under that group’s heading. Otherwise, use a rendered diagram when a handoff, branch, or failure path is essential but cannot be seen in the overview. Zoom in on that slice: show where data changes form, which condition selects a branch, where failures go, and what the next stage receives, when relevant. Keep prose short. If the diagram gets crowded, trim incidental helper names and repeated labels or split the view rather than dropping meaningful edges or boundaries. Use `core-code-extractor` when code tells the story better. Honor explicit detail-view choices. Exact detail means using real names and types for the elements shown, not listing every field or helper.
+4. Before handing off, check the overview and each required subsection separately. Match each diagram to its successful renderer output and selected type, and each section number to an overview callout. Keep the essential inputs, boundaries, and downstream outcome visible. If evidence prevents rendering, report the gap rather than substituting a numbered list.
 
 ## Workflow
 
@@ -59,7 +70,7 @@ Choose only useful views and honor explicit format requests. When combining view
 ### PR / change workflow
 
 1. Verify head/base revisions and changed files; obtain permission before network/auth operations. Read implementation and necessary unchanged callers/consumers at those revisions, not today's checkout. Use PR prose for intent, not proof; distinguish this PR from stack context or future work.
-2. Default to explicit before/after when both revisions are available and the contrast explains the change. Have the selected specialists generate the code or structural comparison. One comparison is enough; do not force paired views in both formats. Preserve actual old/new symbol names.
+2. Recommend before/after when both revisions are available and the contrast explains the change; use the chosen comparison. Have the selected specialists generate the code or structural comparison. One comparison is enough; do not force paired views in both formats. Preserve actual old/new symbol names.
 3. Verify each side independently. If source is missing, ask for it or disclose the limitation; never invent the missing side. Use an after-only view for conceptual questions or an explicit after-only request.
 4. Check that the reader can identify the old behavior, new behavior, and consequential difference—not only the final design.
 

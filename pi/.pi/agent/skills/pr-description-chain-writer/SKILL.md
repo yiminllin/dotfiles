@@ -1,17 +1,36 @@
 ---
 name: pr-description-chain-writer
-description: Write, draft, shorten, or update a public PR description, PR body, or PR template for a single PR or a chained/stacked set, including local branches before PRs exist. Use for "write the PR description", "summarize this change for the PR body", same-style rewrites, and updates to Verification, Criticality of Change, Release Notes, or PR checklists. Defaults to FlightSystems; supports other repositories. Not for private human-review guides or review-comment triage.
+description: Draft, explain, shorten, or update changes for a reviewer-facing pull request description, PR body, or PR template. Use for "draft a PR for this branch", "create a PR and write the description", "explain this change for the PR description", and edits to Verification or other PR sections. Works for single PRs, local branches, and stacks. Not for chat-only explanations, private review guides, or review comments.
 ---
 
-# Pr Description Chain Writer
+# PR Description Chain Writer
+
+## Choose the first-draft presentation
+
+**Draft without a presentation menu by default.** Honor explicit choices. For unresolved choices, use the simplest structure that explains the verified change: Brief for a small change, One main view for one mechanism, or Numbered overview + details for several distinct changes. **When a PR changes a workflow handoff, render an ASCII flow diagram in `Description of Change` by default.** This applies when a stage starts accepting a new input, produces a new output, or work moves between stages. Use the `code-diagram` renderer via `code-explainer`; show the producer, payload, receiving stage, and downstream result. A table can supplement the diagram, but cannot replace it unless the user explicitly chooses another overview view. Make this decision from the verified change, not the number of files or the existing PR layout. Use mixed detail unless exact names or plain labels better serve the draft. Ask only if the review boundary cannot be resolved or the user opts into choosing the presentation.
+
+**When a new or changed input joins an existing path at a shared stage, default to Numbered overview + details with box flow.** In the overview, draw both paths from their verified entry points, label the payloads, and show where they join and who consumes the result. Keep unchanged context visible but distinct from the change. If a producer belongs to a later PR, label it as out of scope; do not make it the only entry point. Number the transformations and shared stage that need explanation, then render a focused diagram for each section.
+
+If the user opts in, ask unresolved choices in one `ask_user_question` menu:
+
+| Question | Choice pool |
+|---|---|
+| **Structure** | Brief · One main view · Numbered overview + details |
+| **View** | Prose · Box flow · Before/after boxes · Tree · Core code · Formula · Table |
+| **Detail** | Plain labels · Exact names and types · Mixed |
+| **Scope** (if unclear) | One change · This PR · Full stack |
+
+In the opt-in menu, keep Structure, View and Detail separate, with 2–4 short relevant options each and the recommendation first. Name the diagram types. If a non-diagram View is chosen for a numbered draft, it applies to the details; still render the overview. If the picker is unavailable, ask in chat and wait. If cancelled, stop.
+
+For section-only edits, keep the existing presentation unless asked to change it. Pass the resolved presentation to the explainer without a nested menu.
 
 ## Overview
 
-Generate a public GitHub PR body for a single PR, an ordered PR chain, or a local git-spice stack whose PRs may not exist yet. The body is authored as the user's reviewer-facing PR description, not a private inspection guide. Reuse section structure and tone from a style reference PR. Stacked PRs should share only the genuinely common motivation in `Reason for Change`, state each PR's distinct impact in `Description of Change`, give non-trivial PRs a source-backed diagram and core-code comparison, keep the surrounding prose flexible, prefer short verification results with evidence links over command transcripts or vague CI claims, and include `PR Tree` by default for multi-PR stacks.
+Write reviewer-facing GitHub PR text for one change or a stack. Load this skill before drafting the body even when another workflow owns PR creation or stack submission. For a chat-only explanation, use `code-explainer`; for a private review guide, use `pr-human-review-guide`.
 
 Draft locally by default. Use existing authentication for requested read-only GitHub inspection. Obtain explicit approval before posting bodies. Never log in, submit a stack, or push branches from this skill.
 
-Use this skill for public PR body follow-ups that say body, description, template, same style, update a PR section, verification section, criticality, release notes, or per-PR checklist/progress. Do not use it for generic PR review, review-comment triage, or private Diffview/human-review guides.
+Use past PRs for structure, tone, and level of detail only. Never copy their claims or evidence into a new PR. Keep private examples and audit artifacts outside public checkouts; use fictional examples in tracked skill files.
 
 ## Mode and Shared PR context packet
 
@@ -31,7 +50,7 @@ Do not include private inspection content in public PR bodies. Forbidden in publ
 
 - Accept one PR number/URL, a local branch, or ordered PR numbers in chain order.
 - For local stacks before PRs exist, collect the current git-spice stack from the repo checkout instead of asking for PR numbers.
-- Default to `ZiplineTeam/FlightSystems` unless user specifies another repo.
+- Resolve the repository from the PR URL, explicit input, or current checkout. Ask if it remains ambiguous.
 - Prefer using a style reference PR with a high-quality body in the same chain.
 
 For local git-spice stacks, inspect the stack with read-only `git`,
@@ -47,23 +66,33 @@ Before running the generator, regenerating text, or posting bodies, capture the 
 Lock these items when present:
 
 - chain-level `Reason for Change` wording and context links; preserve an existing PR's reason unless the user asks to align it across the chain
-- requested title tags and title conventions, including `[DNL]`, `[FSW-#####]`, `[Phoenix]`, and explicit capitalization
+- requested title tags and title conventions, including explicit capitalization
 - `Criticality of Change` and `Release Notes` checklist checked states for each PR
 - diagram/table preference and any requested description style
 - per-PR emphasis, such as which mechanism, files, reviewer concern, or risk each PR should highlight
-- verification evidence, including exact commands, Baraza/S3/GHA links, result labels, and explicit not-run reasons
+- verification evidence, including exact commands, run or report links, result labels, and explicit not-run reasons
 
-### 3. Generate draft bodies
+### 3. Choose a structure and draft
+
+Use the resolved first-draft presentation. See [Explanation choices](../code-explainer/choices.md) for shared handoff rules.
+
+Keep prose short and let the diagrams carry the detail. Cut prose that repeats a figure, not meaningful stages, arrows, or payload labels. Keep material verification results or gaps. Expand optional prose only on request.
+
+| Structure | Description of Change |
+|---|---|
+| Brief | A sentence or a few bullets. No diagram required. |
+| One main view | Use the selected view. Add another only if it answers a different question. |
+| Numbered overview + details | Follow [the shared numbered layout](../code-explainer/SKILL.md#numbered-overview--details). Include its rendered overview in `Description of Change`; a selected detail view never replaces it. For a boxed workflow, require one rendered box diagram under every numbered group unless the user selects a different detail view. Zoom in on that group’s inputs, transformations, decisions, and outputs as relevant. Do not redraw the entire overview. Add a short group-to-commit table where useful. |
 
 For an existing PR body or one-section update, first read the live body, then draft the smallest requested diff against it. Do not run the whole-body generator for a section-only update. For new PR bodies or an explicitly requested rewrite, use the generator script from the loaded skill directory. Set `SKILL_DIR` to that directory when needed; for the stowed global skill this is usually `$HOME/.pi/agent/skills/pr-description-chain-writer`. The generator uses read-only `gh` queries; run it only for the requested repository and PRs with existing authentication.
 
 ```bash
 SKILL_DIR="${SKILL_DIR:-$HOME/.pi/agent/skills/pr-description-chain-writer}"
 python3 "$SKILL_DIR/scripts/generate_pr_chain_descriptions.py" \
-  48761 48824 48825 48784 48833 \
-  --repo ZiplineTeam/FlightSystems \
-  --style-pr 48761 \
-  --context-link "Context: https://github.com/ZiplineTeam/FlightSystems/issues/123" \
+  101 102 103 \
+  --repo OWNER/REPO \
+  --style-pr 101 \
+  --context-link "Context: https://github.com/OWNER/REPO/issues/100" \
   --write-dir /tmp/pr-chain-bodies \
   --stdout
 ```
@@ -85,35 +114,39 @@ Important options:
 
 ### 4. Review generated content before posting
 
-- Load `../code-explainer/SKILL.md`. For non-trivial PRs, use both its diagram and core-code procedures: include the goal, before/after behavior, a source-backed diagram, and representative core code under `Description of Change`. Reuse the human guide's verified explanation when its scope and revisions match, but omit private review routes, questions, and comments. Keep actual symbols and file/line anchors. Tiny mechanical changes or an explicit prose-only request may omit these views; missing source must be disclosed, not invented. Short verification does not mean a prose-only description.
+- Use `../code-explainer/SKILL.md` for the selected views. Reuse verified explanations from a matching private guide without copying review routes, questions, or comments. Disclose missing source instead of inventing details.
 - Read `references/style-notes.md` and keep template order/shape consistent.
 - For section-update requests, update only the requested body/template section, preserving all other live wording, checklist state, and style. Show the minimal proposed diff before posting.
 - Do a title preflight before writing or posting:
   - Preserve any capitalization the user explicitly requested.
   - When drafting from commits, preserve commit title capitalization/style unless the user asks for a rewrite.
-  - For ticketed Phoenix work, use `[FSW-#####] [Phoenix] ...`.
-  - For throwaway/test PRs, add `[DNL]` when the user asks for that marker.
-  - Ensure commit-derived PR titles or wording still follow requested `[FSW-#####] [Phoenix] ...` and `[DNL]` conventions.
-- Tighten the generated reason paragraph so it states the concrete reviewer-visible problem and the mechanism/root cause changed in this PR.
-- Treat script-inferred prose from paths/patches as a draft, not proof; check every mechanism and impact claim against code and measured evidence. Keep `Description of Change` concise and plain-language: feature/mechanism first, file inventory second. Under `In particular:`, prefer conceptual area bullets with semantic labels and nested file details when that improves skimmability, for example `**Config source of truth**`, `**Physics plumbing**`, `**Gen2 tether-guide geometry**`, and `**Contact behavior**`. Use prose and bullets to connect the diagram and core code, not repeat them. A table may supplement the explanation; it does not replace the required views for a non-trivial PR. Summarize generated, mechanical, or bulk churn as one clear bullet/table row instead of listing repetitive file edits.
-- For chains, keep the chain-level reason paragraph/context identical across PRs and keep `PR Tree` by default; only omit it when the user asks or it is clearly noise for reviewers.
-- If you include `PR Tree`, keep the ordering exactly aligned to the chain, use PR numbers only such as `- #123`, do not include PR titles or markdown links, and keep `◀` on the current PR.
-- When a Jira ticket is known, add `Jira Ticket: [FSW-XXXXX](https://flyzipline.atlassian.net/browse/FSW-XXXXX)` directly below the `PR Tree` block; use the ticket most relevant to each PR, even when multiple PRs share a ticket.
+  - Preserve repository or user-supplied ticket prefixes, component tags, and test-only markers.
+- State the concrete problem in `Reason for Change`. Start `Description of Change` with what this PR changes and the effect on behavior. Treat generator prose as a draft; verify claims against the actual diff and evidence.
+- Use short, active sentences. Name the function, field, type, or flag in backticks when it makes the actor, input, or output clear. Use the same term throughout. Replace vague phrases such as “plumb the config” with who reads what and where it goes.
+- Describe actual actions in prose, captions, and diagram labels. Omit what does not happen or stays the same unless it prevents a concrete misunderstanding about scope, compatibility, or risk. Cut headings, subtext, and file lists that repeat the lead or a selected view.
+- For chains, keep the shared motivation and context identical across PRs. Use a neutral chain-wide before/after overview there only when it explains the motivation. Compare the current PR against its own base in `Description of Change`. Keep `PR Tree` by default; only omit it when the user asks or it is clearly noise for reviewers.
+- When a published stack is known, use a `PR Tree` heading and one bare `- #123` per line in verified stack order. Add `◀` only to the current PR if it is a member. Do not use inline arrows, nesting, titles, or explicit Markdown links. Use local branch placeholders only when PR numbers do not exist.
+- When a tracking ticket is known and the repository uses a ticket line, put its verified link below the `PR Tree` block; use the ticket most relevant to each PR, even when multiple PRs share a ticket.
 - For non-trivial PRs, optionally add `### Map for Reviewers` under `Description of Change`. Skip it for tiny PRs. Use this public shape instead of dense reviewer-guide tables:
   - `**Suggested route**`: numbered 1-3 semantic areas to inspect.
   - `**Key checkpoints**`: concise bullets for the main correctness, config, API, or frame points.
-  - `**Context anchors**`: concise bullets for parent/child PRs, Jira/design/Slack context, key evidence, or validator follow-up.
+  - `**Context anchors**`: concise bullets for parent/child PRs, issue/design/discussion context, key evidence, or validator follow-up.
 - Optionally add `### Watchouts` only for real risk or follow-up. Skip it when there is no meaningful risk. Keep compact bullets shaped as `**Risk**: ...`, `**Mitigation**: ...`, and `**Follow-up**: ...`.
-- Both sections are optional; skip `Map for Reviewers` for tiny PRs and skip `Watchouts` when there is no real risk or follow-up. Keep them factual and public-safe. Do not include emoji, deep/skim labels, suggested comments, private TODOs, or unresolved inspection questions in public PR bodies.
+- Omit either section when it repeats the description or verification. Keep both factual and safe for the PR's audience.
 - Preserve the repository template checkbox blocks for `Criticality of Change` and `Release Notes`; do not collapse them to prose such as `L3 Nonfunctional`. Use the existing repo checklist blocks when known, or copy/preserve the exact checklist shape from the current PR template or style reference. Before finalizing, verify the checked criticality and release-notes state reflect reality for each PR.
-- In `Verification`, name the concrete check and result in a short bullet, then show the useful command in a fenced `bash` block. Prefer `Reposition seed 17: passed` over evidence-process prose such as `recorded integrated-stack checks pass; source hashes match`. Group related checks; keep logs and incidental metrics in working notes.
-- Recover commands from saved scripts, logs, or history. Include needed targets, flags, seeds, and output-directory requirements. Put the command block directly after the result; omit labels such as `Reproduce:`. If the exact invocation is unavailable, use a source-checked equivalent without claiming it is the original command or was newly run. Avoid duplicate commands, but do not omit useful reproduction commands merely to shorten the section.
-- Never inherit results from another PR. State pending/failed/not-run status, baseline failures, and material scope limits briefly, including stack-tip-only or pre-cleanup evidence. If nothing ran, say why. Prefer existing run links over local evidence paths; never invent links or upload logs without approval. Remove placeholders.
+
+#### Verification: checklist first
+
+1. Default to one Markdown checklist line. Add another only for a distinct material failure, pending check, or coverage gap. Mark confirmed passes as `- [x] <check>: passed` and failed, pending, or unrun checks as `- [ ] <check>: <status>`. Link directly to a run or report when available. If nothing ran, write `- [ ] Not run: <reason>.` If evidence is missing, write `- [ ] Verification not confirmed.`
+2. Include a fenced `bash` block below the checklist when a reproducible command is available. Prefer the actual command and preserve required targets, flags, and seeds. Label any source-checked equivalent without implying it ran. Omit the block if no command can be verified.
+3. If measured differences matter, add a small before/after table with units and the comparison baseline. Keep material failures, pending checks, and older-head or stack-tip limits even if they need another line. Omit logs, bare `CI`, and test inventories. Never claim another PR's result as this PR's.
+
+Before showing or posting a draft, read the rendered body once. Verify template and checkboxes, source names, current-PR scope, and evidence. When the workflow-handoff rule applies, confirm a rendered flow diagram is present in the final body; a table-only draft is incomplete. For converging inputs, trace each path in the rendered overview to the shared stage and trace its output to the consumer. A path mentioned only in prose does not count. For a numbered box-flow draft with no detail override, count one successfully rendered overview plus one successfully rendered box diagram inside each numbered group. Check every ASCII diagram matches its own successful renderer output unchanged. Fix rejected layouts instead of hand-drawing; if source evidence is missing, state the gap. Check the PR Tree is a flat list in verified order. Delete text that adds no fact, decision, or evidence. Check only the edited sections for a section-only update.
 
 ### 5. Apply generated body to each PR (optional, separately approved)
 
 ```bash
-gh pr edit 48825 --repo ZiplineTeam/FlightSystems --body-file /tmp/pr-chain-bodies/pr_48825.md
+gh pr edit 102 --repo OWNER/REPO --body-file /tmp/pr-chain-bodies/pr_102.md
 ```
 
 Repeat for each PR in the chain.
@@ -130,9 +163,8 @@ For each PR, generate:
 - Repository template sections in canonical order.
 - Shared reason paragraph, optional context link, and default-on `PR Tree` for chains.
 - Human-readable `Description of Change`, flexible in final shape even though the script renders hybrid, prose-only, or bullets-only drafts.
-- More detailed nested bullets with reviewer-meaningful section labels where the diff supports them.
 - Optional `### Map for Reviewers` and `### Watchouts` sections only when they add reviewer value.
-- Source-backed diagram and representative core code for non-trivial PRs, with a clear before/after comparison and verified source anchors. Keep public wording concise; do not copy private review content.
+- The selected structure, with source-backed views and comparison only where useful. Keep public wording concise; do not copy private review content.
 - Existing PRs' own `Criticality of Change` and `Release Notes` checkboxes (no inferred checked defaults); review them for each new PR, plus concise per-PR verification evidence.
 
 Write files to:

@@ -21,7 +21,7 @@ MIN_PATH_CELLS = 4
 MAX_LABEL_DISTANCE = 4
 LANE_GAP = "    "
 
-Node = tuple[str, str | None]
+Node = tuple[str, str | None, bool]
 Flow = tuple[list[Node], list[str]]
 
 
@@ -47,6 +47,12 @@ def keys(value: object, required: set[str], allowed: set[str], where: str) -> di
     return value
 
 
+def changed(value: object, where: str) -> bool:
+    if not isinstance(value, bool):
+        raise DiagramError(f"{where}.changed must be a boolean")
+    return value
+
+
 def flow_spec(value: object, where: str) -> Flow:
     spec = keys(value, {"nodes", "arrows"}, {"nodes", "arrows"}, where)
     nodes = spec["nodes"]
@@ -58,18 +64,21 @@ def flow_spec(value: object, where: str) -> Flow:
     parsed_nodes = []
     for index, node in enumerate(nodes):
         name = f"{where}.nodes[{index}]"
-        item = keys(node, {"name"}, {"name", "detail"}, name)
+        item = keys(node, {"name"}, {"name", "detail", "changed"}, name)
         parsed_nodes.append(
             (
                 text(item["name"], f"{name}.name"),
                 text(item["detail"], f"{name}.detail") if "detail" in item else None,
+                changed(item.get("changed", False), name),
             )
         )
     return parsed_nodes, [text(label, f"{where}.arrows[{i}]") for i, label in enumerate(arrows)]
 
 
 def width_for(*flows: Flow) -> int:
-    names = (len(line) for nodes, _ in flows for node in nodes for line in node if line)
+    names = (
+        len(line) for nodes, _ in flows for name, detail, _ in nodes for line in (name, detail) if line
+    )
     segments = (
         len(piece.strip())
         for _, arrows in flows
@@ -110,10 +119,11 @@ def render_flow(
 ) -> list[str]:
     nodes, arrows = flow
     center = width // 2
-    border = "+" + "-" * (width - 2) + "+"
-    joined = "+" + "-" * (center - 1) + "+" + "-" * (width - center - 2) + "+"
     lines = []
-    for index, (name, detail) in enumerate(nodes):
+    for index, (name, detail, is_changed) in enumerate(nodes):
+        fill = "=" if is_changed else "-"
+        border = "+" + fill * (width - 2) + "+"
+        joined = "+" + fill * (center - 1) + "+" + fill * (width - center - 2) + "+"
         lines.append(border)
         lines.extend(
             "| " + label.ljust(width - 4) + " |" for label in (name, detail) if label is not None
@@ -286,7 +296,9 @@ class _GraphCanvas:
         self.cells[x, y] = char
 
     def node(self, value: object, where: str) -> None:
-        node = keys(value, {"id", "name", "rect"}, {"id", "name", "detail", "rect"}, where)
+        required = {"id", "name", "rect"}
+        node = keys(value, required, required | {"detail", "changed"}, where)
+        fill = "=" if changed(node.get("changed", False), where) else "-"
         node_id = text(node["id"], f"{where}.id")
         if node_id in self.rectangles:
             raise DiagramError(f"{where}: duplicate node id {node_id!r}")
@@ -308,7 +320,7 @@ class _GraphCanvas:
                 if x in (left, right):
                     char = "+" if y in (top, bottom) else "|"
                 elif y in (top, bottom):
-                    char = "-"
+                    char = fill
                 self.paint(x, y, char, where)
         for y, label in enumerate(labels, start=top + 1):
             for x, char in enumerate(label, start=left + 2):
@@ -460,6 +472,8 @@ def render(value: object) -> str:
             "arrows",
             "before",
             "after",
+            "before_label",
+            "after_label",
             "root",
             "annotations",
             "annotation_width",
@@ -474,8 +488,22 @@ def render(value: object) -> str:
         flow = flow_spec({key: val for key, val in spec.items() if key != "kind"}, "diagram")
         lines = render_flow(flow, width_for(flow))
     elif kind == "before_after":
-        keys(spec, {"kind", "before", "after"}, {"kind", "before", "after"}, "diagram")
-        if isinstance(spec["before"], dict) and "root" in spec["before"]:
+        fields = {"kind", "before", "after"}
+        keys(spec, fields, fields | {"before_label", "after_label"}, "diagram")
+        if isinstance(spec["before"], dict) and "canvas" in spec["before"]:
+            lines = []
+            graph_fields = {"canvas", "nodes", "edges"}
+            for side in ("before", "after"):
+                if lines:
+                    lines.append("")
+                label = text(spec.get(f"{side}_label", side.upper()), f"diagram.{side}_label")
+                if len(label) > MAX_CANVAS_WIDTH:
+                    raise DiagramError(f"diagram.{side}_label exceeds the canvas width limit")
+                panel = keys(spec[side], graph_fields, graph_fields, f"diagram.{side}")
+                lines.extend([label, *render_graph(panel)])
+        elif "before_label" in spec or "after_label" in spec:
+            raise DiagramError("custom comparison labels require graph panels")
+        elif isinstance(spec["before"], dict) and "root" in spec["before"]:
             lines = render_tree_comparison(spec["before"], spec["after"])
         else:
             before = flow_spec(spec["before"], "diagram.before")

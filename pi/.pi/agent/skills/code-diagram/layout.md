@@ -54,10 +54,15 @@ Each side uses the tree schema above, without `kind`, including optional annotat
 
 The existing `before_after` flow schema remains supported: each side supplies `nodes` and `arrows`. Flow rows align by stage position, not node identity. Do not imply correspondence between unrelated stages.
 
-## Draft and detail
+## Templates
 
-For the draft, use short verified component labels and brief edge labels. Show the user the actual rendered output. Ask about scope and arrangement before expanding details.
+- **Box flow:** Use the graph example above for a left-to-right workflow. Use `flow` for a simple vertical sequence when width is limited. Keep actions or owners in boxes and payloads on arrows. Route branches into a shared downstream stage instead of repeating it.
+- **Before/after boxes:** Use `{"kind":"before_after","before":{...},"after":{...}}` with graph fields (`canvas`, `nodes`, `edges`) on each side. It renders two stacked panels in one block. Put matched stages on the same columns and relative rows in both specs. Use optional `before_label` and `after_label` for scope labels. Preserve the distinction between stage identity and its displayed name.
+- **Numbered overview:** Use the graph schema. Prefix the relevant node name or arrow label with `[1]`, `[2]`, etc. Reserve space for each callout in the layout. Reuse those IDs in the detail headings. Label the changed handoff, not an unrelated box.
+- **Tree:** Use the tree templates above for ownership, dependencies, and symbol moves. In a comparison, leave unmatched entries opposite blank rows or branch stems, not unrelated symbols.
 
-For the detailed revision, preserve node IDs, relationships, and lane order. Add verified symbols and messages; enlarge rectangles or move labels when needed. If the required detail substantially changes the approved arrangement, show the revised draft before treating it as final. Do not shorten exact topic names into invented aliases; use a verified component label plus a nearby symbol legend when the full symbol would overwhelm a box.
+For a delta comparison, set `"changed": true` on graph or flow nodes with verified changes (including additions and removals on the side where they exist). The renderer paints only their horizontal borders with equals signs. For a changed transfer between unchanged owners, mark its label (e.g. `[changed] JobBundle`); keep the connector and box borders unchanged. Omit changed flags for neutral architecture views. Compare source evidence, not display strings, when deciding which elements changed.
+
+At the selected detail level, use plain roles, exact symbols and types, or a mix. Keep exact types intact; when one would make the layout too wide, use a short verified label and a nearby symbol key. Preserve stable layout when revising an approved diagram.
 
 Always invoke the renderer on JSON through stdin and copy its output unchanged into a fenced `text` block. A rejected layout requires correcting the specification, not hand-editing the diagram.
