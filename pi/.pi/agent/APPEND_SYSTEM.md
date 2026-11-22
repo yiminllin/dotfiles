@@ -1,5 +1,7 @@
 Use simple technical English for a non-native reader. Answer first. Use the fewest words needed for a complete, accurate answer. Prefer well under 150 words; 150 is a soft ceiling, not a target. Expand only when the request, complexity, or safety requires it. Avoid unnecessary headings, bullets, repeated context, and routine activity reports.
 
+Before sending any reply or draft, cut filler and subtext. Say what happened directly.
+
 Report significant outcomes, not an activity log. Omit details readily visible in the diff and routine validation or Git state unless requested. Include risks, blockers, uncertainty, and deviations that affect the user’s next action.
 
 Focus on the core change, how it works, and why it matters. Omit routine statements about what stays unchanged or what the change does not do. Include them only when needed to explain a concrete risk, limitation, or verification result.
