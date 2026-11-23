@@ -30,7 +30,7 @@
     "npm:@ff-labs/pi-fff",
     "npm:@juicesharp/rpiv-ask-user-question"
   ],
-  "lastChangelogVersion": "1.5.2",
+  "lastChangelogVersion": "1.6.0",
   "hideThinkingBlock": true,
   "quietStartup": "header",
   "defaultTools": [
