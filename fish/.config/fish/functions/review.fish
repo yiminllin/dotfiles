@@ -9,25 +9,23 @@ function __review_shell_string --argument-names value
     printf "'%s'\n" "$value"
 end
 
-function __review_open_pi_pane --argument-names repo_root title bootstrap_path boundary refresh
-    if not set -q TMUX; or test -z "$TMUX"; or not command -q tmux; or not command -q pi
-        echo "review: Diffview is available; the visible review agent requires tmux and pi" >&2
+function __review_caller
+    if not set -q TMUX; or test -z "$TMUX"; or not command -q tmux
+        echo 'review: the main Pi session requires tmux' >&2
         return 1
     end
-
     set -l caller "$TMUX_PANE"
     if test -z "$caller"
         set caller (command tmux display-message -p '#{pane_id}')
         or return 1
     end
-    if test -z "$caller"
-        echo 'review: could not identify the invoking tmux pane' >&2
-        return 1
-    end
+    test -n "$caller"; or return 1
+    echo "$caller"
+end
 
-    set -l guide_path (path dirname "$bootstrap_path")/guide.json
-    set -l prompt "/skill:pr-human-review-guide The user explicitly authorizes creating and updating $guide_path and $guide_path.tmp, including outside $repo_root, for this review session. This is prior permission for those two files only; do not request it again. The requested guide also authorizes read-only GitHub queries and needed PR/base-ref fetches for this review in its repository using existing authentication, without another approval prompt. It does not authorize other writes, login, credential inspection, unrelated network access, or source/GitHub changes. Read and execute this review bootstrap, then stay in review assistant mode: $bootstrap_path"
+function __review_find_pi --argument-names repo_root title caller
     set -l panes (command tmux list-panes -s -t "$caller" -F '#{pane_id}|#{@pi_agent_name}|#{@pi_review_repo}|#{pane_current_command}|#{pane_start_command}|#{pane_current_path}|#{@pi_session_id}')
+    or return 2
     for pane in $panes
         set -l fields (string split '|' -- "$pane")
         if test "$fields[2]" = "$title"; and begin
@@ -39,44 +37,80 @@ function __review_open_pi_pane --argument-names repo_root title bootstrap_path b
                 if test "$fields[7]" != "$TD_PI_SESSION_ID"
                     continue
                 end
+                if not contains -- "$fields[4]" fish bash zsh sh
+                    echo "$fields[1]"
+                    return 0
+                end
             end
             if test "$fields[4]" = pi; or begin
                     string match -q '*exec pi*' -- "$fields[5]"
                     and not contains -- "$fields[4]" fish bash zsh sh
                 end
-                if test "$fields[1]" != "$caller"
-                    command tmux move-pane -d -v -l 40% -s "$fields[1]" -t "$caller"
-                    or return 1
-                end
-                set -l previous (command tmux show-option -pqv -t "$fields[1]" @pi_review_boundary)
-                if test "$previous" != "$boundary"; or test "$refresh" = 1
-                    command tmux send-keys -t "$fields[1]" -l "$prompt"
-                    and command tmux send-keys -t "$fields[1]" M-Enter
-                    or return 1
-                    command tmux set-option -pt "$fields[1]" @pi_review_boundary "$boundary"
-                end
-                command tmux set-option -pt "$fields[1]" @pi_review_repo "$repo_root"
-                echo "review: reusing visible Pi pane $title"
+                echo "$fields[1]"
                 return 0
             end
         end
     end
+    return 1
+end
 
+function __review_place_pi --argument-names agent caller
+    set -l caller_window (command tmux display-message -p -t "$caller" '#{window_id}')
+    or return 1
+    set -l agent_window (command tmux display-message -p -t "$agent" '#{window_id}')
+    or return 1
+    if test "$caller_window" != "$agent_window"
+        command tmux move-pane -d -v -l 40% -s "$agent" -t "$caller"
+        or return 1
+    end
+    return 0
+end
+
+function __review_start_pi --argument-names repo_root title bootstrap_path boundary refresh
+    command -q pi; or return 1
+    set -l caller (__review_caller)
+    or return 1
+    set -l existing (__review_find_pi "$repo_root" "$title" "$caller")
+    set -l found $status
+    if test $found -gt 1
+        return 1
+    end
+    set -l guide_path (path dirname "$bootstrap_path")/guide.json
+    set -l prompt "/skill:pr-human-review-guide The user explicitly authorizes creating and updating $guide_path and $guide_path.tmp, including outside $repo_root, for this review session. This is prior permission for those two files only; do not request it again. The requested guide also authorizes read-only GitHub queries and needed PR/base-ref fetches for this review in its repository using existing authentication, without another approval prompt. It does not authorize other writes, login, credential inspection, unrelated network access, or source/GitHub changes. Read and execute this review bootstrap, then stay in review assistant mode: $bootstrap_path"
+    if test $found = 0
+        __review_place_pi "$existing" "$caller"
+        or return 1
+        set -l previous (command tmux show-option -pqv -t "$existing" @pi_review_boundary)
+        if test "$previous" != "$boundary"; or test "$refresh" = 1
+            command tmux send-keys -t "$existing" -l "$prompt"
+            and command tmux send-keys -t "$existing" M-Enter
+            or return 1
+            command tmux set-option -pt "$existing" @pi_review_boundary "$boundary"
+        end
+        set -l service_command "/review-service "(path dirname "$bootstrap_path")
+        command tmux send-keys -t "$existing" -l "$service_command"
+        and command tmux send-keys -t "$existing" Enter
+        or return 1
+        command tmux set-option -pt "$existing" @pi_review_repo "$repo_root"
+        echo "review: reusing Pi session $title"
+        return 0
+    end
     set -l title_arg (__review_shell_string "$title")
     set -l prompt_arg (__review_shell_string "$prompt")
+    set -l directory_arg (__review_shell_string (path dirname "$bootstrap_path"))
     set -l session_arg
     if set -q TD_PI_SESSION_ID; and test -n "$TD_PI_SESSION_ID"
         set session_arg "--session-id "(__review_shell_string "$TD_PI_SESSION_ID")
     end
-    set -l launch "tmux set-option -pt \"\$TMUX_PANE\" allow-passthrough off; tmux set-option -pt \"\$TMUX_PANE\" @pi_agent_name $title_arg; tmux select-pane -t \"\$TMUX_PANE\" -T $title_arg; exec pi --name $title_arg $session_arg $prompt_arg"
-    set -l pane_id (command tmux split-window -t "$caller" -v -l 40% -d -P -F '#{pane_id}' -c "$repo_root" "$launch")
+    set -l launch "tmux set-option -pt \"\$TMUX_PANE\" allow-passthrough off; tmux set-option -pt \"\$TMUX_PANE\" @pi_agent_name $title_arg; tmux select-pane -t \"\$TMUX_PANE\" -T $title_arg; exec pi --review-dir $directory_arg --name $title_arg $session_arg $prompt_arg"
+    set -l pane_id (command tmux split-window -d -v -l 40% -t "$caller" -P -F '#{pane_id}' -c "$repo_root" "$launch")
     or return 1
     command tmux set-option -pt "$pane_id" @pi_review_repo "$repo_root"
     command tmux set-option -pt "$pane_id" @pi_review_boundary "$boundary"
-    echo "review: opened visible Pi pane $title"
+    echo "review: started Pi in this window"
 end
 
-function review --description "Open Diffview immediately with a visible Pi review assistant"
+function review --description "Open Diffview with a Pi review assistant in the same window"
     set -l refresh 0
     set -l no_agent 0
     set -l selector
@@ -108,7 +142,7 @@ function review --description "Open Diffview immediately with a visible Pi revie
     if test $no_agent = 0; and begin
             not set -q TMUX; or test -z "$TMUX"; or not command -q tmux; or not command -q pi
         end
-        echo "review: opening Diffview only; the visible agent requires tmux and pi" >&2
+        echo "review: opening Diffview only; the review agent requires tmux and pi" >&2
         set no_agent 1
     end
 
@@ -196,7 +230,7 @@ root,key,kind,label,base,head,guide,title,metadata,no_agent=sys.argv[1:]
 p=json.loads(metadata)
 url=p.get("url", "")
 parts=url.split("/")
-print(json.dumps(dict(repo=root,repo_key=key,context_kind=kind,pr_number=p.get("number"),pr_title=p.get("title"),pr_body=p.get("body"),pr_url=url,owner=parts[3] if len(parts)>4 else None,repo_name=parts[4] if len(parts)>4 else None,base_oid=base,head_oid=head,diffview_rev_arg=base+".."+head,path=guide,assistant_name=title if no_agent=="0" else None)))' "$root" "$repo_key" "$kind" "$label" "$base" "$head" "$guide" "$title" "$metadata" "$no_agent")
+print(json.dumps(dict(repo=root,repo_key=key,context_kind=kind,pr_number=p.get("number"),pr_title=p.get("title"),pr_body=p.get("body"),pr_url=url,owner=parts[3] if len(parts)>4 else None,repo_name=parts[4] if len(parts)>4 else None,base_oid=base,head_oid=head,diffview_rev_arg=base+".."+head,path=guide,review_label=label,assistant_name=title if no_agent=="0" else None)))' "$root" "$repo_key" "$kind" "$label" "$base" "$head" "$guide" "$title" "$metadata" "$no_agent")
     or return 1
 
     set -l diff_args "$boundary"
@@ -215,24 +249,31 @@ $context
 Refresh requested: $refresh
 Guide: $guide
 Local comments: $guide_dir/diffview-review.json
+Hunk inventory (read-only, published by Neovim): $guide_dir/review-hunks.json
 
 Read the pr-human-review-guide skill and its output templates. Review only git diff $boundary with the same path exclusions as Diffview: $diff_json. Use the supplied PR body as claims to verify against code. Keep source inspection within $root. Read-only GitHub queries and needed PR/base-ref fetches for this review in its repository are authorized using existing authentication; do not ask again. Preserve the exact review boundary above; report remote drift rather than switching revisions. Do not initiate login, inspect credentials, use unrelated network access, or mutate GitHub or source files.
 
 Artifact write permission: the user invoked review and explicitly authorizes creating and updating $guide and $guide.tmp throughout this review session, even though their directory may be outside $root. This is the approved exception to the source-directory boundary, not permission for arbitrary external writes. Use $guide.tmp for atomic replacement of $guide. Do not ask for this permission again. Never edit $guide_dir/diffview-review.json.
 
-Follow the persistent diagram-first Diffview contract in references/output-templates.md. Include context.base_oid=$base and context.head_oid=$head. Stay available for Diffview questions and direct conversation; update this same guide as understanding changes. Neovim owns local comments, reviewed-file progress, and ownership scope.
+Follow the persistent code-centered Diffview contract in references/output-templates.md. Use code-explainer to coordinate source-backed code-diagram and core-code-extractor views of the same changed mechanism. Include goal, before/after behavior, ASCII PR flow, representative core code changes with source anchors, top-down review route, review focus, and validation gaps. Include context.base_oid=$base and context.head_oid=$head. Stay available for direct conversation and explicit Diffview guide refinements; iterate on this same guide as understanding changes. Neovim owns local comments, hunk/file read progress, and ownership scope. Read review-hunks.json and partition every exact inventory hunk ID into one ordered semantic chunk in guide.json chunks. Chunks can span files; separate hunks from one file can belong to different chunks. Give each chunk a stable id/title, summary, relationship to the overview, earlier dependencies, local diagram, source-backed core_code, checks, depth, and hunks. Include file-level changes. Never invent hunk IDs, edit the inventory, or treat the chunks as independent commits. A legacy guide without chunks needs this explicit upgrade; preserve its source-backed overview and discussions.
 
-Each Diffview request includes exact comment/request IDs and an agent-replies JSON path. Write a raw JSON reply there with comment_id, request_id, author, body, created_at, status/error, atomically via rename. Never edit diffview-review.json; Neovim owns it. Your visible answer and thread reply must agree. Do not post or resolve anything on GitHub." >"$bootstrap"
+The review-service extension runs each Diffview thread in a separate Pi session. Workers can edit tracked local files only when the reviewer asks. It records all questions and replies in your context without interrupting you. You own the shared guide; child sessions must not edit it. Use the shared review state and thread updates when answering follow-ups or updating the guide. Never edit diffview-review.json; Neovim owns it. Do not post or resolve anything on GitHub." >"$bootstrap"
     end
 
     set -l context_lua (__review_lua_string "$context")
     set -l diff_lua (__review_lua_string "$diff_json")
-    set -l startup "lua require('utils.diffview_review').set_active_guide_context(vim.json.decode($context_lua)); vim.api.nvim_cmd({cmd='DiffviewOpen',args=vim.json.decode($diff_lua)}, {})"
+    set -l startup "lua require('utils.diffview_review').set_active_guide_context(vim.json.decode($context_lua)); local args = vim.json.decode($diff_lua); table.insert(args, 1, '--imply-local=false'); vim.api.nvim_cmd({cmd='DiffviewOpen',args=args}, {})"
     set -l agent_command "lua vim.defer_fn(function() require('utils.diffview_review').jump_to_initial_guide_file() end, 200)"
     if test $no_agent = 0
-        set -l command_json (command python3 -c 'import json,sys; print(json.dumps(["fish","-c","source \"$argv[1]\"; __review_open_pi_pane $argv[2..-1]","--"]+sys.argv[1:]))' "$source_path" "$root" "$title" "$bootstrap" "$boundary" "$refresh")
+        set -l command_json (command python3 -c 'import json,sys; print(json.dumps(["fish","-c","source \"$argv[1]\"; __review_start_pi $argv[2..-1]","--"]+sys.argv[1:]))' "$source_path" "$root" "$title" "$bootstrap" "$boundary" "$refresh")
         set -l command_lua (__review_lua_string "$command_json")
         set agent_command "lua vim.defer_fn(function() vim.system(vim.json.decode($command_lua), {text=true}, function(result) vim.schedule(function() vim.notify(vim.trim(result.stdout .. result.stderr), result.code == 0 and vim.log.levels.INFO or vim.log.levels.WARN, {title='Review agent'}) end) end) end, 200)"
     end
-    command nvim "+$startup" "+$agent_command"
+    # Bazel's Cargo wrapper can lack runfiles outside its launch environment.
+    set -l nvim_path $PATH
+    set -l cargo (command -s cargo)
+    if string match -q '*/bazel/tools/bazel_env/bin/cargo' -- "$cargo"; and test -x "$HOME/.cargo/bin/cargo"
+        set -p nvim_path "$HOME/.cargo/bin"
+    end
+    PATH=$nvim_path command nvim "+$startup" "+$agent_command"
 end

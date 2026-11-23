@@ -1,6 +1,5 @@
 local M = {}
 
-M.COMMENT_BOX_WIDTH = 88
 M.COMMENT_MARKER = "▌"
 M.GUIDE_MARKER = "🤖"
 M.GITHUB_MARKER = "GH"
@@ -11,101 +10,8 @@ M.GUIDE_SIGN_NAMES = {
 	"DiffviewReviewGuideInfo",
 }
 
-local GUIDE_STYLE_BY_SEVERITY = {
-	High = {
-		border = "DiffviewReviewGuideHighBorder",
-		range = "DiffviewReviewGuideHighRange",
-		sign = "DiffviewReviewGuideHigh",
-		virt = "DiffviewReviewGuideHighVirt",
-	},
-	Medium = {
-		border = "DiffviewReviewGuideMediumBorder",
-		range = "DiffviewReviewGuideMediumRange",
-		sign = "DiffviewReviewGuideMedium",
-		virt = "DiffviewReviewGuideMediumVirt",
-	},
-	Low = {
-		border = "DiffviewReviewGuideLowBorder",
-		range = "DiffviewReviewGuideLowRange",
-		sign = "DiffviewReviewGuideLow",
-		virt = "DiffviewReviewGuideLowVirt",
-	},
-	Info = {
-		border = "DiffviewReviewGuideInfoBorder",
-		range = "DiffviewReviewGuideInfoRange",
-		sign = "DiffviewReviewGuideInfo",
-		virt = "DiffviewReviewGuideInfoVirt",
-	},
-}
-
-local MANUAL_STYLE = {
-	border = "DiffviewReviewCommentBorder",
-	range = "DiffviewReviewCommentRange",
-	sign = "DiffviewReviewComment",
-	virt = "DiffviewReviewCommentVirt",
-}
-
-local GITHUB_STYLE = {
-	border = "DiffviewReviewGithubBorder",
-	range = "DiffviewReviewGithubRange",
-	sign = "DiffviewReviewGithub",
-	virt = "DiffviewReviewGithubVirt",
-}
-
 function M.normalize_comment_text(value)
 	return vim.trim(tostring(value or ""):gsub("\r\n", " "):gsub("\r", " "):gsub("\n", " "):gsub("%s+", " "))
-end
-
-function M.wrap_comment_preview(value, width)
-	local text = M.normalize_comment_text(value)
-	width = width or M.COMMENT_BOX_WIDTH
-	if text == "" then
-		return { "" }
-	end
-
-	local lines = {}
-	local line = ""
-	for word in text:gmatch("%S+") do
-		while #word > width do
-			if line ~= "" then
-				table.insert(lines, line)
-				line = ""
-			end
-			table.insert(lines, word:sub(1, width))
-			word = word:sub(width + 1)
-		end
-
-		if word ~= "" then
-			if line == "" then
-				line = word
-			elseif #line + #word + 1 <= width then
-				line = line .. " " .. word
-			else
-				table.insert(lines, line)
-				line = word
-			end
-		end
-	end
-
-	if line ~= "" then
-		table.insert(lines, line)
-	end
-	return lines
-end
-
-function M.display_width(value)
-	return vim.fn.strdisplaywidth(value)
-end
-
-function M.pad_right(value, width)
-	return value .. string.rep(" ", math.max(width - M.display_width(value), 0))
-end
-
-function M.line_range_label(start_line, end_line)
-	if start_line == end_line then
-		return ("L%d"):format(start_line)
-	end
-	return ("L%d-L%d"):format(start_line, end_line)
 end
 
 function M.range_label(start_line, end_line)
@@ -124,9 +30,7 @@ function M.is_imported_github_comment(comment)
 end
 
 local function is_stale_github_anchor(comment)
-	return M.is_imported_github_comment(comment)
-		and comment.github_line == nil
-		and comment.original_line ~= nil
+	return M.is_imported_github_comment(comment) and comment.github_line == nil and comment.original_line ~= nil
 end
 
 function M.is_file_level_comment(comment)
@@ -149,9 +53,25 @@ local function is_posted_comment(comment)
 		or (comment and comment.github_review_id ~= nil)
 end
 
+function M.agent_status_label(status)
+	return ({
+		pending = "Queued",
+		running = "Investigating",
+		blocked = "Needs input",
+		completed = "Answered",
+		cancelled = "Cancelled",
+		failed = "Failed",
+		unavailable = "Unavailable",
+		unread = "Unread",
+		attention = "Needs attention",
+	})[status] or "Comment"
+end
+
 function M.comment_status_text(comment)
 	local labels = {}
-	if comment and comment.guide_retired then table.insert(labels, "earlier guide") end
+	if comment and comment.guide_retired then
+		table.insert(labels, "earlier guide")
+	end
 	local sync_status = tostring(comment and comment.sync_status or "")
 	if is_stale_github_anchor(comment) then
 		table.insert(labels, "stale original anchor")
@@ -186,17 +106,6 @@ function M.comment_status_text(comment)
 		table.insert(labels, "ambiguous anchor")
 	elseif anchor_status == "legacy_unverified" then
 		table.insert(labels, "unverified legacy anchor")
-	end
-
-	local agent_status = tostring(comment and comment.agent_status or "")
-	if agent_status == "pending" then
-		table.insert(labels, "Pi queued")
-	elseif agent_status == "running" then
-		table.insert(labels, "Pi reviewing…")
-	elseif agent_status == "failed" then
-		table.insert(labels, "Pi failed")
-	elseif agent_status == "unavailable" then
-		table.insert(labels, "Pi unavailable")
 	end
 
 	return table.concat(labels, "; ")
@@ -257,29 +166,18 @@ function M.severity_emoji(value)
 	return M.GUIDE_MARKER
 end
 
-function M.comment_highlights(comment)
+function M.comment_sign(comment)
 	if M.is_imported_github_comment(comment) then
-		return GITHUB_STYLE
+		return "DiffviewReviewGithub"
 	end
 	if not M.is_guide_comment(comment) then
-		return MANUAL_STYLE
+		return "DiffviewReviewComment"
 	end
-
-	local _, severity_key = M.severity_label(comment.severity)
-	return GUIDE_STYLE_BY_SEVERITY[severity_key] or GUIDE_STYLE_BY_SEVERITY.Info
+	local _, severity = M.severity_label(comment.severity)
+	return "DiffviewReviewGuide" .. severity
 end
 
-local function boxed_comment_header(comment, start_line, end_line)
-	local label = M.line_range_label(start_line, end_line)
-	local anchor = M.is_file_level_comment(comment) and "File-level" or label
-	local status = M.comment_status_text(comment)
-	if status ~= "" then
-		status = " [" .. status .. "]"
-	end
-	return " " .. M.comment_source_label(comment) .. " • " .. anchor .. status .. " "
-end
-
-local function boxed_comment_body(comment)
+function M.comment_body(comment)
 	local body = tostring(comment and comment.body or "")
 	if is_stale_github_anchor(comment) then
 		local original_line = tonumber(comment.original_line)
@@ -293,87 +191,54 @@ local function boxed_comment_body(comment)
 		end
 		body = body ~= "" and (note .. "\n\n" .. body) or note
 	end
-	if M.is_guide_comment(comment) and comment.kind == "guide_suggestion" and comment.why and tostring(comment.why) ~= "" then
-		body = body .. "\nWhy it matters: " .. tostring(comment.why)
+	if
+		M.is_guide_comment(comment)
+		and comment.kind == "guide_suggestion"
+		and comment.why
+		and tostring(comment.why) ~= ""
+	then
+		body = body .. "\n\nWhy it matters: " .. tostring(comment.why)
 	end
 	return body
 end
 
-local function reply_label(reply)
-	local author = type(reply.author) == "string" and vim.trim(reply.author) or ""
-	local created_at = type(reply.created_at) == "string" and vim.trim(reply.created_at) or ""
-	local label = author ~= "" and ("Reply @" .. author) or "Reply"
-	if created_at ~= "" then
-		label = label .. " • " .. created_at
+local function abbreviate(text, width, has_more)
+	if not has_more and vim.fn.strdisplaywidth(text) <= width then
+		return text
 	end
-	return label .. ":"
-end
-
-local function wrap_comment_body(value, width)
-	local lines = {}
-	for _, body_line in ipairs(vim.split(tostring(value or ""), "\n", { plain = true })) do
-		vim.list_extend(lines, M.wrap_comment_preview(body_line, width))
+	text = vim.fn.strcharpart(text, 0, width - 1)
+	while vim.fn.strdisplaywidth(text) >= width do
+		text = vim.fn.strcharpart(text, 0, vim.fn.strchars(text) - 1)
 	end
-	return #lines > 0 and lines or { "" }
+	return text .. "…"
 end
 
-local function boxed_card_lines(header, body, hls, width)
-	local body_width = width - 4
-	local top = "╭─" .. header
-	top = top .. string.rep("─", math.max(width - M.display_width(top) - 1, 0)) .. "╮"
-
-	local lines = { { { top, hls.border } } }
-	for _, body_line in ipairs(wrap_comment_body(body, body_width)) do
-		table.insert(lines, {
-			{ "│ ", hls.border },
-			{ M.pad_right(body_line, body_width), hls.virt },
-			{ " │", hls.border },
-		})
-	end
-	table.insert(lines, { { "╰" .. string.rep("─", width - 2) .. "╯", hls.border } })
-	return lines
-end
-
-local function indent_virtual_lines(lines, indent)
-	for _, line in ipairs(lines) do
-		table.insert(line, 1, { indent, "DiffviewReviewStatusMuted" })
-	end
-	return lines
-end
-
-function M.boxed_comment_lines(comment, start_line, end_line)
-	local hls = M.comment_highlights(comment)
-	return boxed_card_lines(boxed_comment_header(comment, start_line, end_line), boxed_comment_body(comment), hls, M.COMMENT_BOX_WIDTH)
-end
-
-function M.boxed_reply_lines(reply, parent_comment)
-	if type(reply) ~= "table" or vim.trim(tostring(reply.body or "")) == "" then
-		return {}
-	end
-
-	local hls = vim.tbl_extend("force", M.comment_highlights(parent_comment), {
-		border = "DiffviewReviewReplyBorder",
-	})
-	local width = M.COMMENT_BOX_WIDTH - 4
-	return indent_virtual_lines(
-		boxed_card_lines(reply_label(reply), tostring(reply.body or ""), hls, width),
-		"  "
-	)
-end
-
-function M.comment_preview(comment)
-	local body = tostring(comment and comment.body or "")
-	local first = body:match("^[^\r\n]*") or ""
-	first = M.normalize_comment_text(first)
+function M.comment_preview(comment, width, has_more)
+	local body = vim.trim(tostring(comment and comment.body or ""))
+	local first = M.normalize_comment_text(body:match("^[^\r\n]*") or "")
 	if first == "" then
 		first = "(empty comment)"
 	end
-	local multiline = body:find("[\r\n]") ~= nil
-	if #first > 96 then
-		first = first:sub(1, 96)
-		multiline = true
-	end
-	return multiline and (first .. "…") or first
+	return abbreviate(first, math.max(1, math.min(width or 96, 96)), has_more or body:find("[\r\n]"))
+end
+
+function M.comment_card(comment, first, last, width, has_more)
+	width = math.min(width, 66)
+	local anchor = M.is_file_level_comment(comment) and "File-level" or M.range_label(first, last)
+	local header = abbreviate(M.normalize_comment_text(M.comment_source_label(comment)) .. " · " .. anchor, width - 5)
+	local top = "╭─ " .. header .. " "
+	top = top .. string.rep("─", width - vim.fn.strdisplaywidth(top) - 1) .. "╮"
+	local preview = M.comment_preview(comment, width - 4, has_more)
+	local border = "DiffviewReviewCommentBorder"
+	return {
+		{ { top, border } },
+		{
+			{ "│ ", border },
+			{ preview .. string.rep(" ", width - 4 - vim.fn.strdisplaywidth(preview)), "DiffviewReviewCommentPreview" },
+			{ " │", border },
+		},
+		{ { "╰" .. string.rep("─", width - 2) .. "╯", border } },
+	}
 end
 
 function M.split_comment_text(text)

@@ -76,8 +76,6 @@ assert(
   "returning guide items reconnect to their thread"
 )
 
-assert(helper("truncate_display")("abcdefgh", 4) == "abc…", "posting previews retain bounded text")
-
 local ordered = helper("review_entries")({
   panel = {
     ordered_file_list = function()
@@ -225,16 +223,52 @@ vim.fn.systemlist = original_systemlist
 vim.fn.executable = original_executable
 original_systemlist({ "true" })
 
-for _, maps in pairs(review.diffview_keymaps()) do
-  local refresh, skim = false, false
+-- SETUP: Keep distinct review controls, not retired views or duplicate action shortcuts.
+local retired = {
+  "<leader>gdV",
+  "<leader>gdC",
+  "<leader>gdn",
+  "<leader>gdN",
+  "<leader>gdp",
+  "<leader>gdj",
+  "<leader>gdk",
+  "<leader>gdS",
+  "<leader>gds",
+  "<leader>gdP",
+  "<leader>gdG",
+  "<leader>gdt",
+  "<leader>gdR",
+  "<leader>gdd",
+}
+for name, maps in pairs(review.diffview_keymaps()) do
+  local refresh = false
+  local comment_modes, question_modes = {}, {}
+  -- TEST: Inspect the registered actions and both code-selection modes.
   for _, map in ipairs(maps) do
-    assert(map[2] ~= "<Tab>" and map[2] ~= "<S-Tab>", "native navigation must not be overridden")
-    refresh = refresh or map[2] == "<leader>gdR"
-    skim = skim or (map[2] == "<leader>gdV" and map[3] == review.show_skim)
-    assert(map[2] ~= "<leader>gdj" and map[2] ~= "<leader>gdk", "duplicate guide navigation must be removed")
-    assert(map[2] ~= "<leader>gdS" and map[2] ~= "<leader>gdU", "redundant dashboards must be removed")
+    refresh = refresh or map[2] == "<leader>gdr"
+    assert(map[2] ~= "<leader>gdU")
+    if map[2] == "<leader>gda" then
+      comment_modes[map[1]] = true
+    end
+    if map[2] == "<leader>gdA" then
+      question_modes[map[1]] = true
+    end
+    assert(not vim.tbl_contains(retired, map[2]), "retired review shortcuts must stay removed: " .. map[2])
     assert(type(map[3]) == "function")
   end
-  assert(refresh and skim)
+  assert(refresh)
+  if name == "view" then
+    assert(comment_modes.n and comment_modes.x and question_modes.n and question_modes.x)
+  end
 end
+local native_refresh = false
+vim.api.nvim_create_user_command("DiffviewRefresh", function()
+  native_refresh = true
+end, {})
+local refresh_map = vim.iter(review.diffview_keymaps().view):find(function(map)
+  return map[1] == "n" and map[2] == "<leader>gdr"
+end)
+refresh_map[3]()
+assert(native_refresh, "gdr keeps the native refresh without a review")
+
 print("diffview_review_workflow: all tests passed")

@@ -16,81 +16,418 @@ function M.diagram(value)
 end
 
 function M.progress(entries, current, phoenix, width)
-  local reviewed, position = 0, nil
+  local position
   for index, item in ipairs(entries) do
-    if item.viewed then
-      reviewed = reviewed + 1
-    end
     if item.path == current then
       position = index
+      break
     end
   end
-  local total = #entries
-  local filled = total > 0 and math.floor(reviewed * 8 / total) or 0
-  local bar = "[" .. string.rep("#", filled) .. string.rep("-", 8 - filled) .. "]"
   local scope = phoenix and "Phoenix" or "All"
-  if total == 0 then
-    local text = scope .. " · no matching files · reviewed 0/0 " .. bar
-    return width and vim.fn.strdisplaywidth(text) > width and (scope .. " · no files " .. bar) or text
+  if #entries == 0 then
+    return scope .. " · no matching files"
   end
-  local text = ("%s · position %s/%d · reviewed %d/%d %s"):format(scope, position or "-", total, reviewed, total, bar)
-  if width and vim.fn.strdisplaywidth(text) > width then
-    return ("%s %s/%d · done %d/%d %s"):format(scope, position or "-", total, reviewed, total, bar)
-  end
-  return text
+  local count = tostring(position or "-") .. "/" .. #entries
+  local text = scope .. " · position " .. count
+  return width and vim.fn.strdisplaywidth(text) > width and (scope .. " " .. count) or text
 end
 
-function M.lines(guide, entries, current, phoenix)
-  local lines, targets = { "PR flow", "" }, {}
-  if guide then
-    if guide.summary ~= "" then
-      table.insert(lines, (guide.summary:gsub("[\r\n]", " ")))
+local function append_text(lines, value)
+  vim.list_extend(lines, M.diagram(value))
+end
+
+local function core_sections(guide)
+  local sections, seen = {}, {}
+  for _, block in ipairs(guide and guide.core_code or {}) do
+    local _, source = M.source((block.sources or {})[1], guide)
+    local anchor = source and (source.path .. ":" .. source.side .. ":" .. source.line)
+    local key = block.id or anchor or (block.label .. " — " .. block.title)
+    seen[key] = (seen[key] or 0) + 1
+    table.insert(sections, { id = "core:" .. key .. ":" .. seen[key], label = block.title, block = block })
+  end
+  return sections
+end
+
+function M.source(source, guide)
+  local path, first, last, revision, side, text
+  if type(source) == "table" then
+    path, first, last, revision, side = source.path, source.line, source.end_line, source.revision, source.side
+    text = tostring(path or "?")
+      .. ":"
+      .. tostring(first or "?")
+      .. (last and ("-" .. tostring(last)) or "")
+      .. " at "
+      .. tostring(revision or side or "?")
+  else
+    text = tostring(source)
+    local location
+    location, revision = text:match("^(.-)%s+at%s+(%S+)$")
+    if location then
+      path, first, last = location:match("^(.-):(%d+)%-(%d+)$")
+      if not path then
+        path, first = location:match("^(.-):(%d+)$")
+      end
+      local without_symbol = path and path:match("^(.-):[^/:]+$")
+      if without_symbol and guide.files_by_path[without_symbol] and not guide.files_by_path[path] then
+        path = without_symbol
+      end
+    end
+  end
+  local context = guide.context or {}
+  if not revision then
+    revision = side == "LEFT" and context.base_oid or (side == "RIGHT" and context.head_oid or nil)
+  end
+  if revision == "base" then
+    revision = context.base_oid
+  end
+  if revision == "head" then
+    revision = context.head_oid
+  end
+  local base, head = context.base_oid, context.head_oid
+  if type(revision) == "string" and #revision >= 7 then
+    local is_base = base and base:sub(1, #revision) == revision
+    local is_head = head and head:sub(1, #revision) == revision
+    if is_base and not is_head then
+      revision, side = base, side or "LEFT"
+    end
+    if is_head and not is_base then
+      revision, side = head, side or "RIGHT"
+    end
+  end
+  last = last or first
+  first = (type(first) == "number" or type(first) == "string") and tonumber(first) or nil
+  last = (type(last) == "number" or type(last) == "string") and tonumber(last) or nil
+  if
+    type(path) ~= "string"
+    or not first
+    or not last
+    or first % 1 ~= 0
+    or last % 1 ~= 0
+    or first < 1
+    or last < first
+    or (side ~= "LEFT" and side ~= "RIGHT")
+    or revision ~= (side == "LEFT" and base or head)
+  then
+    return text
+  end
+  return text, { path = path, line = first, end_line = last, side = side, revision = revision }
+end
+
+function M.source_link(source, guide)
+  local text, target = M.source(source, guide)
+  if not target then
+    return "Source: " .. text, nil
+  end
+  local range = tostring(target.line)
+  if target.end_line ~= target.line then
+    range = range .. "-" .. target.end_line
+  end
+  return ("↗ %s:%s · %s"):format(vim.fs.basename(target.path), range, target.side == "LEFT" and "Before" or "After"),
+    target
+end
+
+function M.code_language(block, guide)
+  local label = vim.trim(block.label):lower()
+  if label:find("pseudocode", 1, true) or label:find("pseudo-code", 1, true) then
+    return "text", "pseudocode"
+  end
+  if label ~= "source excerpt" then
+    return "text"
+  end
+  for _, source in ipairs(block.sources or {}) do
+    local _, target = M.source(source, guide)
+    if target then
+      local filetype = vim.filetype.match({ filename = target.path })
+      local lang = filetype and vim.treesitter.language.get_lang(filetype)
+      if
+        lang
+        and lang:match("^[%w_]+$")
+        and #vim.api.nvim_get_runtime_file("queries/" .. lang .. "/highlights.scm", false) > 0
+      then
+        local ok, loaded = pcall(vim.treesitter.language.add, lang)
+        if ok and loaded then
+          return lang
+        end
+      end
+    end
+  end
+  return "text"
+end
+
+local function legacy_sections(guide, entries)
+  local chunks, seen, summaries = {}, {}, {}
+  for _, file in ipairs(guide and guide.files or {}) do
+    local stage = file.stage and vim.trim(file.stage:gsub("[\r\n]", " "))
+    if stage and not summaries[stage] then
+      summaries[stage] = file.reason
+    end
+  end
+  for _, item in ipairs(entries) do
+    local file = guide and guide.files_by_path[item.path]
+    local stage = file and file.stage and vim.trim(file.stage:gsub("[\r\n]", " "))
+    if not stage or stage == "" then
+      stage = item.path
+    end
+    local chunk = chunks[#chunks]
+    if not chunk or chunk.stage ~= stage then
+      local name = file and file.stage and stage:gsub("^%d+[.)]%s*", "") or stage
+      seen[name] = (seen[name] or 0) + 1
+      chunk = {
+        id = "chunk:" .. name .. ":" .. seen[name],
+        name = name,
+        stage = stage,
+        files = {},
+        summary = summaries[stage] or (file and file.reason),
+        number = file and file.stage and stage:match("^(%d+)[.)]%s*") or tostring(#chunks + 1),
+      }
+      table.insert(chunks, chunk)
+    end
+    table.insert(chunk.files, { item = item, guide = file })
+  end
+  return chunks
+end
+
+local function reading_label(reason)
+  local text = (" " .. (reason or "")):gsub("(%s)%[([^%]]+)%]$", function(space, tag)
+    local key = vim.trim(tag:gsub("^🔎%s*", ""):gsub("^👀%s*", "")):lower()
+    local label = ({
+      ["read carefully"] = "🔎 Careful reading",
+      ["careful reading"] = "🔎 Careful reading",
+      deep = "🔎 Careful reading",
+      skim = "👀 Skim",
+      ["optional/generated"] = "👀 Skim · optional/generated",
+    })[key]
+    return space .. "[" .. (label or tag) .. "]"
+  end)
+  return text:sub(2)
+end
+
+function M.lines(guide, entries, current, phoenix, status, workspace, state, opts)
+  opts = opts or {}
+  local lines, targets, sections, code_rows = {}, {}, {}, {}
+  local divider = string.rep("─", math.max(1, (opts.width or 72) - 2))
+  local function section(id, label)
+    table.insert(lines, label)
+    sections[#lines] = { id = id, label = label }
+  end
+  local overall = require("utils.diffview_review_chunks").overall_progress(workspace, state or {})
+  if overall then
+    section("overall-progress", "Overall review  " .. overall .. " hunks")
+    table.insert(lines, "")
+  end
+  if status then
+    local label = ({
+      queued = "queued",
+      running = "updating guide…",
+      completed = "guide ready",
+      failed = "guide update failed",
+    })[status.status]
+    if label then
+      table.insert(lines, "Main Pi: " .. label)
+    end
+    if status.error then
+      append_text(lines, status.error)
     end
     table.insert(lines, "")
-    for _, line in ipairs(guide.diagram) do
-      table.insert(lines, line)
+  end
+  if guide then
+    section("overview", "## 🧭 PR overview")
+    table.insert(lines, divider)
+  end
+  if guide then
+    table.insert(lines, "")
+    section("goal", "### 🎯 Goal")
+    append_text(lines, guide.summary)
+    local behavior = guide.behavior_change or {}
+    if behavior.before and behavior.before ~= "" then
+      table.insert(lines, "")
+      append_text(lines, "Before: " .. behavior.before)
     end
+    if behavior.after and behavior.after ~= "" then
+      append_text(lines, "After: " .. behavior.after)
+    end
+    table.insert(lines, "")
+    section("diagram", "### 🗺️ PR flow / code diagram")
+    table.insert(lines, "")
+    append_text(lines, guide.diagram)
     if #guide.diagram == 0 then
-      table.insert(lines, "No diagram yet; ask Pi to update the guide.")
+      table.insert(lines, "No diagram yet; press r to update the guide.")
     end
-  else
-    table.insert(lines, "Guide not ready; you can continue reviewing while Pi prepares it.")
+    table.insert(lines, "")
+    section("core", "### 💻 Core code changes")
+    for _, part in ipairs(core_sections(guide)) do
+      local block = part.block
+      table.insert(lines, "")
+      section(part.id, block.label .. " — " .. block.title)
+      local language, style = M.code_language(block, guide)
+      table.insert(lines, "```" .. language)
+      local first = #lines + 1
+      append_text(lines, block.code)
+      for row = first, #lines do
+        code_rows[row] = style or language
+      end
+      table.insert(lines, "```")
+      for _, source in ipairs(block.sources or {}) do
+        local text, target = M.source_link(source, guide)
+        table.insert(lines, text)
+        targets[#lines] = target
+      end
+    end
+    if #(guide.core_code or {}) == 0 then
+      table.insert(lines, "Core code is not included yet; press r to update the guide.")
+    end
+  elseif not guide then
+    section("availability", "Guide not ready; press r to generate it in the main Pi session, or continue reviewing.")
   end
   table.insert(lines, "")
-  table.insert(lines, M.progress(entries, current, phoenix))
-  table.insert(lines, "Recommended review route (Enter opens a file):")
-  if #entries == 0 then
-    table.insert(lines, phoenix and "No Phoenix-owned changed files at this revision." or "No changed files.")
-  end
-  for index, item in ipairs(entries) do
-    local file = guide and guide.files_by_path[item.path]
-    local reason = file and file.reason or nil
-    if reason then
-      reason = reason:gsub("[\r\n]", " ")
+  if workspace and workspace.plan then
+    table.insert(lines, divider)
+    section("route", "## 📚 Review sections · Enter opens · v viewed")
+    local chunks_view = require("utils.diffview_review_chunks")
+    local counts, completed = {}, 0
+    for _, chunk in ipairs(workspace.plan.chunks) do
+      local viewed, total = chunks_view.read_count(chunk.hunks, state or {})
+      counts[chunk.id] = chunks_view.progress_bar(viewed, total)
+      if total > 0 and viewed == total then
+        completed = completed + 1
+      end
     end
-    table.insert(
-      lines,
-      ("%s %s %d. %s%s"):format(
-        item.path == current and ">" or " ",
-        item.viewed and "[x]" or "[ ]",
-        index,
-        item.path,
-        reason and (" — " .. reason) or ""
+    table.insert(lines, "Sections viewed  " .. chunks_view.progress_bar(completed, #workspace.plan.chunks))
+    for _, chunk in ipairs(workspace.plan.chunks) do
+      local visible = not workspace.visible or #workspace.visible(chunk) > 0
+      local prefix = (chunk.id == workspace.active and "> " or "  ") .. counts[chunk.id] .. "  "
+      local title = ("%d. %s"):format(chunk.number, chunk.title)
+      section(
+        "chunk:" .. chunk.id,
+        prefix
+          .. title
+          .. (visible and "" or " · outside ownership scope")
+          .. " — "
+          .. chunk.summary:gsub("[\r\n]", " ")
       )
-    )
-    targets[#lines] = item
-  end
-  if guide and #guide.high_risk > 0 then
+      sections[#lines].title_range = { #prefix, #prefix + #title }
+      targets[#lines] = { chunk_id = chunk.id }
+      if chunk.id == workspace.active then
+        table.insert(lines, "    Hunks viewed     " .. counts[chunk.id])
+        local in_scope = {}
+        for _, hunk in ipairs(workspace.visible and workspace.visible(chunk) or chunk.hunks) do
+          in_scope[hunk.id] = true
+        end
+        for number, hunk in ipairs(chunk.hunks) do
+          local read = state and state.read_hunks and state.read_hunks[hunk.id]
+          section(
+            "section:hunk:" .. hunk.id,
+            ("    • %s %s %d. %s · %s%s"):format(
+              workspace.hunk == hunk.id and "▶" or " ",
+              read and "✓" or "○",
+              number,
+              chunks_view.hunk_location(hunk),
+              hunk.path:gsub("[\r\n]", " "),
+              in_scope[hunk.id] and "" or " · outside ownership scope"
+            )
+          )
+          if in_scope[hunk.id] then
+            targets[#lines] = { chunk_id = chunk.id, hunk_id = hunk.id }
+          end
+          if hunk.file_change then
+            table.insert(lines, "        File attributes: " .. hunk.file_change)
+          end
+        end
+      end
+    end
+    if workspace.error then
+      append_text(lines, "Plan update rejected: " .. workspace.error)
+    end
+  else
+    if workspace and workspace.error then
+      append_text(lines, "Sections: " .. workspace.error)
+    end
+    local chunks = legacy_sections(guide, entries)
+    section("overview-route", "### 📚 Overview route (current scope)")
+    for _, chunk in ipairs(chunks) do
+      section("overview:" .. chunk.id, chunk.number .. ". " .. chunk.name)
+      sections[#lines].title_range = { 0, #lines[#lines] }
+    end
     table.insert(lines, "")
-    table.insert(lines, "Review focus:")
-    for index = 1, math.min(3, #guide.high_risk) do
-      table.insert(lines, "- " .. guide.high_risk[index]:gsub("[\r\n]", " "))
+    table.insert(lines, divider)
+    section("route", "## 🔬 Section review")
+    table.insert(lines, "Enter opens a file or source reference.")
+    if #entries == 0 then
+      table.insert(lines, phoenix and "No Phoenix-owned changed files at this revision." or "No changed files.")
+    end
+    local index = 0
+    for _, chunk in ipairs(chunks) do
+      table.insert(lines, "")
+      section(chunk.id, "### 🔬 Section " .. chunk.number .. " — " .. chunk.name)
+      table.insert(lines, "")
+      local summary = chunk.summary
+      append_text(
+        lines,
+        summary and ("Purpose/change: " .. reading_label(summary):gsub("^Chunk summary:%s*", ""))
+          or "No purpose/change summary in this guide yet."
+      )
+      for _, entry in ipairs(chunk.files) do
+        index = index + 1
+        local item, file = entry.item, entry.guide
+        local reason = file and file.reason ~= summary and file.reason
+        section(
+          "route:" .. item.path,
+          ("%s %s %d. %s%s"):format(
+            item.path == current and ">" or " ",
+            item.viewed and "[x]" or "[ ]",
+            index,
+            item.path,
+            reason and (" — " .. reading_label(reason):gsub("[\r\n]", " ")) or ""
+          )
+        )
+        targets[#lines] = item
+        for suggestion_index, suggestion in ipairs(file and file.suggestions or {}) do
+          table.insert(lines, "")
+          local body = M.diagram(suggestion.body)
+          section("suggestion:" .. item.path .. ":" .. (suggestion.id or suggestion_index), body[1] or "")
+          vim.list_extend(lines, body, 2)
+          if suggestion.line then
+            local source, target = M.source_link({
+              path = item.path,
+              side = suggestion.side,
+              line = suggestion.line,
+              end_line = suggestion.end_line,
+              revision = (guide.context or {})[suggestion.side == "LEFT" and "base_oid" or "head_oid"],
+            }, guide)
+            table.insert(lines, source)
+            targets[#lines] = target
+          else
+            table.insert(lines, "Source: " .. item.path .. " (file-level / approximate anchor)")
+          end
+          if suggestion.why then
+            append_text(lines, "Why: " .. suggestion.why)
+          end
+        end
+        if #(file and file.suggestions or {}) > 0 then
+          table.insert(lines, "")
+        end
+      end
     end
   end
-  return lines, targets
+  if workspace and workspace.plan then
+    table.insert(lines, "")
+    table.insert(lines, divider)
+    local detail, detail_targets, detail_sections, detail_code =
+      require("utils.diffview_review_chunks").lines(workspace, state or {})
+    local offset = #lines
+    vim.list_extend(lines, detail)
+    for row, target in pairs(detail_targets) do
+      targets[row + offset] = target
+    end
+    for row, part in pairs(detail_sections) do
+      sections[row + offset] = { id = "section:" .. part.id, label = part.label }
+    end
+    for row, language in pairs(detail_code or {}) do
+      code_rows[row + offset] = language
+    end
+  end
+  return lines, targets, sections, code_rows
 end
-
-local POPUP_NS = vim.api.nvim_create_namespace("diffview_review_guide")
 
 local function notify(message, level)
   vim.notify(message, level or vim.log.levels.INFO, { title = "Diffview Review" })
@@ -146,6 +483,8 @@ function M.normalize(decoded)
     return nil
   end
 
+  local behavior = type(decoded.behavior_change) == "table" and decoded.behavior_change or {}
+  local validation = type(decoded.validation) == "table" and decoded.validation or {}
   local guide = {
     context = type(decoded.context) == "table" and decoded.context or {},
     pr_number = type(decoded.pr) == "table" and decoded.pr.number
@@ -153,10 +492,34 @@ function M.normalize(decoded)
     pr_url = type(decoded.pr) == "table" and decoded.pr.url or nil,
     summary = type(decoded.summary) == "string" and decoded.summary or "",
     diagram = M.diagram(decoded.diagram),
+    behavior_change = {
+      before = type(behavior.before) == "string" and behavior.before or "",
+      after = type(behavior.after) == "string" and behavior.after or "",
+    },
+    core_code = {},
+    chunks = type(decoded.chunks) == "table" and decoded.chunks or {},
+    validation = {
+      review_scope = type(validation.review_scope) == "string" and validation.review_scope or "",
+      observed = string_list(validation.observed),
+      gaps = string_list(validation.gaps),
+    },
     high_risk = string_list(decoded.high_risk),
     files = {},
     files_by_path = {},
   }
+
+  for _, block in ipairs(type(decoded.core_code) == "table" and decoded.core_code or {}) do
+    local code = type(block) == "table" and M.diagram(block.code) or {}
+    if #code > 0 then
+      table.insert(guide.core_code, {
+        id = string_id(block.id),
+        label = type(block.label) == "string" and block.label or "Core pseudocode",
+        title = type(block.title) == "string" and block.title or "Core mechanism",
+        code = code,
+        sources = type(block.sources) == "table" and vim.deepcopy(block.sources) or string_list(block.sources),
+      })
+    end
+  end
 
   for _, file in ipairs(type(decoded.files) == "table" and decoded.files or {}) do
     local path = type(file) == "table" and normalize_file(file.path) or nil
@@ -164,6 +527,7 @@ function M.normalize(decoded)
       local guide_file = {
         id = string_id(file.guide_id) or string_id(file.id),
         reason = type(file.reason) == "string" and file.reason or nil,
+        stage = type(file.stage) == "string" and file.stage or nil,
         path = path,
         suggestions = {},
       }
@@ -244,88 +608,6 @@ function M.load(path, context)
   end
   M.cache = { path = path, mtime = mtime, guide = guide }
   return guide
-end
-
-function M.refresh_popup(view, guide, entries, current, phoenix)
-  if not M.popup or M.popup.view ~= view then
-    return
-  end
-  local popup = M.popup
-  if not vim.api.nvim_win_is_valid(popup.winid) or not vim.api.nvim_buf_is_valid(popup.bufnr) then
-    M.popup = nil
-    return
-  end
-  local lines, targets = M.lines(guide, entries, current, phoenix)
-  popup.targets = targets
-  if not vim.deep_equal(lines, vim.api.nvim_buf_get_lines(popup.bufnr, 0, -1, false)) then
-    local saved = vim.api.nvim_win_call(popup.winid, vim.fn.winsaveview)
-    vim.bo[popup.bufnr].modifiable = true
-    vim.api.nvim_buf_set_lines(popup.bufnr, 0, -1, false, lines)
-    vim.bo[popup.bufnr].modifiable = false
-    saved.lnum = math.min(saved.lnum, #lines)
-    vim.api.nvim_win_call(popup.winid, function()
-      vim.fn.winrestview(saved)
-    end)
-  end
-  vim.api.nvim_buf_clear_namespace(popup.bufnr, POPUP_NS, 0, -1)
-  for line, item in pairs(targets) do
-    if item.path == current then
-      vim.api.nvim_buf_set_extmark(popup.bufnr, POPUP_NS, line - 1, 0, { line_hl_group = "DiffviewReviewStatusFile" })
-    end
-  end
-end
-
-function M.show(view, guide, entries, current, phoenix, jump)
-  if M.popup and vim.api.nvim_win_is_valid(M.popup.winid) then
-    if M.popup.view == view then
-      vim.api.nvim_set_current_win(M.popup.winid)
-      return
-    end
-    vim.api.nvim_win_close(M.popup.winid, true)
-  end
-  local lines = M.lines(guide, entries, current, phoenix)
-  local longest = 52
-  for _, line in ipairs(lines) do
-    longest = math.max(longest, vim.fn.strdisplaywidth(line))
-  end
-  local width = math.min(longest, math.max(1, vim.o.columns - 4))
-  local height = math.min(#lines, math.max(1, vim.o.lines - 4))
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  vim.b[bufnr].diffview_review_guide = true
-  vim.bo[bufnr].bufhidden = "wipe"
-  vim.bo[bufnr].filetype = "text"
-  local winid = vim.api.nvim_open_win(bufnr, true, {
-    border = "rounded",
-    relative = "editor",
-    style = "minimal",
-    col = math.max(math.floor((vim.o.columns - width) / 2), 0),
-    row = math.max(math.floor((vim.o.lines - height) / 2), 0),
-    width = width,
-    height = height,
-    title = " PR flow and review route ",
-    title_pos = "center",
-  })
-  vim.wo[winid].wrap = false
-  vim.wo[winid].conceallevel = 0
-  M.popup = { bufnr = bufnr, winid = winid, view = view }
-  M.refresh_popup(view, guide, entries, current, phoenix)
-  local function close()
-    if vim.api.nvim_win_is_valid(winid) then
-      vim.api.nvim_win_close(winid, true)
-    end
-    if M.popup and M.popup.winid == winid then
-      M.popup = nil
-    end
-  end
-  vim.keymap.set("n", "q", close, { buffer = bufnr, nowait = true, silent = true })
-  vim.keymap.set("n", "<Esc>", close, { buffer = bufnr, nowait = true, silent = true })
-  vim.keymap.set("n", "<CR>", function()
-    local item = M.popup and M.popup.targets[vim.api.nvim_win_get_cursor(winid)[1]]
-    if item then
-      close()
-      jump(item)
-    end
-  end, { buffer = bufnr, nowait = true, silent = true, desc = "Open review route file" })
 end
 
 return M

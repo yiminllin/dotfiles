@@ -17,7 +17,7 @@ function latestMessageTime(session: ExtensionContext["sessionManager"]): string 
 // Custom dialogs do not set Pi's OSC 7501 blocked state.
 export default function (pi: ExtensionAPI) {
   const pane = process.env.TMUX_PANE;
-  if (!pane) return;
+  if (!pane || process.env.PI_REVIEW_WORKER === "1") return;
   const pending = new Set<string>();
   let active = false;
 

@@ -35,6 +35,7 @@ SELECTED_STYLE = "1;7"
 ACCENT_STYLE = "1;36"
 BORDER_STYLE = "1;38;5;136"
 PI_COMMAND = re.compile(r"(?:^|[\s;|&])(?:exec\s+)?(?:[^\s;|&]*/)?pi(?:[\s;|&]|$)")
+WORKER = re.compile(r"--review-worker(?:\s|$)")
 
 
 def tmux(*args):
@@ -120,7 +121,7 @@ def pi_ancestors():
             continue
         pid, parent, command = parts[:3]
         parents[pid] = parent
-        if Path(command).name == "pi":
+        if Path(command).name == "pi" and not WORKER.search(parts[3] if len(parts) > 3 else ""):
             agents.append(pid)
     result = set()
     for pid in agents:
@@ -237,7 +238,7 @@ def collect_agents():
                 continue
             pane = dict(zip(FIELDS, values))
             start = pane["pane_start_command"]
-            if pane["@pi_agent_board"] == "1":
+            if pane["@pi_agent_board"] == "1" or WORKER.search(start):
                 continue
             if pane["pane_current_command"] == "pi" or PI_COMMAND.search(start) or pane["pane_pid"] in ancestors:
                 panes.append(pane)

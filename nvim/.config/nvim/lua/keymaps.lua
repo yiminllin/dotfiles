@@ -25,18 +25,8 @@ vim.keymap.set("n", "<C-S-right>", "<c-w>5>")
 vim.keymap.set("n", "<C-S-up>", "<C-W>+")
 vim.keymap.set("n", "<C-S-down>", "<C-W>-")
 
--- Use Alt+<jk> to go through Diffview review comments, loclist if exists, or quickfix list
-local function nav_diffview_comments_quickfix(direction)
-	local ok, review = pcall(require, "utils.diffview_review")
-	local qf_direction = direction == "next" and 1 or -1
-	return ok and review.navigate_comments_quickfix and review.navigate_comments_quickfix(qf_direction)
-end
-
+-- Use Alt+<jk> for the location list when available, otherwise quickfix.
 local function nav_loc_or_qf_list(direction)
-	if nav_diffview_comments_quickfix(direction) then
-		return
-	end
-
 	local loclist = vim.fn.getloclist(0, { size = 0 })
 	if loclist.size > 0 then
 		pcall(vim.cmd, direction == "next" and "lnext" or "lprev")
@@ -51,41 +41,61 @@ vim.keymap.set("n", "<M-k>", function()
 	nav_loc_or_qf_list("prev")
 end)
 
--- Cycle through vertical and horizontal layouts
+local function is_diff_side(win)
+	local buf = vim.api.nvim_win_get_buf(win)
+	return vim.wo[win].diff and not vim.b[buf].diffview_review_panel and vim.bo[buf].filetype ~= "DiffviewFiles"
+end
+
+local function split_pair(layout, current)
+	local kind, children = unpack(layout)
+	if kind == "leaf" then
+		return
+	end
+	for index, child in ipairs(children) do
+		if child[1] == "leaf" and child[2] == current then
+			local left, right = children[index - 1], children[index + 1]
+			left = left and left[1] == "leaf" and left[2]
+			right = right and right[1] == "leaf" and right[2]
+			-- In Diffview, favor the other diff side over an adjacent panel.
+			if left and (not right or (is_diff_side(current) and is_diff_side(left))) then
+				return kind, left, current
+			elseif right then
+				return kind, current, right
+			end
+		else
+			local axis, first, second = split_pair(child, current)
+			if axis then
+				return axis, first, second
+			end
+		end
+	end
+end
+
 local function cycle_layout()
-	local wins = vim.api.nvim_tabpage_list_wins(0)
-	if #wins ~= 2 then
+	local current = vim.api.nvim_get_current_win()
+	if vim.api.nvim_win_get_config(current).relative ~= "" then
+		return
+	end
+	local layout = vim.fn.winlayout()
+	if layout[1] == "leaf" then
 		if vim.env.TMUX and vim.env.TMUX ~= "" then
 			vim.system({ "tmux", "run-shell", "-b", "~/.tmux/cycle-layouts.sh" })
 		end
 		return
 	end
 
-	local win1, win2 = wins[1], wins[2]
-
-	local pos1 = vim.api.nvim_win_get_position(win1)
-	local pos2 = vim.api.nvim_win_get_position(win2)
-	local is_vertical = pos1[1] == pos2[1]
-
-	local get_dim = is_vertical and vim.api.nvim_win_get_width or vim.api.nvim_win_get_height
-	local set_dim = is_vertical and vim.api.nvim_win_set_width or vim.api.nvim_win_set_height
-
-	local current_size = get_dim(win1)
-	local total_size = current_size + get_dim(win2)
-
-	local small = math.floor(0.3 * total_size)
-	local medium = math.floor(0.5 * total_size)
-	local large = math.floor(0.7 * total_size)
-	local tolerance = math.floor(0.1 * total_size)
-
-	-- Cycle: 50 -> 70 -> 30 -> 50
-	if math.abs(current_size - medium) <= tolerance then
-		set_dim(win1, large)
-	elseif current_size > medium then
-		set_dim(win1, small)
-	else
-		set_dim(win1, medium)
+	local axis, first, second = split_pair(layout, current)
+	if not axis then
+		return
 	end
+	local get_size = axis == "row" and vim.api.nvim_win_get_width or vim.api.nvim_win_get_height
+	local move = axis == "row" and vim.fn.win_move_separator or vim.fn.win_move_statusline
+	local size = get_size(first)
+	local total = size + get_size(second)
+	local share = size / total
+	-- Cycle the left or top split: 50% → 70% → 30% → 50%.
+	local next_share = share < 0.4 and 0.5 or (share <= 0.6 and 0.7 or 0.3)
+	move(first, math.floor(total * next_share) - size)
 end
 
 vim.keymap.set("n", "<M-c>", cycle_layout, { desc = "Cycle Split Layout" })

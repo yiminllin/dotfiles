@@ -255,8 +255,8 @@ return {
 		"DiffviewRefresh",
 		"DiffviewPrOpen",
 		"DiffviewReviewGuide",
+		"DiffviewReviewAllChanges",
 		"DiffviewReviewImportGithubComments",
-		"DiffviewReviewPostGithubComments",
 		"DiffviewReviewReply",
 		"DiffviewReviewReanchor",
 	},
@@ -623,20 +623,12 @@ return {
 			desc = "[G]it [D]iffview [A]dd Review Comment",
 		},
 		{
-			"<leader>gdd",
-			function()
-				require("utils.diffview_review").delete_comment()
-			end,
-			mode = { "n", "v" },
-			desc = "[G]it [D]iffview [D]elete Review Comment",
-		},
-		{
 			"<leader>gdv",
 			function()
-				require("utils.diffview_review").toggle_file_viewed()
+				require("utils.diffview_review").chunk_action("read")
 			end,
 			mode = { "n", "v" },
-			desc = "[G]it [D]iffview Toggle File [V]iewed",
+			desc = "[G]it [D]iffview Toggle Git Hunk Read",
 		},
 	},
 }

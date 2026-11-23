@@ -32,7 +32,13 @@ Accept a PR number/URL, local branch, commit range, current-worktree diff bounda
 
 ## Persistent Diffview guides
 
-Write one JSON artifact atomically; do not create a separate Markdown guide. Reuse a valid guide unless it is missing, invalid, stale, lacking a diagram, or explicitly requested for refresh. New template fields alone do not require regeneration. When ongoing updates are authorized and discussion changes understanding or order, revise the same artifact; do not rewrite it for every reply. Preserve exact revision stamps and still-relevant suggestion IDs. Neovim owns comment state, reviewed-file progress, and ownership filters—do not edit those. Explain activity and findings in the visible Pi conversation.
+Write one JSON artifact atomically; do not create a separate Markdown guide. Reuse a valid guide unless it is missing, invalid, stale, lacks a source-backed diagram or representative core-code view, lacks a complete semantic chunk partition when the host provides `review-hunks.json`, or is explicitly requested for refresh. New optional template fields alone do not require regeneration.
+
+The main Pi review session owns guide generation and iteration; parallel comment workers are read-only. For a requested update, read the existing guide, local comments, and completed worker replies. Verify substantive conclusions against the pinned source, then update the same code-diagram/core-code-based guide. Authorized ongoing updates may revise understanding or order, but do not rewrite the guide after every reply. Keep detailed discussion in threads. Explain changes and uncertainty in the visible main Pi conversation.
+
+Put a two- or three-sentence plain-English summary first: name the problem, what changes, and why it matters. Start each section with its purpose and one or two concrete cues in `checks`: say what to look at and what should happen. Explain unfamiliar terms once and keep exact symbols in code and source links. Put important cross-cutting concerns in the section where the reader can check them. Keep detailed audit notes in `validation`; the viewer does not show a final focus or coverage section.
+
+Preserve exact revision stamps, stable chunk/core-code IDs, inventory hunk IDs, and still-relevant suggestion IDs. Use the template's structured source anchors for navigable code references. Neovim owns the hunk inventory, comment state, hunk/file progress, and ownership filters; do not edit them.
 
 ## Visual labels
 

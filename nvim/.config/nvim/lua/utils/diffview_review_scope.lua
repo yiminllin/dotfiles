@@ -4,12 +4,14 @@ local PHOENIX = "@ZiplineTeam/phoenix-reviewers"
 
 -- Keep Git's reconciliation order intact. Only the panel's list is reordered;
 -- its entries are the same objects used by the diff layouts and native Tab.
-local function ordered_files(files, order)
+local function ordered_files(files, order, allowed)
   local result = require("diffview.vcs.file_dict").FileDict()
   for index, set in ipairs(files.sets) do
     local positions, copy = {}, result.sets[index]
     for position, entry in ipairs(set) do
-      copy[position] = entry
+      if not allowed or allowed[entry.path] then
+        table.insert(copy, entry)
+      end
       positions[entry] = position
     end
     table.sort(copy, function(a, b)
@@ -29,7 +31,7 @@ function M.apply_order(view, guide)
     return
   end
   local order, paths = {}, {}
-  for index, file in ipairs(guide and guide.files or {}) do
+  for index, file in ipairs(scope.chunk_order or (guide and guide.files or {})) do
     if not order[file.path] then
       order[file.path] = index
       table.insert(paths, file.path)
@@ -67,9 +69,9 @@ function M.attach(view, root, head)
   local update_components = view.panel.update_components
   scope.presentation = true
   view.panel.update_components = function(panel)
-    if next(scope.order) then
+    if next(scope.order) or scope.chunk_paths then
       panel.listing_style = "list" -- A directory tree cannot express an arbitrary review route.
-      panel.files = ordered_files(view.files, scope.order)
+      panel.files = ordered_files(view.files, scope.order, scope.chunk_paths)
     else
       panel.files = view.files
     end

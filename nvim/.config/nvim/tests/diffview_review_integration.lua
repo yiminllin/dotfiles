@@ -42,6 +42,7 @@ vim.fn.writefile({
 for _, path in ipairs({ "a.lua", "b.lua", "c.lua", "old.lua" }) do
   vim.fn.writefile({ "", "old", "tail" }, root .. "/" .. path)
 end
+vim.fn.writefile({ "fn pinned() -> bool {", "    true", "}" }, root .. "/context.rs")
 git("add", ".")
 local base = commit("base")
 for _, path in ipairs({ "a.lua", "b.lua", "c.lua" }) do
@@ -55,7 +56,23 @@ local diagram =
 local document = {
   context = { base_oid = base, head_oid = head },
   summary = "A concise takeaway.",
+  behavior_change = { before = "Old marker.", after = "New marker." },
   diagram = diagram,
+  core_code = {
+    { label = "Source excerpt", title = "Before", code = { "old" }, sources = { "a.lua:2 at " .. base } },
+    {
+      label = "Source excerpt",
+      title = "After",
+      code = { "new" },
+      sources = {
+        "a.lua:2 at " .. head,
+        { path = ".github/CODEOWNERS", side = "LEFT", revision = base, line = 1, end_line = 2 },
+        { path = "context.rs", side = "LEFT", revision = base, line = 1, end_line = 2 },
+        { path = "old.lua", side = "LEFT", revision = base, line = 2, end_line = 3 },
+      },
+    },
+  },
+  validation = { review_scope = "Fixture only.", gaps = { "Provider not exercised." } },
   files = {
     { path = "b.lua", reason = "inspect shared entry" },
     {
@@ -88,6 +105,7 @@ local function open(head_oid)
     head_oid = head_oid,
     diffview_rev_arg = base .. ".." .. head_oid,
     assistant_name = "offline-fixture",
+    review_label = "offline-fixture",
   })
   vim.cmd("DiffviewOpen " .. base .. ".." .. head_oid)
 end
@@ -167,6 +185,334 @@ end
 local function state()
   return vim.json.decode(table.concat(vim.fn.readfile(root .. "/diffview-review.json"), "\n"))
 end
+local review_tab = vim.api.nvim_get_current_tabpage()
+local refresh_review = review.refresh_review
+local review_refreshed = false
+review.refresh_review = function()
+  review_refreshed = true
+end
+vim.api.nvim_feedkeys((vim.g.mapleader or "\\") .. "gdr", "mx", false)
+review.refresh_review = refresh_review
+assert(review_refreshed, "gdr reloads the review in a pinned review view")
+local pinned_win = focus("b")
+local pinned_buffer = vim.api.nvim_win_get_buf(pinned_win)
+local pinned_lines = vim.api.nvim_buf_get_lines(pinned_buffer, 0, -1, false)
+local pinned_path = view.cur_entry.path
+local working_path = root .. "/" .. pinned_path
+local working_lines = vim.fn.readfile(working_path)
+vim.fn.writefile({ "local edit, not part of the pinned diff" }, working_path)
+vim.cmd.edit()
+assert(
+  vim.deep_equal(vim.api.nvim_buf_get_lines(pinned_buffer, 0, -1, false), pinned_lines),
+  ":edit keeps the pinned source"
+)
+assert(not vim.bo[pinned_buffer].modifiable)
+vim.fn.writefile(working_lines, working_path)
+local navigation_panel = review.show_guide_popup()
+local function panel_source(path, side)
+  vim.api.nvim_set_current_win(navigation_panel.winid)
+  for row, target in pairs(navigation_panel.targets) do
+    if target.path == path and target.side == side then
+      vim.api.nvim_win_set_cursor(navigation_panel.winid, { row, 0 })
+      return target
+    end
+  end
+  error("Missing source: " .. path .. " " .. side)
+end
+local function panel_key(key)
+  vim.fn.maparg(key, "n", false, true).callback()
+end
+for _, side in ipairs({ "LEFT", "RIGHT" }) do
+  panel_source("a.lua", side)
+  assert(vim.api.nvim_get_current_line() == "↗ a.lua:2 · " .. (side == "LEFT" and "Before" or "After"))
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "mx", false)
+  assert(
+    vim.wait(3000, function()
+      return vim.api.nvim_get_current_win() ~= navigation_panel.winid
+        and vim.api.nvim_get_current_line() == (side == "LEFT" and "old" or "new")
+        and vim.api.nvim_win_get_cursor(0)[1] == 2
+    end, 20),
+    "source links select the correct real revision buffer"
+  )
+end
+local invalid_source = panel_source("a.lua", "RIGHT")
+invalid_source.end_line = 999
+panel_key("<CR>")
+settle()
+assert(vim.api.nvim_get_current_win() == navigation_panel.winid, "invalid ranges never clamp or steal focus")
+review.refresh_visible()
+panel_source("old.lua", "LEFT")
+panel_key("<CR>")
+assert(
+  vim.wait(3000, function()
+    return view.cur_entry.path == "renamed.lua"
+      and vim.api.nvim_get_current_win() ~= navigation_panel.winid
+      and vim.api.nvim_get_current_line() == "old"
+  end, 20),
+  "base references follow the old path of a renamed file"
+)
+local marks =
+  vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_create_namespace("diffview_review_target"), 0, -1, { details = true })
+assert(
+  #marks == 2 and marks[1][2] == 1 and marks[2][2] == 2 and marks[1][4].sign_text and marks[2][4].sign_text,
+  "native diff source links mark the first and last line in the gutter"
+)
+panel_source("a.lua", "RIGHT")
+view.right.commit = base
+local before_stale = view.cur_entry
+panel_key("<CR>")
+assert(
+  view.cur_entry == before_stale and vim.api.nvim_get_current_win() == navigation_panel.winid,
+  "stale panel navigation cannot change the selected file"
+)
+view.right.commit = head
+panel_source(".github/CODEOWNERS", "LEFT")
+panel_key("<CR>")
+local continued_reviewing = focus("b")
+settle()
+assert(
+  vim.api.nvim_get_current_tabpage() == review_tab and vim.api.nvim_get_current_win() == continued_reviewing,
+  "late source reads cannot take focus after the reviewer moves on"
+)
+panel_source("context.rs", "LEFT")
+panel_key("<CR>")
+assert(vim.wait(3000, function()
+  return vim.api.nvim_buf_get_name(0):match("^review%-source://") ~= nil
+end, 20))
+assert(vim.api.nvim_get_current_tabpage() == review_tab)
+assert(vim.api.nvim_get_current_line() == "fn pinned() -> bool {")
+assert(not vim.bo.modifiable and vim.bo.filetype == "rust" and vim.bo.buftype == "nofile")
+assert(
+  vim.treesitter.highlighter.active[vim.api.nvim_get_current_buf()] or vim.fn.synID(1, 1, 1) ~= 0,
+  "pinned Rust snapshots use Tree-sitter or built-in Rust syntax"
+)
+assert(vim.wo.number and not vim.wo.wrap)
+panel_key("q")
+assert(vim.api.nvim_get_current_tabpage() == review_tab)
+panel_source("a.lua", "RIGHT")
+panel_key("<CR>")
+assert(vim.wait(3000, function()
+  return view.cur_entry.path == "a.lua"
+    and vim.api.nvim_get_current_win() ~= navigation_panel.winid
+    and vim.api.nvim_get_current_line() == "new"
+end, 20))
+vim.api.nvim_set_current_win(navigation_panel.winid)
+panel_key("q")
+local original_state = state()
+local with_attention = vim.deepcopy(original_state)
+vim.list_extend(with_attention.comments, {
+  {
+    local_id = "ui-unread",
+    file = "a.lua",
+    side = "RIGHT",
+    line = 2,
+    body = "Explain new marker\nwith more context",
+    agent_request_id = "offline-unread",
+    agent_status = "completed",
+    agent_unread = true,
+    replies = { { author = "pi", body = "Offline answer", request_id = "offline-unread" } },
+  },
+  {
+    local_id = "ui-input",
+    file = "a.lua",
+    side = "LEFT",
+    line = 2,
+    end_line = 3,
+    body = "Explain old marker",
+    agent_request_id = "offline-input",
+    agent_status = "blocked",
+    agent_input = { id = "offline-question", method = "confirm", title = "Inspect more?" },
+  },
+  {
+    source = "github",
+    github_id = "ui-github",
+    file = "a.lua",
+    file_level = true,
+    author = "alice",
+    body = "Full imported question\nwith its second line",
+    github_url = "https://example.invalid/comment/1",
+    replies = { { author = "bob", body = "A GitHub reply" } },
+  },
+  {
+    file = "a.lua",
+    side = "RIGHT",
+    line = 2,
+    end_line = 2,
+    body = "Legacy question\nwith full local context",
+    created_at = "2026-01-01T00:00:00Z",
+  },
+})
+vim.fn.writefile(
+  { vim.json.encode({ cwd = root, updated_at = vim.fn.localtime() * 1000 }) },
+  root .. "/review-service.json"
+)
+vim.fn.writefile({ vim.json.encode(with_attention) }, root .. "/diffview-review.json")
+review.refresh_visible()
+local preview_text = {}
+for _, file in ipairs(view.cur_entry.layout:files()) do
+  for _, mark in
+    ipairs(
+      vim.api.nvim_buf_get_extmarks(
+        file.bufnr,
+        vim.api.nvim_create_namespace("diffview_review"),
+        0,
+        -1,
+        { details = true }
+      )
+    )
+  do
+    local rows = mark[4].virt_lines
+    if rows then
+      assert(
+        #rows == 3 and rows[1][1][1]:match("^╭─") and rows[3][1][1]:match("╯$"),
+        "preview has a rounded border"
+      )
+      local width = vim.fn.strdisplaywidth(rows[1][1][1])
+      assert(width == vim.fn.strdisplaywidth(rows[3][1][1]))
+      local row = table.concat(vim.tbl_map(function(chunk)
+        return chunk[1]
+      end, rows[2]))
+      assert(vim.fn.strdisplaywidth(row) == width, "the preview fits inside its border")
+      table.insert(preview_text, row)
+      if row:find("Explain new", 1, true) then
+        assert(file.symbol == "b" and mark[2] == 1, "preview belongs to the exact right-side anchor")
+        assert(row:match("…%s*│$"), "the preview indicates omitted text")
+      end
+    end
+  end
+end
+local previews = table.concat(preview_text, "\n")
+assert(previews:find("Explain new", 1, true), previews)
+assert(not previews:find("more context", 1, true) and not previews:find("Offline answer", 1, true))
+assert(not previews:find("Legacy question", 1, true) and not previews:find("Full imported question", 1, true))
+local format = require("utils.diffview_review_format")
+assert(format.comment_preview({ body = "界界界" }, 5) == "界界…", "truncation preserves wide characters")
+assert(
+  vim.wo[view.panel.winid].winbar:find("%3@v:lua.DiffviewReviewStatusClick@", 1, true),
+  "review status exposes actionable input and unread counts"
+)
+local attention_panel = review.next_attention()
+assert(
+  attention_panel.buffer == navigation_panel.buffer and attention_panel.selected == "ui-unread",
+  "attention reuses the guide panel and selects an unread answer"
+)
+for _, comment in ipairs(state().comments) do
+  if comment.local_id == "ui-unread" then
+    assert(not comment.agent_unread, "reading acknowledges the persisted reply")
+  end
+end
+review.status_click(3, 1, "l")
+assert(
+  attention_panel.selected == "ui-input" and attention_panel.filter == "blocked",
+  "count clicks filter real conversations"
+)
+vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "mx", false)
+assert(
+  vim.wait(3000, function()
+    return vim.api.nvim_get_current_win() ~= attention_panel.winid and vim.api.nvim_get_current_line() == "old"
+  end, 20),
+  "threads jump to their pinned side and range"
+)
+review.show_threads()
+assert(attention_panel.selected == "ui-input", "opening at the code cursor selects its conversation")
+local function thread_action(label)
+  local select = vim.ui.select
+  vim.ui.select = function(items, opts, callback)
+    vim.ui.select = select
+    assert(opts.prompt == "Thread actions")
+    for _, item in ipairs(items) do
+      if item.label == label then
+        callback(item)
+        return
+      end
+    end
+    error("Missing thread action: " .. label)
+  end
+  panel_key("m")
+  assert(vim.ui.select == select, "the action menu opened")
+end
+
+review.status_click(3, 1, "l")
+thread_action("Show all conversations")
+local function select_discussion(preview)
+  for row in pairs(attention_panel.rows) do
+    if vim.api.nvim_buf_get_lines(attention_panel.buffer, row - 1, row, false)[1]:find(preview, 1, true) then
+      vim.api.nvim_win_set_cursor(attention_panel.winid, { row, 0 })
+      panel_key("<Space>")
+      return
+    end
+  end
+  error("Missing discussion: " .. preview)
+end
+select_discussion("Full imported question")
+local discussion = table.concat(vim.api.nvim_buf_get_lines(attention_panel.buffer, 0, -1, false), "\n")
+assert(
+  discussion:find("@alice", 1, true)
+    and discussion:find("with its", 1, true)
+    and discussion:find("second line", 1, true)
+    and discussion:find("A GitHub reply", 1, true)
+    and discussion:find("https://example.invalid/comment/1", 1, true)
+)
+thread_action("Resolve locally")
+local resolved_github
+for _, comment in ipairs(state().comments) do
+  if comment.github_id == "ui-github" then
+    resolved_github = comment
+  end
+end
+assert(resolved_github.local_resolved and not resolved_github.resolved, "GitHub resolution is local only")
+thread_action("Delete or dismiss locally")
+assert(state().dismissed_github_comments["ui-github"], "dismissed GitHub discussions cannot return on import")
+select_discussion("Legacy question")
+thread_action("Resolve locally")
+local legacy
+for _, comment in ipairs(state().comments) do
+  if comment.body:find("Legacy question", 1, true) then
+    legacy = comment
+  end
+end
+assert(legacy.resolved, "ID-less legacy comments resolve by exact identity, not display coordinates")
+thread_action("Delete or dismiss locally")
+for _, comment in ipairs(state().comments) do
+  assert(not comment.body:find("Legacy question", 1, true))
+end
+assert(vim.fn.maparg("P", "n", false, true).buffer ~= 1, "pane navigation has no review-specific shortcut")
+assert(vim.fn.exists(":DiffviewReviewAgent") == 0, "the redundant Pi-focus command is removed")
+local header = vim.api.nvim_buf_get_lines(attention_panel.buffer, 0, 2, false)
+assert(
+  header[1]:find("Branch offline-fixture", 1, true)
+    and header[1]:find(base:sub(1, 8) .. ".." .. head:sub(1, 8), 1, true)
+)
+assert(header[2]:find("? help", 1, true) and not discussion:find("Tab switch", 1, true))
+local leader = vim.g.mapleader or "\\"
+local function reopen_panel(mode)
+  panel_key("q")
+  assert(not attention_panel.winid)
+  assert(vim.fn.maparg(leader .. "gdT", "n") == "", "Threads has no separate shortcut")
+  panel_key(leader .. "gdg")
+  assert(vim.api.nvim_get_current_buf() == navigation_panel.buffer and attention_panel.mode == mode)
+end
+reopen_panel("threads")
+panel_key("<Tab>")
+reopen_panel("guide")
+panel_key("q")
+vim.fn.writefile({ vim.json.encode(original_state) }, root .. "/diffview-review.json")
+review.refresh_visible()
+focus("b")
+review.open_review_source()
+assert(vim.api.nvim_get_current_tabpage() ~= review_tab, "matching source opens outside the pinned diff")
+assert(vim.api.nvim_buf_get_name(0) == root .. "/a.lua", "LSP uses the real checked-out source path")
+assert(vim.api.nvim_win_get_cursor(0)[1] == 2, "source navigation preserves the selected line")
+vim.cmd.tabclose()
+assert(vim.api.nvim_get_current_tabpage() == review_tab)
+focus("a")
+review.open_review_source()
+assert(vim.api.nvim_get_current_tabpage() == review_tab, "historical navigation must not silently use HEAD")
+focus("b")
+vim.fn.writefile({ "", "dirty", "tail" }, root .. "/a.lua")
+review.open_review_source()
+assert(vim.api.nvim_get_current_tabpage() == review_tab, "dirty source cannot claim to match the pinned revision")
+vim.fn.writefile({ "", "new", "tail" }, root .. "/a.lua")
 focus("a")
 vim.ui.select = function(items, _, callback)
   for _, item in ipairs(items) do
@@ -182,91 +528,26 @@ assert(state().comments[1].resolved)
 local right = focus("b")
 review.delete_comment({ line = 3 })
 assert(#state().comments == 1)
-review.add_comment({ args = "saved draft", line = 2, end_line = 2 })
-review.toggle_file_viewed()
-assert(state().viewed["a.lua"])
-local function open_skim()
-  review.show_skim()
-  assert(
-    vim.wait(5000, function()
-      return view.review_skim
-        and not view.review_skim.loading
-        and (view.review_skim.signature or view.review_skim.error)
-    end, 20),
-    "skim must build asynchronously"
-  )
-  local skim = view.review_skim
-  assert(not skim.error, skim.error)
-  return skim
-end
-local function skim_key(key)
-  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(key, true, false, true), "mx", false)
-end
-local skim = open_skim()
-assert(not vim.bo[skim.buf].modifiable and vim.bo[skim.buf].buftype == "nofile")
-local persistence = require("utils.diffview_review_state")
-local load_state, save_state = persistence.load, persistence.save
-persistence.load, persistence.save =
-  function()
-    error("snapshot must not load state")
-  end, function()
-    error("snapshot must not save state")
+review.add_comment({ line = 2, end_line = 3 })
+vim.api.nvim_buf_set_lines(0, 0, -1, false, { "saved draft" })
+vim.cmd("write")
+local draft
+for _, comment in ipairs(state().comments) do
+  if comment.body == "saved draft" then
+    draft = comment
   end
-local snapshot_ok, snapshot = pcall(skim.snapshot)
-persistence.load, persistence.save = load_state, save_state
-assert(snapshot_ok and #snapshot.entries == 4, "skim status snapshots must be read-only")
-local skim_lines = vim.api.nvim_buf_get_lines(skim.buf, 0, -1, false)
-assert(skim_lines[1]:find("All · 4 files", 1, true))
-local skim_paths = {}
-for _, section in ipairs(skim.sections) do
-  table.insert(skim_paths, skim.targets[section.start].path)
 end
-assert(vim.deep_equal(skim_paths, { "b.lua", "a.lua", "renamed.lua", "c.lua" }))
-vim.api.nvim_win_call(skim.win, function()
-  vim.cmd("normal! zM")
-  assert(vim.fn.foldclosed(skim.sections[1].start) == skim.sections[1].start, "file sections must fold")
-  vim.cmd("normal! zR")
-end)
-assert(table.concat(skim_lines, "\n"):find("rename from old.lua", 1, true), "skim must retain rename pairs")
-local function select_skim_target(path, side, line)
-  for row, target in pairs(skim.targets) do
-    if target.path == path and target.side == side and target.line == line then
-      vim.api.nvim_win_set_cursor(skim.win, { row, 0 })
-      return row
-    end
-  end
-  error("skim target not found")
-end
-local selected = select_skim_target("b.lua", "LEFT", 2)
-skim_key("<CR>")
-await_file("b.lua")
+assert(draft and draft.anchor_status == "anchored")
+assert(draft.anchor.original.line == 2 and draft.anchor.original.end_line == 3)
 assert(
-  vim.wait(2500, function()
-    for _, file in ipairs(view.cur_entry.layout:files()) do
-      if file.symbol == "a" and file.bufnr == vim.api.nvim_get_current_buf() then
-        return vim.api.nvim_win_get_cursor(0)[1] == 2
-      end
-    end
-  end, 20),
-  "removed code must jump to its exact LEFT line"
+  vim.deep_equal(draft.anchor.original.text, { "new", "tail" }),
+  "the draft anchors to pinned source, not its editor"
 )
-assert(state().viewed["a.lua"] and not state().viewed["b.lua"] and #state().comments == 2)
-skim = open_skim()
-assert(vim.api.nvim_win_get_cursor(skim.win)[1] == selected, "returning to skim must preserve position")
-select_skim_target("a.lua", "RIGHT", 2)
-skim_key("<CR>")
-await_file("a.lua")
-assert(
-  vim.wait(2500, function()
-    for _, file in ipairs(view.cur_entry.layout:files()) do
-      if file.symbol == "b" and file.bufnr == vim.api.nvim_get_current_buf() then
-        return vim.api.nvim_win_get_cursor(0)[1] == 2
-      end
-    end
-  end, 20),
-  "added code must jump to its exact RIGHT line"
-)
-right = focus("b")
+-- Saved data from the retired file-progress controls remains readable.
+local legacy = state()
+legacy.viewed["a.lua"] = true
+vim.fn.writefile({ vim.json.encode(legacy) }, root .. "/diffview-review.json")
+review.refresh_visible()
 -- Working-tree ownership must not affect the immutable review.
 vim.fn.writefile({ "* @nobody" }, root .. "/.github/CODEOWNERS")
 review.toggle_ownership_filter()
@@ -282,33 +563,32 @@ for _, entry in ipairs(view.panel:ordered_file_list()) do
 end
 assert(state().ownership_filter == "phoenix" and state().viewed["a.lua"])
 assert_order({ "b.lua", "a.lua", "renamed.lua" })
-skim = open_skim()
-skim_lines = vim.api.nvim_buf_get_lines(skim.buf, 0, -1, false)
-assert(skim_lines[1]:find("Phoenix · 3 files", 1, true))
-for _, target in pairs(skim.targets) do
-  assert(target.path ~= "c.lua")
-end
-select_skim_target("a.lua", "RIGHT", 2)
-local current_path = view.cur_entry.path
-view.right.commit = base
-skim_key("<CR>")
-assert(
-  vim.api.nvim_win_is_valid(skim.win) and view.cur_entry.path == current_path,
-  "changed revisions must reject old jumps"
-)
-view.right.commit = head
-skim_key("q")
-assert(vim.wo[right].winbar:find("1/3", 1, true), "progress must use filtered denominator")
+assert(vim.wo[right].winbar:find("2/3", 1, true), "route position must use the filtered denominator")
+assert(vim.wo[view.panel.winid].winbar:find("1/3", 1, true), "reviewed progress must use the filtered denominator")
 local cursor = vim.api.nvim_win_get_cursor(right)
-skim = open_skim()
-select_skim_target("a.lua", "RIGHT", 2)
 review.show_guide_popup()
 local popup = vim.api.nvim_get_current_win()
 local popup_buf = vim.api.nvim_win_get_buf(popup)
 local lines = vim.api.nvim_buf_get_lines(popup_buf, 0, -1, false)
-for index, line in ipairs(diagram) do
-  assert(lines[index + 4] == line)
+local diagram_start
+for index, line in ipairs(lines) do
+  if line == diagram[1] then
+    diagram_start = index
+    break
+  end
 end
+assert(diagram_start)
+for index, line in ipairs(diagram) do
+  assert(lines[diagram_start + index - 1] == line)
+end
+assert(
+  table.concat(lines, "\n"):find("Source excerpt — Before", 1, true),
+  "core changes must be visible in the real guide popup"
+)
+assert(
+  not table.concat(lines, "\n"):find("Provider not exercised.", 1, true),
+  "audit notes stay out of the reading view"
+)
 assert(not vim.wo[popup].wrap, "diagram must not wrap")
 assert(not table.concat(lines, "\n"):find("4. c.lua", 1, true), "route must use visible scope")
 assert(table.concat(lines, "\n"):find("Context: c.lua", 1, true), "diagram keeps full PR context")
@@ -317,15 +597,49 @@ vim.notify = function(message, ...)
   table.insert(notifications, message)
   original_notify(message, ...)
 end
+vim.fn.writefile(
+  { vim.json.encode({ cwd = root, updated_at = vim.fn.localtime() * 1000 }) },
+  root .. "/review-service.json"
+)
+view.right.commit = base
+assert(not review.request_guide("generate"), "a changed Diffview comparison cannot generate a guide for stale context")
+view.right.commit = head
+assert(review.request_guide("refine", "Explain the changed marker\nand keep the code comparison."))
+local request_path = vim.fn.glob(root .. "/guide-requests/*.json", false, true)[1]
+local request = vim.json.decode(table.concat(vim.fn.readfile(request_path), "\n"))
+assert(
+  request.root == root and request.base_oid == base and request.head_oid == head,
+  "guide requests preserve the visible immutable boundary"
+)
+assert(
+  request.action == "refine" and request.body:find("\nand keep", 1, true),
+  "the main guide request preserves focused multiline feedback"
+)
+vim.fn.writefile(
+  { vim.json.encode({ request_id = request.request_id, base_oid = base, head_oid = head, status = "running" }) },
+  root .. "/guide-status.json"
+)
+assert(
+  vim.wait(2500, function()
+    return table
+      .concat(vim.api.nvim_buf_get_lines(popup_buf, 0, -1, false), "\n")
+      :find("Main Pi: updating guide", 1, true)
+  end, 20),
+  "guide job status must refresh even before guide.json changes"
+)
+assert(vim.api.nvim_get_current_win() == popup, "guide status must not steal focus")
 -- Simulate Pi atomically updating the guide during conversation.
 document.summary = "Updated understanding."
+document.core_code[2].code = { "new", "tail" }
 document.files = { document.files[2], document.files[3], document.files[1], document.files[4] }
 local temp = path .. ".tmp"
 vim.fn.writefile({ vim.json.encode(document) }, temp)
 assert((vim.uv or vim.loop).fs_rename(temp, path))
 assert(
   vim.wait(2500, function()
-    return vim.api.nvim_buf_get_lines(popup_buf, 2, 3, false)[1] == "Updated understanding."
+    return table
+      .concat(vim.api.nvim_buf_get_lines(popup_buf, 0, -1, false), "\n")
+      :find("Updated understanding.", 1, true) ~= nil
   end, 20),
   "guide must reload through agent polling"
 )
@@ -333,30 +647,6 @@ assert(view.cur_entry.path == "a.lua" and vim.deep_equal(vim.api.nvim_win_get_cu
 assert_order({ "a.lua", "renamed.lua", "b.lua" })
 assert(state().viewed["a.lua"] and state().ownership_filter == "phoenix" and #state().comments == 2)
 assert(table.concat(notifications, "\n"):find("review order updated", 1, true))
-assert(
-  vim.wait(1500, function()
-    return skim.outdated
-  end, 20),
-  "live guide order changes must mark skim outdated"
-)
-vim.api.nvim_set_current_win(skim.win)
-skim_key("<CR>")
-assert(vim.api.nvim_win_is_valid(skim.win) and view.cur_entry.path == "a.lua", "outdated skim must not navigate")
-skim_key("r")
-assert(vim.wait(5000, function()
-  return not skim.loading and not skim.outdated
-end, 20))
-local preserved = skim.targets[vim.api.nvim_win_get_cursor(skim.win)[1]]
-assert(
-  preserved.path == "a.lua" and preserved.side == "RIGHT" and preserved.line == 2,
-  "refresh must preserve the current change"
-)
-skim_paths = {}
-for _, section in ipairs(skim.sections) do
-  table.insert(skim_paths, skim.targets[section.start].path)
-end
-assert(vim.deep_equal(skim_paths, { "a.lua", "renamed.lua", "b.lua" }))
-skim_key("q")
 vim.notify = original_notify
 vim.api.nvim_win_close(popup, true)
 review.toggle_ownership_filter()
@@ -385,10 +675,6 @@ settle()
 review.clear_active_guide_context()
 vim.cmd.DiffviewClose()
 settle()
-assert(
-  not vim.api.nvim_buf_is_valid(skim.buf) and skim.timer == nil and skim.disposed,
-  "closing review must clean up skim"
-)
 -- Start without guidance: native order first, then adopt the late guide without moving the diff.
 vim.fn.delete(path)
 open(head)
@@ -439,10 +725,6 @@ local empty_lines = vim.api.nvim_buf_get_lines(vim.api.nvim_get_current_buf(), 0
 assert(table.concat(empty_lines, "\n"):find("No Phoenix-owned changed files", 1, true))
 assert(state().viewed["a.lua"] and #state().comments == 2)
 vim.api.nvim_win_close(vim.api.nvim_get_current_win(), true)
-skim = open_skim()
-local empty_skim = table.concat(vim.api.nvim_buf_get_lines(skim.buf, 0, -1, false), "\n")
-assert(empty_skim:find("No matching changed files", 1, true) and next(skim.targets) == nil)
-skim_key("q")
 review.clear_active_guide_context()
 vim.cmd.DiffviewClose()
 settle()

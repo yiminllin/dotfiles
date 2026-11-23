@@ -89,15 +89,42 @@ Use `Source excerpt` or `Simplified code` labels when appropriate. If the diagra
   "core_code": [
     {
       "label": "Core pseudocode",
+      "id": "core-before",
       "title": "Before: mechanism at base SHA",
       "code": ["old mechanism"],
-      "sources": ["path:symbol:lines at base SHA"]
+      "sources": [{"path": "path/from/source", "side": "LEFT", "line": 10, "end_line": 12, "revision": "exact base_oid"}]
     },
     {
       "label": "Core pseudocode",
+      "id": "core-after",
       "title": "After: same mechanism at head SHA",
       "code": ["same abstraction level; expose the difference"],
-      "sources": ["path:symbol:lines at head SHA"]
+      "sources": [{"path": "path/from/source", "side": "RIGHT", "line": 15, "end_line": 17, "revision": "exact head_oid"}]
+    }
+  ],
+  "chunks": [
+    {
+      "id": "configuration-boundary",
+      "title": "Configuration boundary",
+      "summary": "Purpose and behavior change for this small review unit.",
+      "relationship": "Consumes scenario inputs; supplies the runtime chunk.",
+      "depends_on": [],
+      "depth": "careful",
+      "diagram": ["actual_entry -> [actual_config] -> actual_runtime"],
+      "core_code": [
+        {
+          "id": "config-core",
+          "label": "Core pseudocode",
+          "title": "actual_symbol — comparable before/after",
+          "code": ["before: old mechanism", "after: changed mechanism"],
+          "sources": [
+            {"path": "source/path", "side": "LEFT", "line": 10, "revision": "exact base_oid"},
+            {"path": "source/path", "side": "RIGHT", "line": 15, "revision": "exact head_oid"}
+          ]
+        }
+      ],
+      "checks": ["Check that a missing input stops the worker before it starts the job."],
+      "hunks": ["<copy exact ID from review-hunks.json>"]
     }
   ],
   "files": [
@@ -127,12 +154,18 @@ Use `Source excerpt` or `Simplified code` labels when appropriate. If the diagra
 }
 ```
 
-Order `files` by the second-pass review route; keep a chunk's files adjacent. Use the same numbered chunk label in `stage` for all files in that chunk. Start the first file's `reason` with a short chunk summary, then give the actual symbol, what to verify, and depth for each file. Use the PR-flow diagram for the first-pass whole-PR route, with matching chunk numbers. This uses existing fields; do not add an unsupported chunk schema. Unchanged entry points belong in diagram/code references, not the changed-file list.
+For persistent Diffview reviews, read the host-owned `review-hunks.json` beside the guide. Check its pinned context. `chunks` defines the review route: partition every inventory hunk ID into exactly one nonempty semantic chunk, including the inventory's file-level units for renames, binary/mode changes, submodules, and empty files. Attributes accompanying code appear with the first hunk. Copy IDs exactly; do not invent IDs, truncate the partition, or edit the inventory. If it is unavailable, report that rather than fabricate a plan. Group by behavior and dependencies, not file size or line count. A chunk may span files, and different hunks in one file may belong to different chunks. `depends_on` names earlier chunk IDs. Preserve IDs across refinement. Give each chunk its purpose/change, relationship to the whole-PR diagram, local diagram/core code with actual symbols and pinned anchors, checks, and `depth` (`careful` or `skim`). These are slices of the original base/head, not intermediate commits or independently buildable PRs.
 
-Keep file-specific comments in `suggestions`; prefix `body` with `Finding:`, `Question:`, or `Verification gap:`. Use `why` for supporting evidence. Reserve `high_risk` for cross-cutting items without duplicating comments; internal follow-ups belong in `validation.gaps`. Empty lists are valid. `end_line` and `why` are optional; use `null` for approximate lines. Anchor LEFT to `base_oid` and RIGHT to `head_oid`; preserve stable suggestion IDs.
+Keep one `files` entry per changed path for file metadata and anchored suggestions. Its `reason` describes the file's role; `stage` remains a legacy fallback, not chunk ownership. Unchanged entry points belong in diagram/code references, not the changed-file list. Preserve the whole-PR overview at the top level; granular explanations belong in `chunks`. Neovim validates coverage, displays focused native hunks, and owns per-hunk read progress.
 
-Put actual source symbol names in code and block titles; do not replace them with conceptual aliases alone.
+Keep file-specific comments in `suggestions`; prefix `body` with `Finding:`, `Question:`, or `Verification gap:`. Use `why` for supporting evidence. Keep one or two short, concrete reading cues in each section's `checks`. Phrase each cue as an observable behavior or question. Place important cross-cutting concerns in the most relevant section, not only in `high_risk`. Keep audit details in `validation`; the viewer does not display either top-level audit field. Empty lists are valid. `end_line` and `why` are optional; use `null` for approximate lines. Anchor LEFT to `base_oid` and RIGHT to `head_oid`; preserve stable suggestion IDs.
+
+Keep core-code `id` values stable across refinements. Put actual source symbol names in code and block titles; do not replace them with conceptual aliases alone. Use repository-relative source paths, verified numeric ranges, and the exact pinned revision. Sources may reference unchanged context files. Do not invent approximate source targets; leave unverified references as plain strings.
 
 ## Viewer compatibility
 
-The current popup shows `summary`, `diagram`, ordered files/reasons, and only the first three `high_risk` items. Suggestions use the review-comment integration. It does not display `behavior_change`, `core_code`, `stage`, or `validation`. Store the full guide anyway; in persistent sessions, explain hidden content and remaining risks in visible Pi conversation. Do not claim full popup support or create a second Markdown artifact. Raw artifact requests still return only the artifact.
+Guide starts with a short plain-English PR summary, followed by the before/after explanation, source-backed diagram, core code, and section list. Each active section starts with its purpose and `checks` (“What to look for”), followed by code, hunks, and anchored discussions. The viewer does not show a bottom-of-guide audit appendix. The JSON schema still uses `chunks` for semantic sections; preserve its keys and IDs.
+
+`O` collapses overview details while keeping the section list visible. Enter on a section opens its guide beside the focused diff. `Tab` inside the panel switches Guide/Threads; `z` expands it. Threads holds full discussion histories and local actions. GitHub discussion import is read-only; publishing is removed. Native source buffers keep pinned line numbers; unrelated regions are folded, not replaced with intermediate revisions. In code, Tab/Shift-Tab follows hunks across sections, ]r/[r changes sections, and gdv toggles a hunk read. In Guide, v on a section row or V for the selected/active section toggles all its hunks; progress survives regrouping. All changed files restores the full Diffview. There is no separate skim viewer or whole-file progress control. Existing guides, comments, and saved file flags remain readable; legacy guides need regeneration for a validated section plan.
+
+Guide `r` generates/updates and `u` requests refinement in the main Pi session. Enter/`o` opens verified source references or route files. Updates mark changed content and preserve reading positions. Existing string references remain readable; only unambiguous pinned anchors are navigable. These explicit queued model turns are not comment workers. Explain changes and uncertainty in the visible main session. Update the same JSON atomically; do not create a second Markdown artifact. Raw artifact requests still return only the artifact.
