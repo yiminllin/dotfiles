@@ -236,7 +236,6 @@ local retired = {
   "<leader>gds",
   "<leader>gdP",
   "<leader>gdG",
-  "<leader>gdt",
   "<leader>gdR",
   "<leader>gdd",
 }

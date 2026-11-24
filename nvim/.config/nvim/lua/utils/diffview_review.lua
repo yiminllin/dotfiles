@@ -1416,13 +1416,32 @@ local function file_level_display_line(bufnr, winid, line_count)
 		or 1
 end
 
-local function refresh_buffer(bufnr, file, state, winid, side, include_file_level)
+local function refresh_buffer(bufnr, file, state, winid, side, include_file_level, catalog)
 	if not file or not vim.api.nvim_buf_is_valid(bufnr) then
 		return
 	end
 	vim.api.nvim_buf_clear_namespace(bufnr, NS, 0, -1)
 	vim.fn.sign_unplace(SIGN_GROUP, { buffer = bufnr })
 	local count = vim.api.nvim_buf_line_count(bufnr)
+	if catalog and side then
+		vim.wo[winid].signcolumn = "yes:2"
+		local left = side == "LEFT"
+		local checked = vim.fn.strdisplaywidth("▎✓") <= 2 and "▎✓" or "✓"
+		for _, hunk in ipairs(catalog.hunks) do
+			if hunk.kind == "hunk" and file == (left and (hunk.oldpath or hunk.path) or hunk.path) then
+				local first = left and hunk.left_start or hunk.right_start
+				local size = left and hunk.left_count or hunk.right_count
+				local viewed = state.read_hunks[hunk.id]
+				for line = first, math.min(count, first + size - 1) do
+					vim.api.nvim_buf_set_extmark(bufnr, NS, line - 1, 0, {
+						sign_text = viewed and line == first and checked or "▎",
+						sign_hl_group = viewed and "DiffviewReviewWinbarViewed" or "DiffviewReviewWinbarUnviewed",
+						priority = 60,
+					})
+				end
+			end
+		end
+	end
 	local width = vim.api.nvim_win_get_width(winid) - vim.fn.getwininfo(winid)[1].textoff
 	for _, thread in ipairs(comment_threads_for_file(state, file, count, side)) do
 		if not thread.file_level or include_file_level then
@@ -1484,6 +1503,7 @@ end
 
 local function refresh_winbar(winid, file, state, progress)
 	local width = vim.api.nvim_win_get_width(winid)
+	vim.w[winid].diffview_review_width = width
 	local status = review_status(file, state)
 	local status_text = status.winbar_text
 	if width < vim.fn.strdisplaywidth(status_text) + 4 then
@@ -1552,8 +1572,8 @@ end
 
 local function open_comment_editor(ctx, line, end_line, initial, on_save, title_prefix)
 	local height = math.min(8, math.max(5, math.floor(vim.o.lines * 0.18)))
-	title_prefix = title_prefix or "Review comment"
-	local title = (" %s %s:%s "):format(title_prefix, ctx.file, range_label(line, end_line))
+	title_prefix = title_prefix or "Private note"
+	local title = (" %s · %s:%s "):format(title_prefix, ctx.file, range_label(line, end_line))
 	local source_win = vim.api.nvim_get_current_win()
 	local source_cursor = vim.api.nvim_win_get_cursor(source_win)
 	local bufnr = vim.api.nvim_create_buf(false, true)
@@ -1573,7 +1593,8 @@ local function open_comment_editor(ctx, line, end_line, initial, on_save, title_
 	vim.wo[winid].number = false
 	vim.wo[winid].relativenumber = false
 	vim.wo[winid].signcolumn = "no"
-	vim.wo[winid].winbar = title .. "  (:w save, :wq save+close, :q close)"
+	local verb = (title_prefix == "Ask Pi" or title_prefix == "Reply") and "send" or "save"
+	vim.wo[winid].winbar = title:gsub("%%", "%%%%") .. " | Ctrl-s " .. verb .. " · :q! discard"
 	vim.wo[winid].winhl = "Normal:DiffviewNormal,NormalNC:DiffviewNormal,EndOfBuffer:EndOfBuffer,SignColumn:SignColumn"
 
 	local closed = false
@@ -1603,6 +1624,7 @@ local function open_comment_editor(ctx, line, end_line, initial, on_save, title_
 		vim.bo[bufnr].modified = false
 		on_save(table.concat(lines, "\n"))
 		if close_after then
+			vim.cmd.stopinsert()
 			close()
 		end
 	end
@@ -1613,12 +1635,9 @@ local function open_comment_editor(ctx, line, end_line, initial, on_save, title_
 			save(false)
 		end,
 	})
-	vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
-		buffer = bufnr,
-		callback = function()
-			vim.bo[bufnr].modified = false
-		end,
-	})
+	vim.keymap.set({ "n", "i" }, "<C-s>", function()
+		save(true)
+	end, { buffer = bufnr })
 	vim.api.nvim_create_autocmd("WinClosed", {
 		pattern = tostring(winid),
 		callback = function()
@@ -1626,7 +1645,11 @@ local function open_comment_editor(ctx, line, end_line, initial, on_save, title_
 		end,
 	})
 	vim.bo[bufnr].modified = false
-	vim.cmd.startinsert()
+	vim.schedule(function()
+		if vim.api.nvim_get_current_win() == winid and vim.api.nvim_get_current_buf() == bufnr then
+			vim.cmd.startinsert()
+		end
+	end)
 end
 
 function M.set_active_guide_context(context)
@@ -1858,8 +1881,19 @@ function M.refresh_visible()
 	local function progress(winid)
 		local workspace = view.review_chunks
 		local width = vim.api.nvim_win_get_width(winid)
-		local overall = require("utils.diffview_review_chunks").overall_progress(workspace, state, width < 55 and 4 or 8)
-		local prefix = overall and ("Review " .. overall .. " · ") or ""
+		local chunks = require("utils.diffview_review_chunks")
+		local prefix = ""
+		if workspace and workspace.catalog then
+			local done, total = chunks.read_count(workspace.catalog.hunks, state)
+			local wide = width >= 62
+			local hunks = wide and chunks.progress_bar(done, total, 5) or ("%d/%d"):format(done, total)
+			prefix = "Hunks " .. hunks .. " · "
+			if workspace.plan then
+				local complete, sections = chunks.section_count(workspace.plan, state)
+				local bar = wide and chunks.progress_bar(complete, sections, 5) or ("%d/%d"):format(complete, sections)
+				prefix = (width < 32 and "Sec " or "Sections ") .. bar .. " · " .. prefix
+			end
+		end
 		if workspace and workspace.active then
 			local chunk = workspace.plan.by_id[workspace.active]
 			local current = chunk_workspace.current(ctx)
@@ -1870,7 +1904,8 @@ function M.refresh_visible()
 				end
 			end
 			local route = width < 55 and "S %d/%d · H %d/%d" or "Section %d/%d · Hunk %d/%d"
-			return prefix .. route:format(chunk.number, #workspace.plan.chunks, index, #chunk.hunks)
+			route = route:format(chunk.number, #workspace.plan.chunks, index, #chunk.hunks)
+			return vim.fn.strdisplaywidth(prefix .. route) + 10 <= width and prefix .. route or prefix:gsub(" · $", "")
 		end
 		return prefix .. guide_view.progress(entries, normalize_file(view.cur_entry and view.cur_entry.path), scope.enabled, width)
 	end
@@ -1907,7 +1942,15 @@ function M.refresh_visible()
 	local file_level_item, file_level_file = review_file_level_comment_item(visible, view)
 	for _, item in ipairs(visible) do
 		local file = item == file_level_item and file_level_file or item.file
-		refresh_buffer(item.bufnr, file, state, item.winid, item.side, item == file_level_item)
+		refresh_buffer(
+			item.bufnr,
+			file,
+			state,
+			item.winid,
+			item.side,
+			item == file_level_item,
+			view.review_chunks and view.review_chunks.catalog
+		)
 		refresh_winbar(item.winid, item.file, state, progress(item.winid))
 	end
 	chunk_workspace.apply(ctx)
@@ -2285,7 +2328,8 @@ function M.add_comment(opts)
 		return
 	end
 
-	open_comment_editor(ctx, line, end_line, existing and existing.body or "", save_comment)
+	local title = opts and opts.ask and "Ask Pi" or (existing and "Edit private note" or "Private note")
+	open_comment_editor(ctx, line, end_line, existing and existing.body or "", save_comment, title)
 end
 
 function M.add_comment_visual(ask)
@@ -2522,7 +2566,7 @@ function M.chunk_action(action, target)
 		M.refresh_visible()
 		return
 	end
-	if action == "viewed" then
+	if action == "viewed" or action == "toggle_viewed" then
 		local chunk_id = target and target.chunk_id or (workspace and workspace.active)
 		local chunk = workspace and workspace.plan and workspace.plan.by_id[chunk_id]
 		if not chunk then
@@ -2535,16 +2579,29 @@ function M.chunk_action(action, target)
 			M.refresh_visible()
 			return
 		end
-		if #chunk_workspace.visible(ctx, chunk) ~= #chunk.hunks then
-			notify("Switch ownership scope to All before marking the entire section viewed", vim.log.levels.WARN)
+		local path = target and target.file_group
+		local id = target and not path and target.hunk_id
+		local function matches(hunk)
+			return (not path or hunk.path == path) and (not id or hunk.id == id)
+		end
+		local hunks = vim.tbl_filter(matches, chunk.hunks)
+		if #vim.tbl_filter(matches, chunk_workspace.visible(ctx, chunk)) ~= #hunks then
+			notify("Switch ownership scope to All before changing viewed state for this group", vim.log.levels.WARN)
 			return
 		end
-		local read, total = require("utils.diffview_review_chunks").read_count(chunk.hunks, state)
-		for _, hunk in ipairs(chunk.hunks) do
-			state.read_hunks[hunk.id] = read ~= total and true or nil
+		local read, total = require("utils.diffview_review_chunks").read_count(hunks, state)
+		local viewed = (action == "viewed" or read ~= total) or nil
+		local changed = false
+		for _, hunk in ipairs(hunks) do
+			if state.read_hunks[hunk.id] ~= viewed then
+				state.read_hunks[hunk.id] = viewed
+				changed = true
+			end
 		end
-		save_state(ctx, state)
-		M.refresh_visible()
+		if changed then
+			save_state(ctx, state)
+			M.refresh_visible()
+		end
 		return
 	end
 	if action == "read" then
@@ -3193,6 +3250,14 @@ function M.diffview_keymaps()
 			end,
 			{ desc = "Toggle current Git hunk read" },
 		},
+		{
+			"n",
+			"<leader>gdt",
+			function()
+				M.show_threads({ at_cursor = true })
+			end,
+			{ desc = "Open thread under cursor" },
+		},
 		{ "n", "<leader>gdO", M.open_review_source, { desc = "Open revision-matched source for LSP" } },
 		{
 			"n",
@@ -3302,6 +3367,27 @@ function M.setup()
 					M.start_agent_reply_polling(repo_context(current_view()))
 				end
 			end, 100)
+		end,
+	})
+
+	vim.api.nvim_create_autocmd("WinResized", {
+		group = group,
+		callback = function()
+			for _, win in ipairs(vim.v.event.windows) do
+				if
+					vim.api.nvim_win_is_valid(win)
+					and vim.wo[win].diff
+					and vim.w[win].diffview_review_width ~= vim.api.nvim_win_get_width(win)
+				then
+					local tab = vim.api.nvim_win_get_tabpage(win)
+					vim.schedule(function()
+						if vim.api.nvim_get_current_tabpage() == tab then
+							M.refresh_visible()
+						end
+					end)
+					break
+				end
+			end
 		end,
 	})
 

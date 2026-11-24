@@ -290,10 +290,7 @@ assert(
     and vim.deep_equal(before_section.viewed, section_state.viewed)
 )
 vim.api.nvim_feedkeys("v", "mx", false)
-assert(
-  chunks.read_count(plan.chunks[1].hunks, state_module.load(ctx, error)) == 0,
-  "viewed sections toggle back to unread"
-)
+assert(chunks.read_count(plan.chunks[1].hunks, state_module.load(ctx, error)) == 0, "v marks the section unviewed")
 vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "mx", false)
 assert(
   vim.wait(3000, function()
@@ -352,9 +349,9 @@ local function assert_section_list(key, active)
   )
   local expanded = 0
   for row, target in pairs(combined.targets) do
-    if target.hunk_id then
+    if target.hunk_id and not target.file_group then
       assert(target.chunk_id == active and row > heading_row("chunk:" .. active))
-      assert(vim.api.nvim_buf_get_lines(combined.buffer, row - 1, row, false)[1]:match("^    • "))
+      assert(vim.api.nvim_buf_get_lines(combined.buffer, row - 1, row, false)[1]:match("^        • "))
       expanded = expanded + 1
     end
   end
@@ -421,7 +418,34 @@ assert(chunks.read_count(plan.chunks[1].hunks, state) == 1)
 assert(details():find("Hunks viewed     [████----] 1/2", 1, true))
 assert(details():find("Sections viewed  [--------] 0/3", 1, true))
 assert(details():find("Overall review  [█-------] 1/5 hunks", 1, true))
-assert(vim.wo[win].winbar:match("Review %[[^%]]+%] 1/5"), "overall progress is visible while reading the diff")
+local winbar = vim.wo[win].winbar
+assert(winbar:match("Sec.-0/3") and winbar:match("Hunks.-1/5"), "both totals are visible while reading the diff")
+local rail = vim.api.nvim_buf_get_extmarks(
+  vim.api.nvim_win_get_buf(win),
+  vim.api.nvim_create_namespace("diffview_review"),
+  0,
+  -1,
+  { details = true }
+)
+assert(
+  vim.iter(rail):any(function(mark)
+    return mark[4].sign_text == "▎✓" and mark[2] == a[1].right_start - 1
+  end),
+  "the viewed hunk has a check in the gutter"
+)
+local file_row = heading_row("section:file:b.lua")
+vim.api.nvim_set_current_win(panel_win)
+vim.api.nvim_win_set_cursor(panel_win, { file_row, 0 })
+vim.api.nvim_feedkeys("v", "mx", false)
+assert(state_module.load(ctx, error).read_hunks[b.id], "a Guide file row marks that section's file hunks")
+vim.api.nvim_feedkeys("v", "mx", false)
+assert(not state_module.load(ctx, error).read_hunks[b.id], "v clears the file's hunks")
+assert(state_module.load(ctx, error).read_hunks[a[1].id], "v leaves the other file viewed")
+vim.api.nvim_win_set_cursor(panel_win, { heading_row("section:hunk:" .. a[1].id), 0 })
+vim.api.nvim_feedkeys("v", "mx", false)
+assert(not state_module.load(ctx, error).read_hunks[a[1].id], "v marks the hunk unviewed")
+vim.api.nvim_feedkeys("v", "mx", false)
+assert(state_module.load(ctx, error).read_hunks[a[1].id], "v marks the hunk viewed again")
 review.show_guide_popup()
 local _, section_win = details()
 vim.api.nvim_win_set_cursor(section_win, { 1, 0 })
@@ -431,6 +455,9 @@ assert(
   "V completes the active partial section"
 )
 vim.api.nvim_feedkeys("V", "mx", false)
+assert(chunks.read_count(plan.chunks[1].hunks, state_module.load(ctx, error)) == 2)
+vim.api.nvim_win_set_cursor(section_win, { heading_row("chunk:configuration"), 0 })
+vim.api.nvim_feedkeys("v", "mx", false)
 assert(chunks.read_count(plan.chunks[1].hunks, state_module.load(ctx, error)) == 0)
 review.chunk_action("read", { chunk_id = "configuration", hunk_id = a[1].id })
 vim.api.nvim_set_current_win(win)

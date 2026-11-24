@@ -359,7 +359,10 @@ local function render(panel)
   end
   if valid_window(panel) then
     vim.wo[panel.winid].wrap = panel.mode == "threads"
-    vim.wo[panel.winid].linebreak = panel.mode == "threads"
+    vim.wo[panel.winid].linebreak = false
+    vim.wo[panel.winid].breakindent = false
+    vim.wo[panel.winid].showbreak = ""
+    vim.wo[panel.winid].list = false
     vim.wo[panel.winid].conceallevel = 2
     vim.wo[panel.winid].concealcursor = "nc"
     vim.wo[panel.winid].number = false
@@ -424,6 +427,10 @@ local function render(panel)
   panel.displayed_mode = view_key
 end
 
+local function dock_width()
+  return math.max(1, math.floor(vim.o.columns * 0.25))
+end
+
 local function expanded_config()
   local width = math.max(1, math.floor(vim.o.columns * 0.90))
   local height = math.max(1, math.floor(vim.o.lines * 0.88))
@@ -451,9 +458,11 @@ local function open_window(panel)
     vim.cmd("topleft vsplit")
     panel.winid = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(panel.winid, panel.buffer)
-    vim.api.nvim_win_set_width(panel.winid, math.max(1, math.floor(vim.o.columns * 0.25)))
+    vim.api.nvim_win_set_width(panel.winid, dock_width())
     vim.wo[panel.winid].winfixwidth = true
   end
+  vim.wo[panel.winid].signcolumn = "no"
+  vim.wo[panel.winid].foldcolumn = "0"
   vim.wo[panel.winid].winhl = table.concat({
     "Normal:NormalFloat",
     "NormalNC:NormalFloat",
@@ -465,12 +474,15 @@ end
 
 local function expand(panel)
   capture(panel)
-  local old = panel.winid
   panel.expanded = not panel.expanded
-  open_window(panel)
-  if vim.api.nvim_win_is_valid(old) then
-    vim.api.nvim_win_close(old, true)
+  if panel.expanded then
+    local config = expanded_config()
+    config.border, config.title = "rounded", " Review "
+    vim.api.nvim_win_set_config(panel.winid, config)
+  else
+    vim.api.nvim_win_set_config(panel.winid, { split = "left", win = -1, width = dock_width() })
   end
+  vim.wo[panel.winid].winfixwidth = not panel.expanded
   render(panel)
 end
 
@@ -504,12 +516,12 @@ end
 local function next_thread(panel, direction, filter, browse)
   local candidates = threads.list(panel.model.state, filter)
   if #candidates == 0 then
-    vim.notify("No review conversations need attention", vim.log.levels.INFO, { title = "Review" })
+    vim.notify("No matching review conversations", vim.log.levels.INFO, { title = "Review" })
     return false
   end
   -- Iterate in review order even after an unread conversation has been marked read.
   local all, start = threads.list(panel.model.state), direction == -1 and 1 or 0
-  local cursor_id = browse and panel.rows[vim.api.nvim_win_get_cursor(panel.winid)[1]]
+  local cursor_id = panel.rows[vim.api.nvim_win_get_cursor(panel.winid)[1]]
   for index, comment in ipairs(all) do
     if threads.identity(comment) == (cursor_id or panel.selected) then
       start = index
@@ -615,19 +627,22 @@ local function maps(panel)
     }
     vim.list_extend(lines, panel.mode == "guide" and {
       "Guide",
-      "Enter       Open section, hunk, or source",
+      "Enter       Open section, file, hunk, or source",
       "g1 / g2 / g3  Jump to overview / section list / active section",
       "]r / [r     Next / previous section",
       "]c / [c     Next / previous hunk",
-      "v / V       Toggle item / whole section",
+      "v           Toggle item viewed / unviewed",
+      "V           Mark whole section viewed",
       "r / u       Update / refine the guide",
     } or {
       "Threads",
       "Enter       Jump to comment in diff",
       "Up / Down   Browse conversations",
       "Space / Esc  Read conversation / return to list",
+      "]t / [t      Read next / previous thread",
       "]a / [a      Next / previous unread reply or Pi question",
-      "m            Show thread actions",
+      "ga           Show all threads",
+      "r / m        Reply / open action menu",
     })
     local buffer, win = vim.lsp.util.open_floating_preview(lines, "text", {
       border = "rounded",
@@ -710,12 +725,12 @@ local function maps(panel)
   end
   map("v", function()
     local target = panel.targets[vim.api.nvim_win_get_cursor(panel.winid)[1]]
-    if panel.mode ~= "threads" and target and target.chunk_id then
-      panel.model.callbacks.chunk(target.hunk_id and "read" or "viewed", target)
+    if panel.mode == "guide" and target and target.chunk_id then
+      panel.model.callbacks.chunk("toggle_viewed", target)
     else
       vim.cmd("normal! v")
     end
-  end, "Toggle section viewed / hunk read")
+  end, "Toggle review item viewed")
   map("V", function()
     local workspace = panel.model.ctx.view and panel.model.ctx.view.review_chunks
     if panel.mode == "threads" or not (workspace and workspace.plan) then
@@ -723,8 +738,8 @@ local function maps(panel)
       return
     end
     local target = panel.targets[vim.api.nvim_win_get_cursor(panel.winid)[1]]
-    panel.model.callbacks.chunk("viewed", target and target.chunk_id and target or nil)
-  end, "Toggle selected or active section viewed")
+    panel.model.callbacks.chunk("viewed", target and target.chunk_id and { chunk_id = target.chunk_id } or nil)
+  end, "Mark selected or active section viewed")
   for key, kind in pairs({ ["]r"] = "chunk", ["[r"] = "chunk", ["]c"] = "hunk", ["[c"] = "hunk" }) do
     map(key, function()
       if panel.mode == "guide" and panel.model.callbacks.step_chunk then
@@ -732,11 +747,42 @@ local function maps(panel)
       end
     end, "Next/previous review item")
   end
+  local function reply(comment)
+    select(panel, threads.identity(comment))
+    if panel.expanded then
+      expand(panel)
+    end
+    threads.editor("Reply", function(body)
+      panel.model.callbacks.reply(comment, body)
+    end, nil, threads.location(comment))
+  end
   map("r", function()
     if panel.mode == "guide" then
       panel.model.callbacks.generate()
+    else
+      local comment = current_comment(panel)
+      if comment then
+        reply(comment)
+      end
     end
-  end, "Update guide")
+  end, "Update guide / reply to thread")
+  local function show_all()
+    panel.filter, panel.selected = nil, nil
+    render(panel)
+    jump_to_heading(panel, "panel")
+  end
+  map("ga", function()
+    if panel.mode == "threads" then
+      show_all()
+    end
+  end, "Show all threads")
+  for key, direction in pairs({ ["]t"] = 1, ["[t"] = -1 }) do
+    map(key, function()
+      if panel.mode == "threads" then
+        next_thread(panel, direction, panel.filter)
+      end
+    end, "Read next/previous thread")
+  end
   map("u", function()
     if panel.mode == "guide" then
       if panel.expanded then
@@ -755,21 +801,12 @@ local function maps(panel)
       table.insert(choices, { label = label, run = run })
     end
     if panel.filter then
-      add("Show all conversations", function()
-        panel.filter = nil
-        render(panel)
-      end)
+      add("Show all conversations", show_all)
     end
     if comment then
       local callbacks = panel.model.callbacks
       add("Reply", function()
-        select(panel, threads.identity(comment))
-        if panel.expanded then
-          expand(panel)
-        end
-        threads.editor("Reply", function(body)
-          callbacks.reply(comment, body)
-        end)
+        reply(comment)
       end)
       if comment.agent_status == "blocked" then
         add("Answer Pi's question", function()
@@ -923,10 +960,11 @@ function M.open(model, opts)
   if not valid_window(panel) then
     panel.expanded = not opts.focused
     open_window(panel)
-  elseif opts.focused and panel.expanded then
-    expand(panel)
   else
     vim.api.nvim_set_current_win(panel.winid)
+    if opts.focused and panel.expanded then
+      expand(panel)
+    end
   end
   if opts.mode then
     panel.mode = opts.mode
@@ -945,6 +983,10 @@ function M.open(model, opts)
     next_thread(panel, 1, "attention")
   elseif opts.selected then
     select(panel, opts.selected, true)
+  elseif opts.at_cursor then
+    panel.selected = nil
+    render(panel)
+    jump_to_heading(panel, "panel")
   else
     show_selection(panel)
   end
@@ -960,6 +1002,35 @@ vim.api.nvim_create_autocmd("VimResized", {
         vim.api.nvim_win_set_config(panel.winid, expanded_config())
       end
       if valid_window(panel) and panel.mode == "threads" then
+        render(panel)
+      end
+    end
+  end,
+})
+vim.api.nvim_create_autocmd("WinEnter", {
+  group = group,
+  callback = function()
+    local win, tab = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_tabpage()
+    if vim.api.nvim_win_get_config(win).relative ~= "" or not vim.wo[win].diff then
+      return
+    end
+    for _, panel in pairs(panels) do
+      if panel.tabpage == tab and panel.expanded and valid_window(panel) then
+        vim.schedule(function()
+          if vim.api.nvim_get_current_win() == win and panel.expanded and valid_window(panel) then
+            panel.source_win = win
+            expand(panel)
+          end
+        end)
+      end
+    end
+  end,
+})
+vim.api.nvim_create_autocmd("WinResized", {
+  group = group,
+  callback = function()
+    for _, panel in pairs(panels) do
+      if valid_window(panel) and panel.mode == "threads" and vim.tbl_contains(vim.v.event.windows, panel.winid) then
         render(panel)
       end
     end

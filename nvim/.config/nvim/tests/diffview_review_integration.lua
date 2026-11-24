@@ -413,8 +413,9 @@ assert(
   end, 20),
   "threads jump to their pinned side and range"
 )
-review.show_threads()
-assert(attention_panel.selected == "ui-input", "opening at the code cursor selects its conversation")
+local leader = vim.g.mapleader or "\\"
+panel_key(leader .. "gdt")
+assert(attention_panel.selected == "ui-input", "gdt opens the conversation at the code cursor")
 local function thread_action(label)
   local select = vim.ui.select
   vim.ui.select = function(items, opts, callback)
@@ -449,7 +450,7 @@ local discussion = table.concat(vim.api.nvim_buf_get_lines(attention_panel.buffe
 assert(
   discussion:find("@alice", 1, true)
     and discussion:find("with its", 1, true)
-    and discussion:find("second line", 1, true)
+    and discussion:gsub("%s*│\n│%s*", " "):find("second line", 1, true)
     and discussion:find("A GitHub reply", 1, true)
     and discussion:find("https://example.invalid/comment/1", 1, true)
 )
@@ -484,17 +485,26 @@ assert(
     and header[1]:find(base:sub(1, 8) .. ".." .. head:sub(1, 8), 1, true)
 )
 assert(header[2]:find("? help", 1, true) and not discussion:find("Tab switch", 1, true))
-local leader = vim.g.mapleader or "\\"
 local function reopen_panel(mode)
   panel_key("q")
   assert(not attention_panel.winid)
-  assert(vim.fn.maparg(leader .. "gdT", "n") == "", "Threads has no separate shortcut")
   panel_key(leader .. "gdg")
   assert(vim.api.nvim_get_current_buf() == navigation_panel.buffer and attention_panel.mode == mode)
 end
 reopen_panel("threads")
 panel_key("<Tab>")
 reopen_panel("guide")
+local review_win = attention_panel.winid
+focus("b")
+assert(
+  vim.wait(1000, function()
+    return not attention_panel.expanded
+  end),
+  "moving to code docks the panel"
+)
+assert(attention_panel.winid == review_win and vim.api.nvim_get_current_win() ~= review_win)
+panel_key(leader .. "gdg")
+assert(vim.api.nvim_get_current_win() == review_win, "gdg focuses the existing panel")
 panel_key("q")
 vim.fn.writefile({ vim.json.encode(original_state) }, root .. "/diffview-review.json")
 review.refresh_visible()

@@ -222,22 +222,31 @@ function M.comment_preview(comment, width, has_more)
 	return abbreviate(first, math.max(1, math.min(width or 96, 96)), has_more or body:find("[\r\n]"))
 end
 
+function M.card_rule(left, right, width)
+	local cells = math.max(0, width - vim.fn.strdisplaywidth(left .. right))
+	local step = vim.fn.strdisplaywidth("─")
+	return left .. string.rep("─", math.floor(cells / step)) .. string.rep(" ", cells % step) .. right
+end
+
 function M.comment_card(comment, first, last, width, has_more)
 	width = math.min(width, 66)
 	local anchor = M.is_file_level_comment(comment) and "File-level" or M.range_label(first, last)
-	local header = abbreviate(M.normalize_comment_text(M.comment_source_label(comment)) .. " · " .. anchor, width - 5)
-	local top = "╭─ " .. header .. " "
-	top = top .. string.rep("─", width - vim.fn.strdisplaywidth(top) - 1) .. "╮"
-	local preview = M.comment_preview(comment, width - 4, has_more)
+	local header = abbreviate(
+		M.normalize_comment_text(M.comment_source_label(comment)) .. " · " .. anchor,
+		width - vim.fn.strdisplaywidth("╭─  ╮")
+	)
+	local top = M.card_rule("╭─ " .. header .. " ", "╮", width)
+	local inner = width - vim.fn.strdisplaywidth("│  │")
+	local preview = M.comment_preview(comment, inner, has_more)
 	local border = "DiffviewReviewCommentBorder"
 	return {
 		{ { top, border } },
 		{
 			{ "│ ", border },
-			{ preview .. string.rep(" ", width - 4 - vim.fn.strdisplaywidth(preview)), "DiffviewReviewCommentPreview" },
+			{ preview .. string.rep(" ", math.max(0, inner - vim.fn.strdisplaywidth(preview))), "DiffviewReviewCommentPreview" },
 			{ " │", border },
 		},
-		{ { "╰" .. string.rep("─", width - 2) .. "╯", border } },
+		{ { M.card_rule("╰", "╯", width), border } },
 	}
 end
 

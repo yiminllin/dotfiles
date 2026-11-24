@@ -47,7 +47,7 @@ function M.list(state, filter, selected)
   return result
 end
 
-function M.editor(title, submit, initial)
+function M.editor(title, submit, initial, location)
   local return_window = vim.api.nvim_get_current_win()
   vim.cmd("botright 8new")
   local editor_window = vim.api.nvim_get_current_win()
@@ -65,6 +65,7 @@ function M.editor(title, submit, initial)
       if vim.trim(body) == "" then
         return
       end
+      vim.cmd.stopinsert()
       submit(body)
       vim.bo[buffer].modified = false
       -- Let :wq close the draft before handling the plain :w case.
@@ -78,8 +79,14 @@ function M.editor(title, submit, initial)
       end)
     end,
   })
-  vim.keymap.set("n", "<C-s>", "<cmd>write<CR>", { buffer = buffer })
-  vim.notify("Write your reply; :w or :wq sends it. :q! discards it.", vim.log.levels.INFO, { title = "Review thread" })
+  vim.wo[editor_window].winbar = (title .. (location and (" · " .. location) or "")):gsub("%%", "%%%%")
+    .. "  |  Ctrl-s send · :q! discard"
+  vim.keymap.set({ "n", "i" }, "<C-s>", "<cmd>write<CR>", { buffer = buffer })
+  vim.schedule(function()
+    if vim.api.nvim_get_current_buf() == buffer then
+      vim.cmd.startinsert()
+    end
+  end)
 end
 
 local function comment_location(comment)
@@ -90,6 +97,10 @@ local function comment_location(comment)
   local first = tonumber(comment.start_line) or line
   local last = tonumber(comment.end_line) or line
   return first == last and tostring(first) or ("%s–%s"):format(math.min(first, last), math.max(first, last))
+end
+
+function M.location(comment)
+  return comment.file .. ":" .. comment_location(comment)
 end
 
 local status_icons = {
@@ -126,9 +137,9 @@ local function message_card(lines, cards, width, name, body, response)
     table.insert(lines, line)
     cards[#lines] = { group = group, whole = whole }
   end
-  local inner = width - 4
+  local inner = width - vim.fn.strdisplaywidth("│  │")
   local function row(text, heading)
-    text = text:gsub("\t", "    ")
+    text = text:gsub("\r$", ""):gsub("\t", "    ")
     repeat
       local part = text
       if vim.fn.strdisplaywidth(part) > inner then
@@ -145,12 +156,12 @@ local function message_card(lines, cards, width, name, body, response)
       text = text:sub(#part + 1)
     until text == ""
   end
-  add("╭" .. string.rep("─", width - 2) .. "╮", true)
+  add(format.card_rule("╭", "╮", width), true)
   row(format.normalize_comment_text(name), true)
   for _, line in ipairs(vim.split(body, "\n", { plain = true })) do
     row(line, false)
   end
-  add("╰" .. string.rep("─", width - 2) .. "╯", true)
+  add(format.card_rule("╰", "╯", width), true)
 end
 
 local function author_name(author, fallback)
@@ -162,12 +173,17 @@ end
 
 function M.lines(state, selected_id, filter, plan, width)
   local lines = {
-    filter and ("Filter: " .. status_label(filter) .. " · m → Show all conversations") or "Conversations",
-    "↑/↓ Browse · Space Read · Enter Source · m Actions",
+    filter and ("Filter: " .. status_label(filter) .. " · ga All threads") or "All threads",
+    "↑/↓ Browse · Space Read · Enter Source · r Reply · m Menu",
     "",
   }
   local rows = {}
-  for _, comment in ipairs(M.list(state, filter, selected_id)) do
+  local conversations = M.list(state, filter, selected_id)
+  local selected_index
+  for index, comment in ipairs(conversations) do
+    if M.identity(comment) == selected_id then
+      selected_index = index
+    end
     local label = status_label(comment.agent_status)
     if comment.local_resolved then
       label = label .. " · Resolved locally"
@@ -177,17 +193,10 @@ function M.lines(state, selected_id, filter, plan, width)
     if comment.agent_unread then
       label = label .. " · ✉️ unread"
     end
-    local preview = source_label(comment) .. " · " .. format.comment_preview(comment)
+    local preview = format.comment_preview(comment, 48)
     table.insert(
       lines,
-      ("%s [%s] %s:%s %s  %s"):format(
-        M.identity(comment) == selected_id and ">" or " ",
-        label,
-        comment.file,
-        comment_location(comment),
-        comment.side or "RIGHT",
-        preview
-      )
+      ("%s %s · %s · %s"):format(M.identity(comment) == selected_id and ">" or " ", M.location(comment), label, preview)
     )
     rows[#lines] = M.identity(comment)
   end
@@ -198,14 +207,16 @@ function M.lines(state, selected_id, filter, plan, width)
   local detail_line, cards
   if comment then
     cards = {}
-    width = math.max(8, (width or 72) - 1)
+    width = math.max(8, width or 72)
     vim.list_extend(lines, {
       "",
       "────────────────────────────────────────",
     })
     detail_line = #lines + 1
     vim.list_extend(lines, {
-      "# " .. comment.file .. ":" .. comment_location(comment) .. " " .. (comment.side or "RIGHT"),
+      ("Thread %d/%d · [t / ]t · r Reply"):format(selected_index or 1, #conversations),
+      filter and (status_label(filter) .. " · ga All threads") or "All threads",
+      "# " .. M.location(comment) .. " " .. (comment.side or "RIGHT"),
     })
     if plan then
       local chunks = require("utils.diffview_review_chunks")

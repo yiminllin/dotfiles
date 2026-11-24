@@ -13,7 +13,8 @@ After updating these files, run `source ~/.config/fish/functions/review.fish` in
 
 | Key | Action |
 | --- | --- |
-| `<leader>gdg` | Open the review panel on the last used tab (Guide or Threads) |
+| `<leader>gdg` | Focus the review panel on the last used tab (Guide or Threads) |
+| `<leader>gdt` | Open the thread at the diff cursor, or show the thread list if there is no match |
 | Tab / Shift-Tab, in code | Cycle hunks within the current section; change files outside section focus |
 | `]r` / `[r` | Next/previous review section |
 | `]c` / `[c` | Next/previous focused hunk; native change otherwise |
@@ -30,7 +31,7 @@ After updating these files, run `source ~/.config/fish/functions/review.fish` in
 
 Guide and Threads share one panel per review/tab. Guide shows both the 🧭 PR overview and the 🔬 current section guide, separated by horizontal rules and emoji headings. The PR overview comes first: goal, before/after explanation, diagram, and core code. The section list follows. Each section starts with what changed and what to look for, then shows its diagram, core code, hunks, and discussions. There is no separate Chunks view.
 
-Guide and Threads open expanded in the same centered panel. Press `z` to dock it on the left at about 25% width. Opening source docks the panel so you can see the diff. Source excerpts use syntax colors when an installed Tree-sitter parser supports their language. Pseudocode highlights keywords, calls, literals, and line comments without a parser. In Guide, press `g1` for the PR overview, `g2` for the section list, or `g3` for the active section details. Selecting another section updates its guide and focused diff while keeping the overview available above it.
+Guide and Threads open expanded in the same centered panel. Press `z` to dock it on the left at about 25% width. Moving focus to the diff docks the panel so it does not cover the code. Source excerpts use syntax colors when an installed Tree-sitter parser supports their language. Pseudocode highlights keywords, calls, literals, and line comments without a parser. In Guide, press `g1` for the PR overview, `g2` for the section list, or `g3` for the active section details. Selecting another section updates its guide and focused diff while keeping the overview available above it.
 
 `Tab` or `Shift-Tab` inside the panel switches Guide/Threads and preserves their reading positions. Press `z` to switch between expanded and split layouts, `?` for help, or `q` to close it. Escape remains available to cancel `/` search. Closing the panel does not cancel work. Reopening restores its selection. The header identifies the PR/branch, pinned base/head, and ownership scope. Counts appear in the status bar.
 
@@ -44,26 +45,29 @@ Commands: `:DiffviewReviewAllChanges`, `:DiffviewReviewThreads`, `:DiffviewRevie
 
 Pi divides the pinned PR into ordered semantic sections, not arbitrary file-size buckets. A section can span files; separate Git hunks in one file can belong to different sections. Start from the overview and press Enter on a section.
 
-Enter opens a section/hunk. Press `v` on a section row to toggle the whole section viewed, or on a hunk row to toggle that hunk read. Press `V` anywhere in Guide to toggle the selected section, falling back to the active section. When a valid plan is ready, review starts at the first section in scope. Tab/Shift-Tab cycles hunks within the active section without moving Guide; `]r`/`[r` changes sections and scrolls an open Guide to **Review sections**. Navigation from code does not reopen a closed panel. Only the active section expands to show its Git hunks. Hunk jumps land on a changed line, not the leading context. Returning to a section restores its reading position.
+The active section groups its hunks by file. Enter opens the section, file's first hunk, or selected hunk. Press `v` on a section, file, or hunk row to mark it viewed. If it is already fully viewed, `v` marks it unviewed. A file row changes only its hunks in that section. Press `V` anywhere in Guide to mark the selected section viewed, falling back to the active section. When a valid plan is ready, review starts at the first section in scope. Tab/Shift-Tab cycles hunks within the active section without moving Guide; `]r`/`[r` changes sections and scrolls an open Guide to **Review sections**. Navigation from code does not reopen a closed panel. Only the active section expands to show its Git hunks. Hunk jumps land on a changed line, not the leading context. Returning to a section restores its reading position.
 
 The file panel contains the active section's files. Other regions in the original revision buffers are folded and labeled **outside active section**. This is a focused view of the same base/head, not a fabricated intermediate commit. Source links retain actual line numbers. Normal fold commands can expose context; only assigned hunks can be marked read. Use `:DiffviewReviewAllChanges` to leave section focus deliberately.
 
 Neovim publishes `review-hunks.json` beside the guide. Pi must assign every inventory ID exactly once, including file-level changes; file attributes accompanying code travel with the first hunk. Unknown/duplicate IDs, omitted regions, stale pins, and forward dependencies reject the plan. Invalid updates retain the last valid partition and discussions. Ownership filtering restricts navigation, not whole-PR coverage; out-of-scope hunks remain labeled in the section list. The JSON schema still calls sections `chunks`.
 
-The diff winbar and the top of Guide show overall hunk progress across the pinned review. Ownership filters do not change that total. The section list shows how many sections are complete and a hunk progress bar for each section. The active section also shows its progress above the Git hunks. These bars use the full section totals, even when ownership filtering hides some hunks. Marking a partial section viewed marks every remaining hunk read; toggling a viewed section clears all its hunk flags. If ownership filtering hides any of its hunks, switch ownership scope to All before changing the whole section. Read state belongs to immutable hunk identities, not section names or file flags, so regrouping preserves progress. Existing file flags and comments remain stored separately. Whole-file progress controls are removed; existing flags remain readable. Legacy guides remain readable: open Guide and press `r` to generate a section plan. After updating this configuration, reload Fish, restart Neovim, and `/reload` a reused Pi session before generating the plan.
+The diff winbar shows completed sections and viewed hunks across the pinned review. The top of Guide also shows overall hunk progress. A vertical rail marks each hunk in the diff gutter. A green rail with a check means the hunk is viewed. Ownership filters do not change that total. The section list shows how many sections are complete and a hunk progress bar for each section. The active section also shows its progress above the Git hunks. These bars use the full section totals, even when ownership filtering hides some hunks. Marking a partial section viewed marks every remaining hunk read. Marking the section unviewed clears its hunk flags. If ownership filtering hides any of its hunks, switch ownership scope to All before changing the whole section. Read state belongs to immutable hunk identities, not section names or file flags, so regrouping preserves progress. Existing file flags and comments remain stored separately. Whole-file progress controls are removed; existing flags remain readable. Legacy guides remain readable: open Guide and press `r` to generate a section plan. After updating this configuration, reload Fish, restart Neovim, and `/reload` a reused Pi session before generating the plan.
 
 | Threads key | Action |
 | --- | --- |
 | `↑` / `↓` | Browse without marking a conversation read |
 | Enter | Open the comment’s pinned source. Press Esc there to return to the same thread row. |
 | Space / Esc | Read the conversation / return to the list |
+| `]t` / `[t` | Read the next / previous thread in the current list |
 | `]a` / `[a` | Next / previous unread Pi answer or request for input |
-| `m` | Open thread actions. Press a displayed number to choose it directly. |
+| `ga` | Show the full thread list and clear the filter |
+| `r` | Reply to the selected thread |
+| `m` | Open the thread action menu. Press a displayed number to choose an action. |
 | `q` | Close the panel without cancelling workers |
 
-Click a status count to show only that group. In the `m` menu, **Show all conversations** removes that filter. The same menu offers replies, worker controls, and local resolve or dismissal. In the reply editor, `:w`, `:wq`, or normal-mode Ctrl-s sends and returns to the same thread. `:q!` discards.
+Click a status count to filter threads. Press `ga` to clear the filter. Comment editors start in Insert mode. Press Ctrl-s to save or send and return to the source or thread. Use `:q!` to discard.
 
-To edit from a thread, press `m` → **Reply**, ask for the change, and send it with `:wq`. Pi can edit tracked files if the checkout matches the reviewed head. Edits are unstaged and do not appear in the pinned diff. Use `git diff` to inspect them.
+To edit from a thread, press `r`, ask for the change, and send the reply. Pi can edit tracked files if the checkout matches the reviewed head. Edits are unstaged and do not appear in the pinned diff. Use `git diff` to inspect them.
 
 Replies stream into the selected conversation without moving the cursor or
 stealing focus. Inline status marks queued work, investigation, input requests,

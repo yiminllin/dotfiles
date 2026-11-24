@@ -240,6 +240,17 @@ function M.read_count(hunks, state)
   return count, #hunks
 end
 
+function M.section_count(plan, state)
+  local complete = 0
+  for _, section in ipairs(plan.chunks) do
+    local done, total = M.read_count(section.hunks, state)
+    if total > 0 and done == total then
+      complete = complete + 1
+    end
+  end
+  return complete, #plan.chunks
+end
+
 function M.progress_bar(done, total, width)
   width = width or 8
   local filled = total == 0 and 0 or math.floor(done / total * width)

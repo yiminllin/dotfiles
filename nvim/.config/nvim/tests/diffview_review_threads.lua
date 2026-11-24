@@ -80,6 +80,14 @@ local function has_card_author(group, name)
 end
 assert(has_card_author("DiffviewReviewThreadQuestion", "vscode"))
 assert(has_card_author("DiffviewReviewThreadResponse", "Pi"))
+local thread_view = require("utils.diffview_review_threads")
+local wide_comment = { local_id = "wide", file = "wide.lua", line = 2, body = "界 wide line that wraps\n\n\tindent" }
+for _, width in ipairs({ 14, 58 }) do
+  local lines, _, _, cards = thread_view.lines({ comments = { wide_comment } }, "wide", nil, nil, width)
+  for row in pairs(cards) do
+    assert(vim.fn.strdisplaywidth(lines[row]) == width, "message borders align across wrapped and blank rows")
+  end
+end
 assert(text(buffer):find("# b.lua:5 RIGHT\n\n──", 1, true), "the location is separated from the comment")
 assert(
   vim.iter(marks):any(function(mark)
@@ -142,10 +150,18 @@ assert(not panel.expanded, "jumping to code docks Threads")
 assert(jumped[1].file == "a.lua" and jumped[1].side == "LEFT" and jumped[1].end_line == 5)
 press("<Space>")
 assert(panel.selected == "a" and panel.detail_line)
+press("]t")
+assert(panel.selected == "b" and text(buffer):find("Thread 2/2", 1, true))
+press("[t")
+assert(panel.selected == "a" and panel.detail_line)
 press("<Esc>")
 assert(not panel.detail_line and panel.rows[vim.api.nvim_win_get_cursor(window)[1]] == "a")
 for index, command in ipairs({ "write", "wq" }) do
-  thread_action("Reply")
+  if index == 1 then
+    press("r")
+  else
+    thread_action("Reply")
+  end
   local editor = vim.api.nvim_get_current_buf()
   assert(editor ~= buffer and vim.bo[editor].buftype == "acwrite")
   vim.api.nvim_buf_set_lines(editor, 0, -1, false, { "Follow up", "with a second line" })

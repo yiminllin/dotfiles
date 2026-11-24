@@ -284,18 +284,12 @@ function M.lines(guide, entries, current, phoenix, status, workspace, state, opt
     table.insert(lines, divider)
     section("route", "## 📚 Review sections · Enter opens · v viewed")
     local chunks_view = require("utils.diffview_review_chunks")
-    local counts, completed = {}, 0
-    for _, chunk in ipairs(workspace.plan.chunks) do
-      local viewed, total = chunks_view.read_count(chunk.hunks, state or {})
-      counts[chunk.id] = chunks_view.progress_bar(viewed, total)
-      if total > 0 and viewed == total then
-        completed = completed + 1
-      end
-    end
-    table.insert(lines, "Sections viewed  " .. chunks_view.progress_bar(completed, #workspace.plan.chunks))
+    local complete, total_sections = chunks_view.section_count(workspace.plan, state or {})
+    table.insert(lines, "Sections viewed  " .. chunks_view.progress_bar(complete, total_sections))
     for _, chunk in ipairs(workspace.plan.chunks) do
       local visible = not workspace.visible or #workspace.visible(chunk) > 0
-      local prefix = (chunk.id == workspace.active and "> " or "  ") .. counts[chunk.id] .. "  "
+      local progress = chunks_view.progress_bar(chunks_view.read_count(chunk.hunks, state or {}))
+      local prefix = (chunk.id == workspace.active and "> " or "  ") .. progress .. "  "
       local title = ("%d. %s"):format(chunk.number, chunk.title)
       section(
         "chunk:" .. chunk.id,
@@ -308,29 +302,51 @@ function M.lines(guide, entries, current, phoenix, status, workspace, state, opt
       sections[#lines].title_range = { #prefix, #prefix + #title }
       targets[#lines] = { chunk_id = chunk.id }
       if chunk.id == workspace.active then
-        table.insert(lines, "    Hunks viewed     " .. counts[chunk.id])
-        local in_scope = {}
+        table.insert(lines, "    Hunks viewed     " .. progress)
+        local in_scope, groups, paths, numbers = {}, {}, {}, {}
         for _, hunk in ipairs(workspace.visible and workspace.visible(chunk) or chunk.hunks) do
           in_scope[hunk.id] = true
         end
         for number, hunk in ipairs(chunk.hunks) do
-          local read = state and state.read_hunks and state.read_hunks[hunk.id]
+          if not groups[hunk.path] then
+            groups[hunk.path] = {}
+            table.insert(paths, hunk.path)
+          end
+          table.insert(groups[hunk.path], hunk)
+          numbers[hunk.id] = number
+        end
+        for _, path in ipairs(paths) do
+          local hunks = groups[path]
+          local first = hunks[1]
+          local visible_file = in_scope[first.id]
           section(
-            "section:hunk:" .. hunk.id,
-            ("    • %s %s %d. %s · %s%s"):format(
-              workspace.hunk == hunk.id and "▶" or " ",
-              read and "✓" or "○",
-              number,
-              chunks_view.hunk_location(hunk),
-              hunk.path:gsub("[\r\n]", " "),
-              in_scope[hunk.id] and "" or " · outside ownership scope"
+            "section:file:" .. path,
+            ("    • %s  %s%s"):format(
+              chunks_view.progress_bar(chunks_view.read_count(hunks, state or {})),
+              path:gsub("[\r\n]", " "),
+              visible_file and "" or " · outside ownership scope"
             )
           )
-          if in_scope[hunk.id] then
-            targets[#lines] = { chunk_id = chunk.id, hunk_id = hunk.id }
+          if visible_file then
+            targets[#lines] = { chunk_id = chunk.id, hunk_id = first.id, file_group = path }
           end
-          if hunk.file_change then
-            table.insert(lines, "        File attributes: " .. hunk.file_change)
+          for _, hunk in ipairs(hunks) do
+            local read = state and state.read_hunks and state.read_hunks[hunk.id]
+            section(
+              "section:hunk:" .. hunk.id,
+              ("        • %s %s %d. %s"):format(
+                workspace.hunk == hunk.id and "▶" or " ",
+                read and "✓" or "○",
+                numbers[hunk.id],
+                chunks_view.hunk_location(hunk)
+              )
+            )
+            if visible_file then
+              targets[#lines] = { chunk_id = chunk.id, hunk_id = hunk.id }
+            end
+            if hunk.file_change then
+              table.insert(lines, "            File attributes: " .. hunk.file_change)
+            end
           end
         end
       end
