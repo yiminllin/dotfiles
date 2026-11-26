@@ -40,6 +40,7 @@ Start `tmux`. Prefix is Ctrl-Space.
 | ------------------------------------ | -------------------------------------------- |
 | Select home (`~`) or a Git workspace | prefix + f                                   |
 | Open tasks                           | prefix + T or `td` ([guide](td/README.md))   |
+| Open current Pi session's task       | prefix + Ctrl-T                              |
 | Open Agent Board                     | prefix + a                                   |
 | Toggle agent's dimmed entry          | prefix + Shift+A; select with arrows, then Shift+A in Agent Board |
 | Start Pi                             | `pi`, then `/login`                          |

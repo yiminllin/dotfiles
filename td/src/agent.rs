@@ -9,6 +9,24 @@ use uuid::Uuid;
 
 use crate::data::{append_event, new_envelope, Event, Task, TaskStatus};
 
+pub(crate) fn linked_task<'a>(
+    session: &str,
+    tasks: impl IntoIterator<Item = &'a Task>,
+) -> Result<Option<&'a Task>> {
+    let mut matches = tasks.into_iter().filter(|task| {
+        task.status != TaskStatus::Deleted
+            && task
+                .agent
+                .as_ref()
+                .is_some_and(|agent| agent.session_id == session)
+    });
+    let task = matches.next();
+    if matches.next().is_some() {
+        bail!("Pi session is linked to more than one task; unlink the extra task first");
+    }
+    Ok(task)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentSession {
     pub session_id: String,

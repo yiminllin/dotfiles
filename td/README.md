@@ -139,6 +139,9 @@ Associations use append-only events. Rebuild older `td` binaries before they rea
 logs containing these events. Completion can close a confirmed live agent, but it
 never deletes session history.
 
+Press `tmux prefix + Ctrl-T` in a Pi pane to open its linked td entry.
+Use `prefix + T` to open the full task list instead.
+
 ## Urgency and ordering
 
 CLI lists and every TUI Pending view sort by Done → In progress → Next →

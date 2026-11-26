@@ -18,6 +18,8 @@ use crate::{
 #[derive(Debug, Parser)]
 #[command(name = "td", version, about = "Small JSONL todo CLI/TUI")]
 struct Cli {
+    #[arg(long, hide = true)]
+    pi_session: Option<String>,
     #[arg(long, global = true, value_name = "PATH")]
     events: Option<PathBuf>,
     #[command(subcommand)]
@@ -108,8 +110,11 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
     let path = resolve_events_path(cli.events)?;
     let Some(command) = cli.command else {
-        return tui::run(path);
+        return tui::run(path, cli.pi_session.as_deref());
     };
+    if cli.pi_session.is_some() {
+        bail!("--pi-session cannot be used with a subcommand");
+    }
     let tasks = load_tasks(&path)?;
 
     let (task_id, event) = match command {

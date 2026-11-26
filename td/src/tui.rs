@@ -40,8 +40,11 @@ mod work_view;
 use hyperlinks::{jira_links, pr_links, Hyperlink, Reference};
 use work_view::{draw_work_dashboard, draw_work_detail};
 
-pub fn run(path: PathBuf) -> Result<()> {
+pub fn run(path: PathBuf, pi_session: Option<&str>) -> Result<()> {
     let mut app = App::new(path)?;
+    if let Some(session) = pi_session {
+        app.open_linked_task(session)?;
+    }
     if let Some(path) = pr_titles::default_path() {
         app.pr_titles = pr_titles::Cache::load(path);
     }
@@ -539,6 +542,25 @@ impl App {
         };
         app.reload()?;
         Ok(app)
+    }
+
+    fn open_linked_task(&mut self, session: &str) -> Result<()> {
+        let task = crate::agent::linked_task(session, self.tasks.iter().map(|view| &view.task))?
+            .ok_or_else(|| anyhow::anyhow!("This Pi session is not linked to a task"))?;
+        let id = task.id;
+        let status = task.status;
+        let is_work = task.project.as_deref() == Some("work");
+        self.select_project(is_work.then_some("work"));
+        self.status = status;
+        self.selected = self
+            .visible_tasks()
+            .iter()
+            .position(|view| view.task.id == id)
+            .expect("linked task is visible");
+        if is_work {
+            self.mode = Mode::Detail;
+        }
+        Ok(())
     }
 
     fn reload(&mut self) -> Result<()> {
