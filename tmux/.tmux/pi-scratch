@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mode=$1
+pane=$2
+metadata=$(tmux display-message -p -t "$pane" '#{@pi_session_owner} #{@pi_session_id}')
+read -r owner session <<< "$metadata"
+[[ $owner =~ ^[1-9][0-9]*$ && -n $session ]] && kill -0 "$owner" 2>/dev/null || exit 1
+[[ $mode == open ]] || exit 0
+
+name=$(tmux display-message -p -t "$pane" '#{@pi_agent_name}')
+note=$("$HOME/.cargo/bin/td" scratch-path -- "$session" "$name")
+mkdir -p -- "${note%/*}"
+: >> "$note"
+exec nvim -- "$note"

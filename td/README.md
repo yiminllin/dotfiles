@@ -31,17 +31,17 @@ td                                      # open TUI
 td list                                 # pending tasks
 td list --status completed                 # done tasks
 td list --status all --json
-td add "write note" --project note --priority H --estimate D
+td add "write note" --project note
 td show <id-prefix>
 td edit <id-prefix> --description "new text"
 td done <id-prefix>
 td delete <id-prefix>
-td edit <id-prefix> --project work --priority M --estimate Q --state waiting
-td edit <id-prefix> --project "" --priority "" --estimate "" --state none
+td edit <id-prefix> --project work --state waiting
+td edit <id-prefix> --project "" --state none
 ```
 
 The CLI displays full UUIDs. Unambiguous UUID prefixes also work as input.
-Use empty values to clear project, priority, or estimate. Use `--state none` to clear
+Use an empty value to clear the project. Use `--state none` to clear
 state. `add` and `edit` accept `none`, `next`, `in-progress`, or `waiting`.
 Descriptions cannot be empty.
 
@@ -142,21 +142,27 @@ never deletes session history.
 Press `tmux prefix + t` in a Pi pane to open its linked td entry.
 Use `prefix + T` to open the full task list instead.
 
-## Urgency and ordering
+## Scratch notes
 
-CLI lists and every TUI Pending view sort by Done → In progress → Next →
-No state → Waiting, with descending urgency within each group. Urgency ties use
-older creation time, then UUID. The TUI Done view instead sorts by completion time,
-newest first, then UUID. Tasks without a valid completion time appear last.
-The CLI also supports deleted tasks. Urgency uses these weights:
+In a Pi pane, press `tmux prefix + b` to open its Markdown note in the
+**Pi [B]uffer** popup, or `prefix + B` to open it full-screen. Both create the
+same note if needed. Use `:wq` to save and close, or `:q` to close an unchanged note.
 
-- Priority A/H/M/L: 100/10/5/1; unset: 0
-- Estimate Q/H/D/W/M: 8/5/2/0.5/0.1; unset: 0
-- Project: base bonus 1, plus improve/work 5, code 3, note 2, read 1, opensource 0.5
-- Age: 2 × whole days / 365, capped at 2; future or missing dates contribute 0
+New notes use the Agent Board name, for example
+`~/notes/docs/td-scratch/<task-id>/review-123.md`. If there is no saved agent
+name, the note uses the original task title. Standalone notes use
+`~/notes/docs/pi-scratch/<session-id>/`. Renames do not move existing notes,
+and older filenames still work.
+`tmux prefix + N` toggles global scratch from any pane. Reload older Pi sessions
+with `/reload` if they do not publish their tmux pane metadata.
 
-Due dates, tags, annotations, and task dependencies are not supported.
-Update `src/urgency.rs` to change the weights.
+## Task ordering
+
+Pending tasks sort by In progress → Next → No state → Waiting, oldest added
+first within each state. Recent completions appear first in the TUI Pending view.
+The separate TUI Done view shows newest completions first. Priority and estimate
+are no longer editable or used for sorting. Legacy events and JSON fields stay
+readable.
 
 ## TUI keys
 
@@ -226,20 +232,19 @@ Numbers `1`–`4` or arrows and Enter also work. Each template shows only its re
 
 | Template | Inputs | Presets |
 |---|---|---|
-| PR review | One PR link or number, priority | Work / Reviews, M/H |
-| Improvement | Description, priority, category | Improve, A/Q |
-| Feature work | One Jira ticket link or key, priority | Work / Features, M/H |
-| Design doc review | Description, document list, priority | Work / Reviews, M/H |
+| PR review | One PR link or number | Work / Reviews |
+| Improvement | Description, category | Improve |
+| Feature work | One Jira ticket link or key | Work / Features |
+| Design doc review | Description, document list | Work / Reviews |
 
-The last two preset letters mean priority / estimate. Work templates start with
-No state. Bare PR numbers use FlightSystems; bare Jira numbers use `FSW`.
-Improvement category starts Uncategorized. Ordinary `a` keeps its existing defaults.
+Templates start with No state. Bare PR numbers use FlightSystems; bare Jira numbers use `FSW`.
+Improve tasks default to Uncategorized.
 
 Templates use the same editing keys as ordinary add. Type or paste the input;
 multiline pasted descriptions stay intact. Enter and Tab advance fields without
 saving; Shift-Tab moves back. Enter on Useful links opens the editor; Tab
-accepts the current link and moves to Priority. Choose priority with A/H/M/L or Left/Right; choose
-an Improve category with `1`–`6` or arrows. Text fields support the same Vim keys.
+accepts the current link and moves to State. Choose a state with `1`–`4` or arrows.
+Choose an Improve category with `1`–`6` or arrows. Text fields support the same Vim keys.
 Esc leaves insert mode, then `:wq` and Enter save. `:q!` and Enter discard.
 Esc in normal/select mode cancels, with confirmation for unsaved changes.
 Ctrl-S does not save.
@@ -267,7 +272,7 @@ Use `p`, then `i` to open Improve. The table shows Category instead of Project.
 New and existing tasks default to Uncategorized. Adding from a focused category
 still starts Uncategorized; saving switches the filter to the new task's category.
 Changing projects preserves saved category metadata. Improve categories are separate
-from Work categories and do not affect urgency. `td show` and `td list --json` include
+from Work categories and do not affect sorting. `td show` and `td list --json` include
 `improve_category`; category editing is currently TUI-only, like Work metadata.
 Old events need no rewrite: category changes append update events.
 
@@ -296,7 +301,7 @@ Link icons distinguish PRs, PR chains, tickets, documents, spreadsheets, slides,
 forms, videos, threads, wikis, repositories, folders, and other web links.
 Each PR in a chain has its own URL. The table wraps descriptions and link titles.
 If there is no cached title, it shows a short label such as `#123` or `Google Doc 1`.
-Review time and notes are in task details (Enter).
+Review time and legacy inline notes are in Work task details (Enter).
 
 ### Cached link titles
 
@@ -324,17 +329,12 @@ failed lookups keep the short label. Private Google Docs may not provide a title
 When testing with an isolated event log, also set `XDG_CACHE_HOME` to a temporary
 directory to keep test titles separate from your normal cache.
 
-### Work item fields
+### Task fields
 
-Selecting project `work` in the form reveals Category, Useful links, and Notes. Category always has a value. Ordinary add defaults to Uncategorized,
-even from a focused category view; quick-add templates supply their preset category.
-Category choices and the focused State field appear as indented rows with short explanations, muted text, and a dot on the selected
-choice. Choice rows have no bold text or colored backgrounds.
-Links and notes are optional.
-Use arrows, `j` / `k`, or Space for category/state; `f` / `r` / `d` / `a` / `u`
-selects a category, and `1`–`4` selects a state. Tab moves between fields.
-Enter on **Useful links** opens one editor for all references. Notes use the same
-Vim keys as Description.
+Only Description is required. Work and Improve tasks default to Uncategorized,
+even from a focused category view. Use arrows, `j` / `k`, or Space for category
+and state. For Work categories, use `f` / `r` / `d` / `a` / `u`. Use `1`–`4` for
+state. Tab moves between fields. Enter on **Useful links** opens the reference editor.
 
 - Paste URLs, Jira keys such as `FSW-12345`, or PR numbers such as `#123`.
   A bare number means a FlightSystems PR. Spaces, commas, and newlines separate entries.
@@ -345,8 +345,8 @@ Vim keys as Description.
 - To add a PR chain, enter `#123 > #124`, with the base PR first.
 - Use arrows or `j`/`k` to select an entry. Enter edits it; `x` deletes it.
   `J`/`K` reorders entries of the same type. Esc cancels the current input.
-- Tab accepts the input and moves to Notes. Esc from the list returns to the
-  current field. Save the form with `:wq` and Enter.
+- Tab accepts the input and advances to the next field. Esc from the list returns
+  to the current field. Save the form with `:wq` and Enter.
 
 Existing links and chains need no migration. PR and Jira URLs use their canonical
 paths. Document URLs keep their queries and fragments.
@@ -431,18 +431,14 @@ Done, followed by the filter. The form header shows
 `INSERT`, `NORMAL`, `SELECT`, or `COMMAND`.
 The active field has a `>` marker. Text editing shows the cursor. Colors use the
 dim borders and muted accents without reverse video. The palette suits the
-Solarized Light terminal configuration. Priority uses distinct dark red, orange,
-amber, and taupe shades; estimates range from deep blue to slate blue.
-A/H priorities and Q/H estimates stay bold; other values use less saturated colors.
-Project labels use green. State badges use the colors listed above.
+Solarized Light terminal configuration. Project labels use green. State badges use the colors listed above.
 
 Task rows have pale project backgrounds: improve sage, work blue, code lavender,
 note sand, read blush, and opensource mint. Wrapped continuation lines share the
 same background, except for state badges. Unset or custom projects keep the terminal background.
 
-The task list has labeled columns: Priority, Estimate, State, Project, and
-Description. Narrow windows use Pri/Est. Status is shown by the Pending/Done view
-and Done badges. Urgency sorts within state groups but is not shown in the TUI.
+All task views use **State | Project | Agent | Description | Links**.
+Project categories are filters, not columns.
 Descriptions wrap at word boundaries, including long words when needed.
 Ctrl-U/Ctrl-D move by screen lines so even descriptions taller than the popup can
 be read fully. `j`/`k` still move between tasks. The `>` marker identifies the
@@ -480,16 +476,9 @@ starts in normal mode:
 - `dd`: delete the current line, including any text that wraps on screen
 - In insert mode: type text, use arrows/Home/End, Backspace, or Delete
 
-Project, priority, and estimate are choice fields. Use left/right arrows or Space
-to cycle. Backspace/Delete selects unset (`-`). Project first letters select
-directly; `h`/`l` also cycle projects. Priority and estimate letters work in either
-case (`h` selects H, `l` selects L for priority, `q` selects Q for estimate).
-State uses `1`–`4` to select directly, or arrows, `j`/`k`, or Space to cycle.
-Esc requests cancellation from any choice field.
-
-- Projects: improve, work, code, note, read, opensource
-- Priorities: A, H, M, L
-- Estimates: Q, H, D, W, M
+For Project, use left/right arrows or Space to cycle, first letters to select,
+or Backspace/Delete to clear. `h`/`l` also cycle projects. Use `1`–`4` to select
+State, or arrows, `j`/`k`, or Space to cycle. Esc requests cancellation.
 
 Existing custom imported values stay unchanged until you select a replacement. The CLI still accepts free-form field values.
 Description is required. In the filter view, Enter applies the filter and Esc cancels.
@@ -499,12 +488,12 @@ and run `./td/target/debug/td`, or reinstall with `cargo install --path ./td --l
 
 ## tmux popup
 
-Prefix + T opens the installed `td` in a popup, 75% of the terminal width and
-65% of its height. Press `q` from the task list to close it and return to your pane.
+Prefix + T opens the installed `td` in a popup, 85% of the terminal width and
+75% of its height. Press `q` from the task list to close it and return to your pane.
 Reinstall after source changes so the popup uses the updated binary.
 
 The binding in `tmux/.tmux.conf` is:
 
 ```tmux
-bind-key T display-popup -E -w 75% -h 65% '$HOME/.cargo/bin/td'
+bind-key T display-popup -E -w 85% -h 75% 'env TD_POPUP=1 "$HOME/.cargo/bin/td"'
 ```

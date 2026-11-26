@@ -77,22 +77,10 @@ fn note_icon(path: &str) -> &'static str {
 }
 
 fn note_reference(path: &str) -> Option<Reference> {
-    let home = std::env::var("HOME").ok()?;
-    if !home.starts_with('/') {
-        return None;
-    }
-    let mut url = String::from("file://");
-    for byte in format!("{}/notes/{path}", home.trim_end_matches('/')).bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'_' | b'.' | b'~') {
-            url.push(char::from(byte));
-        } else {
-            use std::fmt::Write;
-            let _ = write!(url, "%{byte:02X}");
-        }
-    }
-    Some(Reference {
+    let home = std::path::PathBuf::from(std::env::var_os("HOME")?);
+    home.is_absolute().then(|| Reference {
         label: path.into(),
-        url,
+        url: super::hyperlinks::file_url(&home.join("notes").join(path)),
     })
 }
 

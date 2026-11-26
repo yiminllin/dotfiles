@@ -128,7 +128,7 @@ mod tests {
     }
 
     #[test]
-    fn sorts_descending_urgency_then_older_creation_time() {
+    fn list_sorts_by_creation_time_even_if_a_newer_task_has_higher_urgency() {
         let now = OffsetDateTime::now_utc();
         let mut older = task();
         older.created_at = Some((now - Duration::days(1000)).format(&Rfc3339).unwrap());
@@ -136,13 +136,13 @@ mod tests {
         newer.id = Uuid::from_u128(2);
         newer.created_at = Some((now - Duration::days(900)).format(&Rfc3339).unwrap());
         newer.modified_at = Some(now.format(&Rfc3339).unwrap());
-        let mut high = older.clone();
+        let mut high = newer.clone();
         high.id = Uuid::from_u128(3);
         high.priority = Some("A".to_string());
         let views = sorted_task_views([high, newer, older]);
         assert_eq!(
             views.iter().map(|view| view.task.id).collect::<Vec<_>>(),
-            [Uuid::from_u128(3), Uuid::from_u128(1), Uuid::from_u128(2)]
+            [Uuid::from_u128(1), Uuid::from_u128(2), Uuid::from_u128(3)]
         );
     }
 }

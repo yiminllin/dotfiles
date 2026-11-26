@@ -79,18 +79,6 @@ impl QuickAdd {
             "work"
         }
         .into();
-        form.values[2] = if template == Template::Improvement {
-            "A"
-        } else {
-            "M"
-        }
-        .into();
-        form.values[3] = if template == Template::Improvement {
-            "Q"
-        } else {
-            "H"
-        }
-        .into();
         form.work.category = if template == Template::Feature {
             WorkCategory::Feature
         } else {
@@ -115,11 +103,11 @@ impl QuickAdd {
 
     fn fields(&self) -> &[usize] {
         if self.template == Template::Improvement {
-            &[0, 2, 5]
+            &[0, STATE_FIELD, CATEGORY_FIELD]
         } else if self.template == Template::DocumentReview {
-            &[0, LINKS_FIELD, 2]
+            &[0, LINKS_FIELD, STATE_FIELD]
         } else {
-            &[0, 2]
+            &[0, STATE_FIELD]
         }
     }
 
@@ -509,7 +497,7 @@ pub(super) fn draw(frame: &mut Frame, app: &App) {
         return;
     }
     let mut form = quick.form.clone();
-    form.active = if quick.active == 0 { 0 } else { 2 };
+    form.active = quick.form.active;
     let (mut lines, cursor) =
         wrapped_form_text(&form, body.width as usize, quick.template.input_label());
     let links_row = lines.len();
@@ -523,20 +511,20 @@ pub(super) fn draw(frame: &mut Frame, app: &App) {
             }
         )));
     }
-    let priority_row = lines.len();
-    let priority = &quick.form.values[2];
-    lines.push(if quick.form.active == 2 {
-        form_choice_line("Priority", 2, priority, PRIORITIES)
+    let state_row = lines.len();
+    let state = quick.form.state;
+    if quick.form.active == STATE_FIELD {
+        let label = state.label();
+        lines.push(form_choice_line("State", STATE_FIELD, label, &[label]));
+        lines.extend((0..TaskState::ALL.len()).map(|choice| form_state_choice(choice, state)));
     } else {
-        Line::from(vec![
-            Span::raw("  Priority: "),
-            Span::styled(priority.clone(), enum_style(2, priority)),
-        ])
-    });
+        lines.push(Line::from(format!("  State: {}", state.label())));
+    }
+    let category_row = lines.len();
     if quick.template == Template::Improvement {
         let category = quick.form.improve_category.label();
         lines.push(if quick.active == 2 {
-            form_choice_line("Category", 5, category, &[category])
+            form_choice_line("Category", CATEGORY_FIELD, category, &[category])
         } else {
             Line::from(format!("  Category: {category}"))
         });
@@ -560,7 +548,17 @@ pub(super) fn draw(frame: &mut Frame, app: &App) {
     let focus = match quick.active {
         0 => cursor.1,
         _ if quick.form.active == LINKS_FIELD => links_row,
-        _ if quick.form.active == 2 => priority_row,
+        _ if quick.form.active == STATE_FIELD => {
+            let choice = if body.height as usize > TaskState::ALL.len() {
+                TaskState::ALL.len() - 1
+            } else {
+                TaskState::ALL
+                    .iter()
+                    .position(|value| *value == state)
+                    .unwrap()
+            };
+            state_row + 1 + choice
+        }
         _ => {
             let choice = if body.height as usize > ImproveCategory::ALL.len() {
                 ImproveCategory::ALL.len() - 1
@@ -570,7 +568,7 @@ pub(super) fn draw(frame: &mut Frame, app: &App) {
                     .position(|category| *category == quick.form.improve_category)
                     .unwrap()
             };
-            priority_row + 2 + choice
+            category_row + 1 + choice
         }
     };
     let scroll = focus.saturating_sub(body.height.saturating_sub(1) as usize);
@@ -677,8 +675,7 @@ mod tests {
             let (form, reference) = quick.prepare().unwrap();
             assert_eq!(reference, expected);
             assert_eq!(form.state, TaskState::None);
-            assert_eq!(form.values[2], "M");
-            assert_eq!(form.values[3], "H");
+            assert_eq!(form.state, TaskState::None);
         }
         for (template, input) in [
             (Template::PrReview, ""),
@@ -709,9 +706,9 @@ mod tests {
         handle_key(&mut app, KeyCode::Enter).unwrap();
         paste(&mut app, "https://example.com/design\nhttps://example.com/review#notes\nhttps://example.com/design");
         handle_key(&mut app, KeyCode::Tab).unwrap();
-        assert_eq!(app.quick_add.as_ref().unwrap().form.active, 2);
+        assert_eq!(app.quick_add.as_ref().unwrap().form.active, STATE_FIELD);
         assert!(app.quick_add.as_ref().unwrap().form.references.is_none());
-        handle_key(&mut app, KeyCode::Char('h')).unwrap();
+        handle_key(&mut app, KeyCode::Char('2')).unwrap();
         handle_key(&mut app, KeyCode::BackTab).unwrap();
         handle_key(&mut app, KeyCode::Enter).unwrap();
         paste(&mut app, "file:///invalid");
@@ -730,17 +727,17 @@ mod tests {
             task.work.design_docs,
             "https://example.com/design https://example.com/review#notes"
         );
-        assert_eq!(task.priority.as_deref(), Some("H"));
+        assert_eq!(task.state, TaskState::Next);
         assert!(task.work.notes.is_empty());
     }
 
     #[test]
-    fn improvement_minimal_form_saves_multiline_text_priority_and_category() {
+    fn improvement_minimal_form_saves_multiline_text_state_and_category() {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         enter(&mut app, '2', "Make input easier\nKeep Unicode: 改善");
         super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
-        super::super::handle_key(&mut app, KeyCode::Char('h')).unwrap();
+        super::super::handle_key(&mut app, KeyCode::Char('2')).unwrap();
         super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
         super::super::handle_key(&mut app, KeyCode::Char('1')).unwrap();
         super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
@@ -751,8 +748,7 @@ mod tests {
         assert_eq!(tasks.len(), 1);
         assert_eq!(task.description, "Make input easier\nKeep Unicode: 改善");
         assert_eq!(task.project.as_deref(), Some("improve"));
-        assert_eq!(task.priority.as_deref(), Some("H"));
-        assert_eq!(task.estimate.as_deref(), Some("Q"));
+        assert_eq!(task.state, TaskState::Next);
         assert_eq!(task.improve_category, ImproveCategory::Td);
         assert_eq!(app.visible_tasks().len(), 1);
         assert!(matches!(app.mode, Mode::Normal));
@@ -837,11 +833,11 @@ mod tests {
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         enter(&mut app, 'i', "");
         super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
-        super::super::handle_key(&mut app, KeyCode::Char('h')).unwrap();
+        super::super::handle_key(&mut app, KeyCode::Char('2')).unwrap();
         super::super::handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(app.quick_add.as_ref().unwrap().confirm_discard);
         super::super::handle_key(&mut app, KeyCode::Char('n')).unwrap();
-        assert_eq!(app.quick_add.as_ref().unwrap().form.values[2], "H");
+        assert_eq!(app.quick_add.as_ref().unwrap().form.state, TaskState::Next);
         run_command(&mut app, ":q!");
         assert!(app.quick_add.is_none());
         assert!(load_tasks(&app.path).unwrap().is_empty());
@@ -961,9 +957,9 @@ mod tests {
                         .map(|cell| cell.symbol())
                         .collect();
                     match app.quick_add.as_ref().unwrap().form.active {
-                        2 => assert!(text.contains("Priority:")),
+                        STATE_FIELD => assert!(text.contains("● 1 No state")),
                         LINKS_FIELD => assert!(text.contains("Useful links:")),
-                        5 => {
+                        CATEGORY_FIELD => {
                             assert!(text.contains("●"));
                             assert!(text.contains("Uncategorized"));
                         }
@@ -976,7 +972,7 @@ mod tests {
     }
 
     #[test]
-    fn priority_and_category_use_standard_form_choices() {
+    fn state_and_category_use_standard_form_choices() {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         enter(&mut app, '2', "Improve forms");
@@ -994,28 +990,38 @@ mod tests {
         terminal
             .draw(|frame| super::super::draw(frame, &mut app))
             .unwrap();
-        assert!(text(&terminal).contains("> Priority: - [A] H M L"));
+        assert!(text(&terminal).contains("> State:"));
         let mut ordinary = app.quick_add.as_ref().unwrap().form.clone();
-        ordinary.active = 2;
+        ordinary.active = STATE_FIELD;
         for key in [
             KeyCode::Left,
             KeyCode::Right,
-            KeyCode::Char('m'),
-            KeyCode::Char('h'),
+            KeyCode::Char('3'),
+            KeyCode::Char('2'),
         ] {
             ordinary.handle_choice_key(key);
             super::super::handle_key(&mut app, key).unwrap();
-            assert_eq!(
-                app.quick_add.as_ref().unwrap().form.values[2],
-                ordinary.values[2]
-            );
+            assert_eq!(app.quick_add.as_ref().unwrap().form.state, ordinary.state);
         }
         terminal
             .draw(|frame| super::super::draw(frame, &mut app))
             .unwrap();
-        assert!(text(&terminal).contains("> Priority: - A [H] M L"));
+        let rendered = text(&terminal);
+        assert!(rendered.contains("> State: [Next]"));
+        assert!(rendered.contains("● 2 Next"));
+        for state in TaskState::ALL {
+            assert!(rendered.contains(state.label()));
+        }
+        let mut small = Terminal::new(TestBackend::new(30, 5)).unwrap();
+        for (key, marker) in [('1', "● 1 No state"), ('4', "● 4 Waiting")] {
+            super::super::handle_key(&mut app, KeyCode::Char(key)).unwrap();
+            small
+                .draw(|frame| super::super::draw(frame, &mut app))
+                .unwrap();
+            assert!(text(&small).contains(marker));
+        }
         super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
-        ordinary.active = 5;
+        ordinary.active = CATEGORY_FIELD;
         for key in [KeyCode::Right, KeyCode::Char(' '), KeyCode::Char('1')] {
             ordinary.handle_choice_key(key);
             super::super::handle_key(&mut app, key).unwrap();

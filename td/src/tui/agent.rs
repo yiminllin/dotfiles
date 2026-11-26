@@ -367,7 +367,7 @@ mod tests {
     fn every_dashboard_shows_colored_agent_letters_after_state() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("events.jsonl");
-        for description in ["one", "two", "nil"] {
+        for description in ["one", "two", "na"] {
             append_event(
                 &path,
                 &new_envelope(
@@ -445,7 +445,7 @@ mod tests {
                     let state = header.find("State").unwrap();
                     let agent = header.find("Agent").unwrap();
                     assert!(state < agent);
-                    assert!(header[state + 5..agent].trim().is_empty());
+                    assert!(header[state + 5..agent].contains("Project"));
                     let agent_x = header[..agent].chars().count() as u16;
                     let cells: Vec<_> = (header_y + 1..24)
                         .map(|y| &buffer[(agent_x, y)])

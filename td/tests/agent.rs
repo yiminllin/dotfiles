@@ -55,7 +55,10 @@ fn links_replace_and_unlink_without_losing_task_fields() {
                 "--link-only",
             ],
         ));
-        ok(td(&events, &["edit", id, "--priority", "H"]));
+        ok(td(
+            &events,
+            &["edit", id, "--description", "Review PR details"],
+        ));
         let task: Value = serde_json::from_str(&ok(td(&events, &["show", id]))).unwrap();
         assert_eq!(task["agent"]["session_id"], session);
         assert_eq!(task["agent"]["name"], "Review PR");
@@ -84,7 +87,7 @@ fn links_replace_and_unlink_without_losing_task_fields() {
     ok(td(&events, &["agent", id, "--unlink"]));
     let task: Value = serde_json::from_str(&ok(td(&events, &["show", id]))).unwrap();
     assert!(task["agent"].is_null());
-    assert_eq!(task["priority"], "H");
+    assert_eq!(task["description"], "Review PR details");
 }
 
 #[test]

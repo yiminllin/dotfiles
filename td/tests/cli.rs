@@ -24,24 +24,13 @@ fn edits_and_clears_fields_then_completes_a_task() {
     let path = dir.path().join("events.jsonl");
     let id = td(
         &path,
-        &[
-            "add",
-            "task",
-            "--project",
-            "work",
-            "--priority",
-            "H",
-            "--estimate",
-            "D",
-            "--state",
-            "waiting",
-        ],
+        &["add", "task", "--project", "work", "--state", "waiting"],
     );
     let id = id.trim();
     assert!(uuid::Uuid::parse_str(id).is_ok());
     assert!(td(&path, &["list"]).contains(id));
     assert!(td(&path, &["list"]).contains("Waiting"));
-    td(&path, &["edit", id, "--priority", "A"]);
+    td(&path, &["edit", id, "--description", "first edit"]);
     let task: Value = serde_json::from_str(&td(&path, &["show", id])).unwrap();
     assert_eq!(task["state"], "waiting");
     td(
@@ -52,10 +41,6 @@ fn edits_and_clears_fields_then_completes_a_task() {
             "--description",
             "updated",
             "--project",
-            "",
-            "--priority",
-            "",
-            "--estimate",
             "",
             "--state",
             "none",
@@ -75,6 +60,69 @@ fn edits_and_clears_fields_then_completes_a_task() {
     td(&path, &["done", id]);
     assert!(td(&path, &["list"]).is_empty());
     assert!(td(&path, &["list", "--status", "completed"]).contains(id));
+}
+
+#[test]
+fn scratch_paths_are_readable_stable_and_lazy() {
+    let home = tempdir().unwrap();
+    let events = home.path().join("events.jsonl");
+    let id = td(&events, &["add", "Review PR #123 / café"]);
+    let id = id.trim();
+    let link = |name| {
+        td(
+            &events,
+            &[
+                "agent",
+                id,
+                "--worktree",
+                home.path().to_str().unwrap(),
+                "--session",
+                "linked-session",
+                "--name",
+                name,
+                "--link-only",
+            ],
+        );
+    };
+    link("Review / café");
+    let resolve = |id, name| {
+        Command::new(env!("CARGO_BIN_EXE_td"))
+            .env("HOME", home.path())
+            .arg("--events")
+            .arg(&events)
+            .args(["scratch-path", "--", id, name])
+            .output()
+            .unwrap()
+    };
+    let docs = home.path().join("notes/docs");
+    let linked = docs.join(format!("td-scratch/{id}/review-café.md"));
+    let standalone = docs.join("pi-scratch/standalone/testing-notes.md");
+    let assert_path = |session, name, expected: &Path| {
+        let output = resolve(session, name);
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().trim(),
+            expected.to_str().unwrap()
+        );
+    };
+    assert_path("linked-session", "Pane name", &linked);
+    assert_path("standalone", "Testing notes", &standalone);
+    assert!(!home.path().join("notes").exists());
+    assert!(!resolve("../invalid", "").status.success());
+
+    let original = docs.join(format!("td-scratch/review-pr-123-café-{id}.md"));
+    fs::create_dir_all(original.parent().unwrap()).unwrap();
+    fs::write(&original, "existing notes").unwrap();
+    td(&events, &["edit", id, "--description", "Renamed task"]);
+    assert_path("linked-session", "", &original);
+    fs::remove_file(original).unwrap();
+    for note in [&linked, &standalone] {
+        fs::create_dir_all(note.parent().unwrap()).unwrap();
+        fs::write(note, "existing notes").unwrap();
+    }
+    link("Renamed agent");
+    assert_path("linked-session", "", &linked);
+    assert_path("standalone", "Renamed agent", &standalone);
 }
 
 #[test]

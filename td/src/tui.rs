@@ -105,29 +105,15 @@ struct App {
 
 const ACCENT: Color = Color::Indexed(109);
 const PROJECTS: &[&str] = &["", "improve", "work", "code", "note", "read", "opensource"];
-const PRIORITIES: &[&str] = &["", "A", "H", "M", "L"];
-const ESTIMATES: &[&str] = &["", "Q", "H", "D", "W", "M"];
+const STATE_FIELD: usize = 2;
+const LINKS_FIELD: usize = 3;
+const CATEGORY_FIELD: usize = 4;
 
 fn enum_style(field: usize, value: &str) -> Style {
-    let (color, bold) = match (field, value) {
-        (_, "") => (Color::Indexed(244), false),
-        (1, _) => (Color::Rgb(62, 113, 73), false),
-        (2, "A") => (Color::Rgb(174, 40, 36), true),
-        (2, "H") => (Color::Rgb(165, 74, 30), true),
-        (2, "M") => (Color::Rgb(128, 96, 35), false),
-        (2, "L") => (Color::Rgb(110, 96, 86), false),
-        (3, "Q") => (Color::Rgb(34, 61, 143), true),
-        (3, "H") => (Color::Rgb(29, 83, 135), true),
-        (3, "D") => (Color::Rgb(55, 94, 132), false),
-        (3, "W") => (Color::Rgb(73, 99, 124), false),
-        (3, "M") => (Color::Rgb(84, 102, 117), false),
-        _ => return Style::default(),
-    };
-    let style = Style::default().fg(color);
-    if bold {
-        style.add_modifier(Modifier::BOLD)
-    } else {
-        style
+    match (field, value) {
+        (_, "") => Style::default().fg(Color::Indexed(244)),
+        (1, _) => Style::default().fg(Color::Rgb(62, 113, 73)),
+        _ => Style::default(),
     }
 }
 
@@ -158,7 +144,7 @@ fn task_row_style(project: &str, index: usize) -> Style {
 
 #[derive(Clone, Default)]
 struct Form {
-    values: [String; 4],
+    values: [String; 2],
     state: TaskState,
     active: usize,
     cursor: usize,
@@ -173,38 +159,34 @@ impl Form {
     fn has_changes(&self, initial: &Self) -> bool {
         self.values != initial.values
             || self.state != initial.state
-            || (self.values[1] == "work" && self.work != initial.work)
+            || self.work != initial.work
             || (self.values[1] == "improve" && self.improve_category != initial.improve_category)
     }
 
     fn options(&self) -> &[&str] {
         match self.active {
             1 => PROJECTS,
-            2 => PRIORITIES,
-            3 => ESTIMATES,
             _ => &[],
         }
     }
 
     fn field_count(&self) -> usize {
-        if self.values[1] == "work" {
-            8
-        } else if self.values[1] == "improve" {
-            6
-        } else {
+        if matches!(self.values[1].as_str(), "work" | "improve") {
             5
+        } else {
+            4
         }
     }
 
     fn focus(&mut self, active: usize) {
         self.active = active;
-        self.insert = active == 7;
+        self.insert = false;
         self.delete_pending = false;
-        self.cursor = if self.insert { self.text().len() } else { 0 };
+        self.cursor = 0;
     }
 
     fn is_text(&self) -> bool {
-        self.active == 0 || self.active == 7
+        self.active == 0
     }
 
     fn editing_mode(&self) -> &'static str {
@@ -232,14 +214,11 @@ impl Form {
     }
 
     fn text(&self) -> &str {
-        match self.active {
-            7 => &self.work.notes,
-            _ => &self.values[0],
-        }
+        &self.values[0]
     }
 
     fn choose(&mut self, forward: bool) {
-        if self.active == 5 && self.values[1] == "improve" {
+        if self.active == CATEGORY_FIELD && self.values[1] == "improve" {
             let options = ImproveCategory::ALL;
             let index = options
                 .iter()
@@ -249,7 +228,7 @@ impl Form {
                 options[(index + if forward { 1 } else { options.len() - 1 }) % options.len()];
             return;
         }
-        if self.active == 5 {
+        if self.active == CATEGORY_FIELD {
             let options = WorkCategory::ALL;
             let index = options
                 .iter()
@@ -259,7 +238,7 @@ impl Form {
                 options[(index + if forward { 1 } else { options.len() - 1 }) % options.len()];
             return;
         }
-        if self.active == 4 {
+        if self.active == STATE_FIELD {
             let options = TaskState::ALL;
             let index = options
                 .iter()
@@ -280,11 +259,13 @@ impl Form {
 
     fn handle_choice_key(&mut self, key: KeyCode) {
         match key {
-            KeyCode::Char(ch @ '1'..='6') if self.active == 5 && self.values[1] == "improve" => {
+            KeyCode::Char(ch @ '1'..='6')
+                if self.active == CATEGORY_FIELD && self.values[1] == "improve" =>
+            {
                 self.improve_category = ImproveCategory::ALL[(ch as u8 - b'1') as usize];
             }
             KeyCode::Char('f' | 'r' | 'd' | 'a' | 'u')
-                if self.active == 5 && self.values[1] == "work" =>
+                if self.active == CATEGORY_FIELD && self.values[1] == "work" =>
             {
                 let category = match key {
                     KeyCode::Char('r') => WorkCategory::Review,
@@ -295,33 +276,32 @@ impl Form {
                 };
                 self.work.category = category;
             }
-            KeyCode::Char(ch @ '1'..='4') if self.active == 4 => {
+            KeyCode::Char(ch @ '1'..='4') if self.active == STATE_FIELD => {
                 self.state = TaskState::ALL[(ch as u8 - b'1') as usize];
             }
-            KeyCode::Down | KeyCode::Char('j') if matches!(self.active, 4 | 5) => {
+            KeyCode::Down | KeyCode::Char('j')
+                if matches!(self.active, STATE_FIELD | CATEGORY_FIELD) =>
+            {
                 self.choose(true);
             }
-            KeyCode::Up | KeyCode::Char('k') if matches!(self.active, 4 | 5) => {
+            KeyCode::Up | KeyCode::Char('k')
+                if matches!(self.active, STATE_FIELD | CATEGORY_FIELD) =>
+            {
                 self.choose(false);
             }
             KeyCode::Right | KeyCode::Char(' ') => self.choose(true),
             KeyCode::Left => self.choose(false),
-            KeyCode::Backspace | KeyCode::Delete if self.active < 4 => {
+            KeyCode::Backspace | KeyCode::Delete if self.active == 1 => {
                 self.values[self.active].clear();
             }
-            KeyCode::Char(ch) if self.active < 4 => {
-                let shortcut = if self.active == 1 {
-                    ch
-                } else {
-                    ch.to_ascii_uppercase()
-                };
+            KeyCode::Char(ch) if self.active == 1 => {
                 if let Some(value) = self
                     .options()
                     .iter()
-                    .find(|value| !value.is_empty() && value.starts_with(shortcut))
+                    .find(|value| !value.is_empty() && value.starts_with(ch))
                 {
                     self.values[self.active] = value.to_string();
-                } else if self.active == 1 && matches!(ch, 'h' | 'l') {
+                } else if matches!(ch, 'h' | 'l') {
                     self.choose(ch == 'l');
                 }
             }
@@ -331,10 +311,7 @@ impl Form {
     }
 
     fn edit_description(&mut self, key: KeyCode) {
-        let text = match self.active {
-            7 => &mut self.work.notes,
-            _ => &mut self.values[0],
-        };
+        let text = &mut self.values[0];
         if self.insert {
             match key {
                 KeyCode::Char(ch) => {
@@ -433,8 +410,6 @@ impl Form {
     }
 }
 
-const LINKS_FIELD: usize = 6;
-
 fn open_reference_editor(form: &mut Form) {
     if form.references.is_none() {
         form.references = Some(references::ReferenceEditor::new(&form.work));
@@ -451,7 +426,7 @@ fn handle_reference_key(form: &mut Form, key: KeyCode) {
                 form.active - 1
             };
         }
-        form.insert = form.active == 7;
+        form.insert = false;
         form.cursor = if form.insert { form.text().len() } else { 0 };
     }
 }
@@ -1231,8 +1206,6 @@ fn open_task_form(app: &mut App, id: Uuid) {
             values: [
                 task.description.clone(),
                 task.project.clone().unwrap_or_default(),
-                task.priority.clone().unwrap_or_default(),
-                task.estimate.clone().unwrap_or_default(),
             ],
             state: task.state,
             work: task.work.clone(),
@@ -1258,7 +1231,7 @@ fn work_update(work: WorkDetails) -> Event {
 }
 
 fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
-    let [description, project, priority, estimate] = app
+    let [description, project] = app
         .form
         .values
         .clone()
@@ -1273,18 +1246,12 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
     let is_work = project == "work";
     let is_improve = project == "improve";
     let mut work = app.form.work.clone();
-    for value in [
-        &mut work.jira,
-        &mut work.prs,
-        &mut work.design_docs,
-        &mut work.notes,
-    ] {
+    for value in [&mut work.jira, &mut work.prs, &mut work.design_docs] {
         *value = value.trim().to_string();
     }
-    if is_work {
-        work.jira = hyperlinks::normalize_jira(&work.jira);
-        work.prs = hyperlinks::normalize_prs(&work.prs);
-    }
+    work.jira = hyperlinks::normalize_jira(&work.jira);
+    work.prs = hyperlinks::normalize_prs(&work.prs);
+    let save_details = is_work || work != app.initial_form.work;
     if is_work
         && work.category == WorkCategory::Review
         && app.form.state == TaskState::Waiting
@@ -1300,19 +1267,19 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
         Event::TaskUpdated {
             description: Some(description),
             project: Some(project),
-            priority: Some(priority),
-            estimate: Some(estimate),
+            priority: None,
+            estimate: None,
             state: Some(app.form.state),
             blocked: None,
-            work: is_work.then(|| work.clone()),
+            work: save_details.then(|| work.clone()),
             improve_category: is_improve.then_some(app.form.improve_category),
         }
     } else {
         Event::TaskCreated {
             description,
             project: Some(project).filter(|value| !value.is_empty()),
-            priority: Some(priority).filter(|value| !value.is_empty()),
-            estimate: Some(estimate).filter(|value| !value.is_empty()),
+            priority: None,
+            estimate: None,
             state: Some(app.form.state),
             blocked: false,
             imported_uuid: None,
@@ -1320,7 +1287,7 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
     };
     let task_id = id.unwrap_or_else(Uuid::now_v7);
     let mut events = vec![new_envelope(task_id, "tui", event)?];
-    if id.is_none() && is_work {
+    if id.is_none() && (save_details || work != WorkDetails::default()) {
         events.push(new_envelope(task_id, "tui", work_update(work))?);
     }
     if id.is_none() && is_improve {
@@ -1617,246 +1584,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
         Mode::Search => draw_input(frame, "Filter", &app.input, app.input.len(), chunks[1]),
         Mode::Command(_) => draw_input(frame, "Command", &app.input, app.input.len(), chunks[1]),
         Mode::Normal | Mode::Project | Mode::Merge => {
-            app.half_page = (chunks[1].height.saturating_sub(4) as usize / 2).max(1);
-            let compact = chunks[1].width < 80;
-            let narrow = chunks[1].width < 60;
-            let widths = [
-                Constraint::Length(if narrow {
-                    1
-                } else if compact {
-                    3
-                } else {
-                    8
-                }),
-                Constraint::Length(if narrow {
-                    1
-                } else if compact {
-                    3
-                } else {
-                    8
-                }),
-                Constraint::Length(11),
-                Constraint::Length(5),
-                Constraint::Length(if narrow {
-                    10
-                } else if app.project == Some("improve") && !compact {
-                    13
-                } else {
-                    12
-                }),
-                Constraint::Min(8),
-            ];
-            let block = Block::default()
-                .title(Line::from(vec![
-                    app.status_label(),
-                    Span::styled(
-                        format!(
-                            " | {} ",
-                            match app.project {
-                                None => "All projects",
-                                Some("") => "No project",
-                                Some(project) => project,
-                            }
-                        ),
-                        enum_style(1, "project").add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw(format!(" | filter: {}", app.filter)),
-                ]))
-                .borders(Borders::ALL)
-                .border_style(Style::default().add_modifier(Modifier::DIM));
-            let [_, columns_area] =
-                Layout::horizontal([Constraint::Length(3), Constraint::Fill(0)])
-                    .areas(block.inner(chunks[1]));
-            let columns = Layout::horizontal(widths)
-                .flex(Flex::Start)
-                .spacing(1)
-                .split(columns_area);
-            let is_improve = app.project == Some("improve");
-            let visible = app.visible_tasks();
-            let border_background = visible
-                .get(app.selected)
-                .and_then(|view| {
-                    task_row_style(view.task.project.as_deref().unwrap_or(""), app.selected).bg
-                })
-                .unwrap_or(Color::Reset);
-            let is_empty = visible.is_empty();
-            let descriptions: Vec<_> = visible
-                .iter()
-                .map(|view| {
-                    let completed = view.task.status == TaskStatus::Completed;
-                    let prefix = if app.merge_ids.contains(&view.task.id) {
-                        "[x] "
-                    } else {
-                        ""
-                    };
-                    let width =
-                        (columns[5].width as usize).saturating_sub(if completed { 2 } else { 0 });
-                    let mut description =
-                        wrap_description(&format!("{prefix}{}", view.task.description), width);
-                    if completed {
-                        for (index, line) in description.lines.iter_mut().enumerate() {
-                            for span in &mut line.spans {
-                                span.style = span.style.add_modifier(Modifier::CROSSED_OUT);
-                            }
-                            line.spans
-                                .insert(0, Span::raw(if index == 0 { "✓ " } else { "  " }));
-                        }
-                    }
-                    description
-                })
-                .collect();
-            let row_heights = descriptions.iter().map(|text| text.lines.len()).collect();
-            let rows: Vec<_> = visible
-                .iter()
-                .zip(descriptions)
-                .enumerate()
-                .flat_map(|(task_index, (view, description))| {
-                    let task = &view.task;
-                    let agent = app.agents.cell(task);
-                    let mut row_style =
-                        task_row_style(task.project.as_deref().unwrap_or(""), task_index);
-                    if row_style.bg.is_some() {
-                        row_style = row_style.fg(Color::Rgb(104, 116, 124));
-                    }
-                    if task.status == TaskStatus::Completed || task.state.is_waiting() {
-                        row_style = row_style.add_modifier(Modifier::DIM);
-                    }
-                    description
-                        .lines
-                        .into_iter()
-                        .enumerate()
-                        .map(move |(index, line)| {
-                            if index > 0 {
-                                return Row::new(vec![
-                                    Cell::default(),
-                                    Cell::default(),
-                                    Cell::default(),
-                                    Cell::default(),
-                                    Cell::default(),
-                                    Cell::from(line).style(task_description_style(row_style)),
-                                ])
-                                .style(row_style);
-                            }
-                            let priority = task.priority.as_deref().unwrap_or("");
-                            let estimate = task.estimate.as_deref().unwrap_or("");
-                            let project = task.project.as_deref().unwrap_or("");
-                            Row::new(vec![
-                                Cell::from(
-                                    if priority.is_empty() { "-" } else { priority }.to_string(),
-                                )
-                                .style(enum_style(2, priority)),
-                                Cell::from(
-                                    if estimate.is_empty() { "-" } else { estimate }.to_string(),
-                                )
-                                .style(enum_style(3, estimate)),
-                                Cell::from(task.state_label())
-                                    .style(work_view::task_state_style(task)),
-                                agent.clone(),
-                                Cell::from(
-                                    if is_improve {
-                                        task.improve_category.label()
-                                    } else if project.is_empty() {
-                                        "-"
-                                    } else {
-                                        project
-                                    }
-                                    .to_string(),
-                                )
-                                .style(enum_style(1, project)),
-                                Cell::from(line).style(task_description_style(row_style)),
-                            ])
-                            .style(row_style)
-                        })
-                })
-                .collect();
-            app.row_heights = row_heights;
-            app.selected_line = app.selected_line.min(
-                app.row_heights
-                    .get(app.selected)
-                    .copied()
-                    .unwrap_or(1)
-                    .saturating_sub(1),
-            );
-            let selected_row =
-                app.row_heights.iter().take(app.selected).sum::<usize>() + app.selected_line;
-            app.table_state
-                .select(if is_empty { None } else { Some(selected_row) });
-            let border = TaskBorder::new(&app.row_heights, app.selected);
-            let rows_area = Rect::new(
-                chunks[1].x,
-                chunks[1].y + 3,
-                chunks[1].width,
-                chunks[1].height.saturating_sub(4),
-            );
-            app.center_task_table(&border, rows_area.height);
-            let table = Table::new(border.rows(rows), widths)
-                .header(
-                    Row::new(
-                        [
-                            if narrow {
-                                "P"
-                            } else if compact {
-                                "Pri"
-                            } else {
-                                "Priority"
-                            },
-                            if narrow {
-                                "E"
-                            } else if compact {
-                                "Est"
-                            } else {
-                                "Estimate"
-                            },
-                            "State",
-                            "Agent",
-                            if app.project == Some("improve") {
-                                "Category"
-                            } else {
-                                "Project"
-                            },
-                            "Description",
-                        ]
-                        .into_iter()
-                        .zip([
-                            "",
-                            "",
-                            "",
-                            "",
-                            if app.project == Some("improve") {
-                                ""
-                            } else {
-                                ""
-                            },
-                            "",
-                        ])
-                        .map(|(label, icon)| {
-                            let icon = if narrow && matches!(label, "P" | "E") {
-                                ""
-                            } else {
-                                icon
-                            };
-                            Cell::from(format!("{icon}\n{label}"))
-                        }),
-                    )
-                    .height(2)
-                    .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-                )
-                .column_spacing(1)
-                .block(block)
-                .highlight_symbol(Span::styled(
-                    "█▶ ",
-                    Style::default()
-                        .fg(Color::Rgb(0, 51, 153))
-                        .add_modifier(Modifier::BOLD)
-                        .remove_modifier(Modifier::DIM),
-                ));
-            frame.render_stateful_widget(table, chunks[1], &mut app.table_state);
-            border.draw(
-                frame,
-                rows_area,
-                app.table_state.offset(),
-                border_background,
-            );
+            work_view::draw_task_table(frame, app, chunks[1]);
         }
     }
 }
@@ -1978,9 +1706,9 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         return;
     }
     let hint = match form.active {
-        5 if form.values[1] == "improve" => "Category: 1-6 or arrows; Enter continues",
-        5 => "Category: f/r/d/a/u or arrows; Enter continues",
-        4 => "State: 1-4 or arrows; Enter continues",
+        CATEGORY_FIELD if form.values[1] == "improve" => "Category: 1-6 or arrows; Enter continues",
+        CATEGORY_FIELD => "Category: f/r/d/a/u or arrows; Enter continues",
+        STATE_FIELD => "State: 1-4 or arrows; Enter continues",
         LINKS_FIELD => "Useful links: Enter to manage; Tab continues",
         _ => "Description required | - means unset",
     };
@@ -1993,12 +1721,9 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
     let labels = [
         "Description",
         "Project",
-        "Priority",
-        "Estimate",
         "State",
-        "Category",
         "Useful links",
-        "Notes",
+        "Category",
     ];
     let (description_lines, description_cursor) =
         wrapped_form_description(form, inner.width as usize);
@@ -2010,27 +1735,27 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         }
         fields.push((index, None));
         let count = match index {
-            5 if form.values[1] == "improve" => ImproveCategory::ALL.len(),
-            5 => WorkCategory::ALL.len(),
-            4 if form.active == 4 => TaskState::ALL.len(),
+            CATEGORY_FIELD if form.values[1] == "improve" => ImproveCategory::ALL.len(),
+            CATEGORY_FIELD => WorkCategory::ALL.len(),
+            STATE_FIELD if form.active == STATE_FIELD => TaskState::ALL.len(),
             _ => 0,
         };
         fields.extend((0..count).map(|choice| (index, Some(choice))));
     }
     let (selected_choice, choice_count) = match form.active {
-        5 if form.values[1] == "improve" => (
+        CATEGORY_FIELD if form.values[1] == "improve" => (
             ImproveCategory::ALL
                 .iter()
                 .position(|value| *value == form.improve_category),
             ImproveCategory::ALL.len(),
         ),
-        5 => (
+        CATEGORY_FIELD => (
             WorkCategory::ALL
                 .iter()
                 .position(|value| *value == form.work.category),
             WorkCategory::ALL.len(),
         ),
-        4 => (
+        STATE_FIELD => (
             TaskState::ALL.iter().position(|value| *value == form.state),
             TaskState::ALL.len(),
         ),
@@ -2072,8 +1797,12 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
             continue;
         }
         if let Some(choice) = choice {
+            if index == STATE_FIELD {
+                frame.render_widget(Paragraph::new(form_state_choice(choice, form.state)), row);
+                continue;
+            }
             let (shortcut, label, description, selected) =
-                if index == 5 && form.values[1] == "improve" {
+                if index == CATEGORY_FIELD && form.values[1] == "improve" {
                     let category = ImproveCategory::ALL[choice];
                     (
                         (b'1' + choice as u8) as char,
@@ -2081,7 +1810,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                         "",
                         category == form.improve_category,
                     )
-                } else if index == 5 {
+                } else {
                     let category = WorkCategory::ALL[choice];
                     let (shortcut, description) = match category {
                         WorkCategory::Feature => ('f', "Build, fix or investigate"),
@@ -2096,20 +1825,6 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                         description,
                         category == form.work.category,
                     )
-                } else {
-                    let state = TaskState::ALL[choice];
-                    let description = match state {
-                        TaskState::None => "Not a current focus",
-                        TaskState::Next => "Plan to work on next",
-                        TaskState::InProgress => "Working on it",
-                        TaskState::Waiting => "Waiting on someone or something",
-                    };
-                    (
-                        (b'1' + choice as u8) as char,
-                        state.label(),
-                        description,
-                        state == form.state,
-                    )
                 };
             frame.render_widget(
                 Paragraph::new(form_category_choice(shortcut, label, description, selected)),
@@ -2120,9 +1835,9 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         let label = labels[index];
         let reference_labels;
         let value = match index {
-            4 => form.state.label(),
-            5 if form.values[1] == "improve" => form.improve_category.label(),
-            5 => form.work.category.label(),
+            STATE_FIELD => form.state.label(),
+            CATEGORY_FIELD if form.values[1] == "improve" => form.improve_category.label(),
+            CATEGORY_FIELD => form.work.category.label(),
             LINKS_FIELD => {
                 reference_labels = references::display_links(&form.work)
                     .into_iter()
@@ -2138,16 +1853,15 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                     &reference_labels
                 }
             }
-            7 => &form.work.notes,
             _ => &form.values[index],
         };
-        if index == form.active && form.is_text() {
-            draw_input(frame, label, value, form.cursor, row);
-        } else if index == form.active {
+        if index == form.active {
             let options: Vec<&str> = match index {
-                4 => vec![form.state.label()],
-                5 if form.values[1] == "improve" => vec![form.improve_category.label()],
-                5 => vec![form.work.category.label()],
+                STATE_FIELD => vec![form.state.label()],
+                CATEGORY_FIELD if form.values[1] == "improve" => {
+                    vec![form.improve_category.label()]
+                }
+                CATEGORY_FIELD => vec![form.work.category.label()],
                 _ => form.options().to_vec(),
             };
             frame.render_widget(
@@ -2164,6 +1878,22 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
             );
         }
     }
+}
+
+fn form_state_choice(choice: usize, selected: TaskState) -> Line<'static> {
+    let state = TaskState::ALL[choice];
+    let description = match state {
+        TaskState::None => "Not a current focus",
+        TaskState::Next => "Plan to work on next",
+        TaskState::InProgress => "Working on it",
+        TaskState::Waiting => "Waiting on someone or something",
+    };
+    form_category_choice(
+        (b'1' + choice as u8) as char,
+        state.label(),
+        description,
+        state == selected,
+    )
 }
 
 fn form_choice_line(label: &str, index: usize, value: &str, options: &[&str]) -> Line<'static> {
@@ -2326,10 +2056,10 @@ mod tests {
         app.select_project(Some("improve"));
         for (index, category) in ImproveCategory::ALL.into_iter().enumerate() {
             handle_key(&mut app, KeyCode::Char('a')).unwrap();
-            assert_eq!(app.form.field_count(), 6);
+            assert_eq!(app.form.field_count(), 5);
             assert_eq!(app.form.improve_category, ImproveCategory::Uncategorized);
             app.form.values[0] = format!("Improve {}", category.label());
-            app.form.active = 5;
+            app.form.active = CATEGORY_FIELD;
             app.form.insert = false;
             handle_key(&mut app, KeyCode::Char((b'1' + index as u8) as char)).unwrap();
             assert!(app.form.has_changes(&app.initial_form));
@@ -2370,12 +2100,12 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect();
         assert!(screen.contains("[1 td]"));
-        assert!(screen.contains("Category"));
+        assert!(screen.contains("Project"));
         app.select_project(Some("work"));
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
-        assert_eq!(app.form.field_count(), 8);
-        app.form.values[1] = "code".into();
         assert_eq!(app.form.field_count(), 5);
+        app.form.values[1] = "code".into();
+        assert_eq!(app.form.field_count(), 4);
     }
 
     #[test]
@@ -2417,7 +2147,7 @@ mod tests {
         assert_eq!(app.improve_category, Some(ImproveCategory::Uncategorized));
         assert_eq!(app.visible_tasks().len(), 2);
         handle_key(&mut app, KeyCode::Char('e')).unwrap();
-        app.form.active = 5;
+        app.form.active = CATEGORY_FIELD;
         let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         let screen: String = terminal
@@ -2447,7 +2177,7 @@ mod tests {
         assert!(app.clipboard.is_none());
 
         for description in ["First task", "Full description\n中文 🦀\nWith details"] {
-            app.form.values = [description.into(), "work".into(), "".into(), "".into()];
+            app.form.values = [description.into(), "work".into()];
             save_form(&mut app, None).unwrap();
         }
         let before = std::fs::read(&app.path).unwrap();
@@ -2477,7 +2207,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         for description in ["First 工作", "Second\nline"] {
-            app.form.values = [description.into(), "work".into(), "H".into(), "D".into()];
+            app.form.values = [description.into(), "work".into()];
             app.form.work.notes = description.into();
             save_form(&mut app, None).unwrap();
         }
@@ -2492,7 +2222,7 @@ mod tests {
             handle_key(&mut app, KeyCode::Enter).unwrap();
             assert!(matches!(app.mode, Mode::Form(Some(id)) if id == survivor.id));
             assert_eq!(app.form.values[0], "Second\nline\n\nFirst 工作");
-            assert_eq!(app.form.values[1..], ["work", "H", "D"]);
+            assert_eq!(app.form.values[1..], ["work"]);
             assert_eq!(app.form.work, survivor.work);
             assert_eq!(std::fs::read(&app.path).unwrap(), before);
             if attempt == 0 {
@@ -2507,12 +2237,11 @@ mod tests {
             save_form(&mut app, Some(survivor.id)).unwrap();
             assert_eq!(std::fs::read(&app.path).unwrap(), before);
             app.form.values[0] = "Edited merged task".into();
-            app.form.values[2] = "A".into();
             write_and_quit(&mut app);
             let tasks = load_tasks(&app.path).unwrap();
             let merged = &tasks[&survivor.id];
             assert_eq!(merged.description, "Edited merged task");
-            assert_eq!(merged.priority.as_deref(), Some("A"));
+            assert!(merged.priority.is_none());
             assert_eq!(merged.work, survivor.work);
             assert_eq!(merged.created_at, survivor.created_at);
             assert_eq!(app.selected_task().unwrap().task.id, survivor.id);
@@ -2654,12 +2383,7 @@ mod tests {
             ("custom project", "workshop"),
             ("unassigned", ""),
         ] {
-            app.form.values = [
-                description.into(),
-                project.into(),
-                String::new(),
-                String::new(),
-            ];
+            app.form.values = [description.into(), project.into()];
             save_form(&mut app, None).unwrap();
         }
         let before = std::fs::read_to_string(&app.path).unwrap();
@@ -2756,7 +2480,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
-        for value in ["test", "w", "h", "d"] {
+        for value in ["test", "w"] {
             for ch in value.chars() {
                 handle_key(&mut app, KeyCode::Char(ch)).unwrap();
             }
@@ -2768,18 +2492,12 @@ mod tests {
         let id = task.id;
         assert_eq!(task.description, "test");
         assert_eq!(task.project.as_deref(), Some("work"));
-        assert_eq!(task.priority.as_deref(), Some("H"));
-        assert_eq!(task.estimate.as_deref(), Some("D"));
         assert_eq!(task.state, TaskState::Next);
 
         handle_key(&mut app, KeyCode::Char('e')).unwrap();
-        assert_eq!(app.form.values, ["test", "work", "H", "D"]);
-        for _ in 0..3 {
-            handle_key(&mut app, KeyCode::Tab).unwrap();
-            while !app.form.values[app.form.active].is_empty() {
-                handle_key(&mut app, KeyCode::Backspace).unwrap();
-            }
-        }
+        assert_eq!(app.form.values, ["test", "work"]);
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        handle_key(&mut app, KeyCode::Backspace).unwrap();
         handle_key(&mut app, KeyCode::Tab).unwrap();
         handle_key(&mut app, KeyCode::Char('1')).unwrap();
         write_and_quit(&mut app);
@@ -2797,7 +2515,7 @@ mod tests {
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         handle_key(&mut app, KeyCode::BackTab).unwrap();
-        assert_eq!(app.form.active, 4);
+        assert_eq!(app.form.active, LINKS_FIELD);
         write_and_quit(&mut app);
         assert!(matches!(app.mode, Mode::Form(None)));
         assert_eq!(app.form.active, 0);
@@ -2896,15 +2614,13 @@ mod tests {
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(matches!(app.mode, Mode::Normal));
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
-        app.form.active = 7;
-        app.form.insert = true;
-        handle_key(&mut app, KeyCode::Char('λ')).unwrap();
-        handle_key(&mut app, KeyCode::Esc).unwrap();
+        app.form.focus(CATEGORY_FIELD);
+        handle_key(&mut app, KeyCode::Char('r')).unwrap();
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(matches!(app.mode, Mode::ConfirmDiscard(None)));
         handle_key(&mut app, KeyCode::Char('n')).unwrap();
-        assert_eq!(app.form.work.notes, "λ");
-        handle_key(&mut app, KeyCode::Char('x')).unwrap();
+        assert_eq!(app.form.work.category, WorkCategory::Review);
+        handle_key(&mut app, KeyCode::Char('u')).unwrap();
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(matches!(app.mode, Mode::Normal));
         assert!(!app.path.exists());
@@ -2946,12 +2662,7 @@ mod tests {
     #[test]
     fn text_cursor_respects_unicode_boundaries() {
         let mut form = Form {
-            values: [
-                "你好".to_string(),
-                String::new(),
-                String::new(),
-                String::new(),
-            ],
+            values: ["你好".to_string(), String::new()],
             ..Form::default()
         };
         for key in [
@@ -2977,8 +2688,13 @@ mod tests {
         for ch in "test".chars() {
             handle_key(&mut app, KeyCode::Char(ch)).unwrap();
         }
-        for active in [1, 2, 3, 4, 0] {
-            handle_key(&mut app, KeyCode::Enter).unwrap();
+        for (key, active) in [
+            (KeyCode::Enter, 1),
+            (KeyCode::Enter, STATE_FIELD),
+            (KeyCode::Enter, LINKS_FIELD),
+            (KeyCode::Tab, 0),
+        ] {
+            handle_key(&mut app, key).unwrap();
             assert_eq!(app.form.active, active);
             assert!(!app.path.exists());
         }
@@ -3163,12 +2879,7 @@ mod tests {
     fn completed_rows_are_crossed_out_and_can_be_reopened() {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
-        app.form.values = [
-            "wrapped description ".repeat(6),
-            "work".to_string(),
-            "H".to_string(),
-            "D".to_string(),
-        ];
+        app.form.values = ["wrapped description ".repeat(6), "work".to_string()];
         save_form(&mut app, None).unwrap();
         let id = app.selected_task().unwrap().task.id;
         handle_key(&mut app, KeyCode::Char('d')).unwrap();
@@ -3198,7 +2909,11 @@ mod tests {
             assert!(row[description_start..79]
                 .iter()
                 .any(|cell| cell.symbol() != " "));
-            assert!(row[description_start..79]
+            let description_end = row
+                .iter()
+                .position(|cell| cell.symbol() == "│" && cell.fg == Color::Rgb(157, 169, 178))
+                .unwrap();
+            assert!(row[description_start..description_end]
                 .iter()
                 .filter(|cell| cell.symbol() != " ")
                 .all(|cell| cell.modifier.contains(Modifier::CROSSED_OUT)));
@@ -3261,9 +2976,8 @@ mod tests {
     fn done_view_sorts_by_completion_time_not_urgency() {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
-        for (description, priority) in [("older", "A"), ("recent", "L"), ("pending", "H")] {
+        for description in ["older", "recent", "pending"] {
             app.form.values[0] = description.to_string();
-            app.form.values[2] = priority.to_string();
             save_form(&mut app, None).unwrap();
         }
         for (description, at) in [
@@ -3333,14 +3047,9 @@ mod tests {
             let mut app = App::new(dir.path().join(format!("{case}.jsonl"))).unwrap();
             app.select_project(scope);
             for state in TaskState::ALL.into_iter().rev() {
-                for priority in ["L", "A"] {
+                for _ in 0..2 {
                     app.form = Form::default();
-                    app.form.values = [
-                        state.label().into(),
-                        project.to_string(),
-                        priority.into(),
-                        "Q".into(),
-                    ];
+                    app.form.values = [state.label().into(), project.to_string()];
                     app.form.state = state;
                     save_form(&mut app, None).unwrap();
                 }
@@ -3349,7 +3058,7 @@ mod tests {
             assert!(visible.windows(2).all(|pair| {
                 pair[0].task.state.sort_order() < pair[1].task.state.sort_order()
                     || (pair[0].task.state == pair[1].task.state
-                        && pair[0].urgency >= pair[1].urgency)
+                        && pair[0].task.created_at <= pair[1].task.created_at)
             }));
             app.selected = 0;
             let id = app.selected_task().unwrap().task.id;
@@ -3379,7 +3088,7 @@ mod tests {
             assert_eq!(app.selected_task().unwrap().task.state, TaskState::None);
             assert_eq!(app.selected_task().unwrap().task.work, work);
             handle_key(&mut app, KeyCode::Char('e')).unwrap();
-            app.form.focus(4);
+            app.form.focus(STATE_FIELD);
             handle_key(&mut app, KeyCode::Char('2')).unwrap();
             write_and_quit(&mut app);
             assert_eq!(app.selected_task().unwrap().task.state, TaskState::Next);
@@ -3405,53 +3114,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         app.mode = Mode::Form(None);
-        for (field, options) in [(2, PRIORITIES), (3, ESTIMATES)] {
-            app.form.active = field;
-            for value in &options[1..] {
-                handle_key(
-                    &mut app,
-                    KeyCode::Char(value.chars().next().unwrap().to_ascii_lowercase()),
-                )
-                .unwrap();
-                assert_eq!(app.form.values[field], *value);
-            }
-            handle_key(&mut app, KeyCode::Char('h')).unwrap();
-            assert_eq!(app.form.values[field], "H");
-            handle_key(&mut app, KeyCode::Right).unwrap();
-            assert_eq!(app.form.values[field], if field == 2 { "M" } else { "D" });
-            handle_key(&mut app, KeyCode::Left).unwrap();
-            assert_eq!(app.form.values[field], "H");
-        }
-        app.form.active = 4;
+        app.form.active = STATE_FIELD;
         for (index, expected) in TaskState::ALL.into_iter().enumerate() {
             handle_key(&mut app, KeyCode::Char((b'1' + index as u8) as char)).unwrap();
             assert_eq!(app.form.state, expected);
-        }
-    }
-
-    #[test]
-    fn category_colors_emphasize_high_priority_and_short_estimates() {
-        for (field, options) in [(2, PRIORITIES), (3, ESTIMATES)] {
-            let mut previous_intensity = u8::MAX;
-            for (index, value) in options[1..].iter().enumerate() {
-                let style = enum_style(field, value);
-                let Some(Color::Rgb(r, g, b)) = style.fg else {
-                    panic!("expected RGB color");
-                };
-                let intensity = if field == 2 {
-                    assert!(r > g && g > b);
-                    r - b
-                } else {
-                    assert!(b > g && g > r);
-                    b - r
-                };
-                assert!(intensity < previous_intensity);
-                previous_intensity = intensity;
-                assert_eq!(style.add_modifier.contains(Modifier::BOLD), index < 2);
-            }
-        }
-        for project in &PROJECTS[1..] {
-            assert_eq!(enum_style(1, project), enum_style(1, "work"));
         }
     }
 
@@ -3478,8 +3144,6 @@ mod tests {
             app.form.values = [
                 format!("{project} {}endmarker", "wrapped description ".repeat(4)),
                 project.to_string(),
-                String::new(),
-                String::new(),
             ];
             save_form(&mut app, None).unwrap();
         }
@@ -3518,7 +3182,7 @@ mod tests {
                 let dir = tempdir().unwrap();
                 let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
                 for description in ["first task", "second task\nwith wrapped text"] {
-                    app.form.values = [description.into(), project.into(), "H".into(), "D".into()];
+                    app.form.values = [description.into(), project.into()];
                     if project == "work" {
                         app.form.work.jira = "FSW-12345".into();
                         app.form.work.prs = "#64310".into();
@@ -3592,10 +3256,21 @@ mod tests {
                         let label: String = (link.area.x..link.area.right())
                             .map(|x| buffer[(x, link.area.y)].symbol())
                             .collect();
-                        assert!(label.ends_with("FSW-12345") || label.ends_with("#64310"));
+                        assert!(!label.trim().is_empty());
+                        assert!(link.url.ends_with("FSW-12345") || link.url.ends_with("/64310"));
                     }
                     if project == "work" {
-                        assert_eq!(app.hyperlinks.len(), 4);
+                        assert_eq!(
+                            app.hyperlinks
+                                .iter()
+                                .filter(|link| link.url.ends_with("/64310"))
+                                .count(),
+                            2
+                        );
+                        assert!(app
+                            .hyperlinks
+                            .iter()
+                            .any(|link| link.url.ends_with("FSW-12345")));
                     }
                 }
             }
@@ -3612,7 +3287,7 @@ mod tests {
         assert_eq!(form.values[1], "opensource");
         form.choose(true);
         assert!(form.values[1].is_empty());
-        for (field, options) in [(1, PROJECTS), (2, PRIORITIES), (3, ESTIMATES)] {
+        for (field, options) in [(1, PROJECTS)] {
             form.active = field;
             for expected in options.iter().skip(1).chain(options.iter().take(1)) {
                 form.choose(true);
@@ -3625,12 +3300,7 @@ mod tests {
     fn task_table_has_headers_and_preserves_selected_row_colors() {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
-        app.form.values = [
-            "test task".to_string(),
-            "work".to_string(),
-            "H".to_string(),
-            "D".to_string(),
-        ];
+        app.form.values = ["test task".to_string(), "work".to_string()];
         app.form.state = TaskState::Waiting;
         save_form(&mut app, None).unwrap();
         let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
@@ -3638,14 +3308,11 @@ mod tests {
         let buffer = terminal.backend().buffer();
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         for header in [
-            "",
-            "",
             "",
             "",
             "",
             "",
-            "Priority",
-            "Estimate",
+            "Links",
             "State",
             "Project",
             "Description",
@@ -3658,13 +3325,9 @@ mod tests {
         assert!(!text.contains("Status"));
         assert!(text.contains("test task"));
         assert!(text.contains("Waiting"));
-        for (symbol, field, value) in [("H", 2, "H"), ("D", 3, "D"), ("w", 1, "work")] {
-            let style = enum_style(field, value);
-            assert!(buffer.content.iter().any(|cell| cell.symbol() == symbol
-                && Some(cell.fg) == style.fg
-                && cell.modifier.contains(Modifier::BOLD)
-                    == style.add_modifier.contains(Modifier::BOLD)));
-        }
+        assert!(buffer.content.iter().any(|cell| cell.symbol() == "w"
+            && Some(cell.fg) == enum_style(1, "work").fg
+            && !cell.modifier.contains(Modifier::BOLD)));
         let marker = buffer
             .content
             .iter()
@@ -3775,7 +3438,7 @@ mod tests {
             .iter()
             .all(|cell| cell.bg == Color::Reset && !cell.modifier.contains(Modifier::REVERSED)));
         assert_eq!(terminal.get_cursor_position().unwrap().x, 20);
-        handle_key(&mut app, KeyCode::BackTab).unwrap();
+        app.form.focus(STATE_FIELD);
         let mut terminal = Terminal::new(TestBackend::new(80, 5)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         let text: String = terminal

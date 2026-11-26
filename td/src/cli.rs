@@ -30,10 +30,6 @@ struct Cli {
 struct Fields {
     #[arg(short = 'p', long)]
     project: Option<String>,
-    #[arg(long)]
-    priority: Option<String>,
-    #[arg(long)]
-    estimate: Option<String>,
     #[arg(long, value_enum)]
     state: Option<TaskState>,
 }
@@ -76,6 +72,12 @@ enum Command {
         unlink: bool,
         #[arg(long, conflicts_with = "unlink")]
         link_only: bool,
+    },
+    #[command(hide = true)]
+    ScratchPath {
+        session: String,
+        #[arg(default_value = "")]
+        board_name: String,
     },
     Done {
         id: String,
@@ -139,16 +141,24 @@ pub fn run() -> Result<()> {
                 for view in views {
                     let task = view.task;
                     println!(
-                        "{} {} {} {:<11} {:<12} {}",
+                        "{} {:<11} {:<12} {}",
                         task.id,
-                        task.priority.as_deref().unwrap_or("-"),
-                        task.estimate.as_deref().unwrap_or("-"),
                         task.state_label(),
                         task.project.as_deref().unwrap_or("-"),
                         task.description,
                     );
                 }
             }
+            return Ok(());
+        }
+        Command::ScratchPath {
+            session,
+            board_name,
+        } => {
+            println!(
+                "{}",
+                crate::scratch::session_note(&session, &board_name, tasks.values())?.display()
+            );
             return Ok(());
         }
         Command::Agent {
@@ -188,8 +198,8 @@ pub fn run() -> Result<()> {
             Event::TaskCreated {
                 description: nonempty_description(description)?,
                 project: trim(fields.project).filter(|value| !value.is_empty()),
-                priority: trim(fields.priority).filter(|value| !value.is_empty()),
-                estimate: trim(fields.estimate).filter(|value| !value.is_empty()),
+                priority: None,
+                estimate: None,
                 state: Some(fields.state.unwrap_or_default()),
                 blocked: false,
                 imported_uuid: None,
@@ -200,12 +210,7 @@ pub fn run() -> Result<()> {
             description,
             fields,
         } => {
-            if description.is_none()
-                && fields.project.is_none()
-                && fields.priority.is_none()
-                && fields.estimate.is_none()
-                && fields.state.is_none()
-            {
+            if description.is_none() && fields.project.is_none() && fields.state.is_none() {
                 bail!("edit needs at least one field flag");
             }
             (
@@ -213,8 +218,8 @@ pub fn run() -> Result<()> {
                 Event::TaskUpdated {
                     description: description.map(nonempty_description).transpose()?,
                     project: trim(fields.project),
-                    priority: trim(fields.priority),
-                    estimate: trim(fields.estimate),
+                    priority: None,
+                    estimate: None,
                     state: fields.state,
                     blocked: None,
                     work: None,

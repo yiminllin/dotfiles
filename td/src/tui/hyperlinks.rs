@@ -104,6 +104,19 @@ pub(super) fn document_links(value: &str) -> Vec<Reference> {
     links
 }
 
+pub(super) fn file_url(path: &std::path::Path) -> String {
+    use std::fmt::Write;
+    let mut url = String::from("file://");
+    for &byte in path.as_os_str().as_encoded_bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'_' | b'.' | b'~') {
+            url.push(char::from(byte));
+        } else {
+            let _ = write!(url, "%{byte:02X}");
+        }
+    }
+    url
+}
+
 pub(super) fn web_link_kind(url: &str) -> (&'static str, &'static str) {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let rest = rest.split(['?', '#']).next().unwrap_or("");

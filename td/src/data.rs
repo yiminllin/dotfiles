@@ -83,6 +83,8 @@ impl TaskStatus {
 pub struct Task {
     pub id: Uuid,
     pub description: String,
+    #[serde(skip)]
+    pub(crate) original_description: String,
     pub project: Option<String>,
     pub priority: Option<String>,
     pub estimate: Option<String>,
@@ -285,19 +287,18 @@ pub fn sorted_task_views(tasks: impl IntoIterator<Item = Task>) -> Vec<TaskView>
         })
         .collect();
 
-    views.sort_by(|left, right| {
-        let rank = |view: &TaskView| {
-            if view.task.status == TaskStatus::Completed {
-                0
-            } else {
-                view.task.state.sort_order()
-            }
+    views.sort_by_cached_key(|view| {
+        let task = &view.task;
+        let rank = if task.status == TaskStatus::Completed {
+            0
+        } else {
+            task.state.sort_order()
         };
-        rank(left)
-            .cmp(&rank(right))
-            .then_with(|| right.urgency.total_cmp(&left.urgency))
-            .then_with(|| left.task.created_at.cmp(&right.task.created_at))
-            .then_with(|| left.task.id.cmp(&right.task.id))
+        let added = task
+            .created_at
+            .as_deref()
+            .and_then(|at| OffsetDateTime::parse(at, &Rfc3339).ok());
+        (rank, added, task.id)
     });
     views
 }
@@ -356,6 +357,7 @@ fn apply_event(tasks: &mut BTreeMap<Uuid, Task>, envelope: &EventEnvelope) {
                 Task {
                     id: envelope.task_id,
                     description: description.clone(),
+                    original_description: description.clone(),
                     project: project.clone(),
                     priority: priority.clone(),
                     estimate: estimate.clone(),
