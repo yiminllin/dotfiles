@@ -39,7 +39,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
     );
     let narrow = body.width < 70;
     let hints = if narrow {
-        "c chat  C settings  Enter details  a add  e edit\nAgent: A active / I inactive / blank none\nj/k move  Tab view  p project  / search  q quit"
+        "c chat  C settings  Enter details  a add  e edit\nAgent: ● active / ○ inactive / blank none\nj/k move  Tab view  p project  / search  q quit"
     } else {
         "c chat  C settings  Enter details  a add  A template  e edit\nj/k move  s state  S cycle  y copy  m merge  r refresh links  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit"
     };
@@ -54,22 +54,18 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
 pub(super) fn draw_task_table(frame: &mut Frame, app: &mut App, body: Rect) {
     let visible = app.visible_tasks();
     let narrow = body.width < 70;
-    let state_width = if narrow { 7 } else { 11 };
-    let project_width = if narrow { 7 } else { 10 };
-    let agent_width = 5;
+    let icon_width = 5;
     let links_width = if narrow {
         8
     } else {
         // Leave space for borders, the selection marker, gaps, and description text.
-        let available = body
-            .width
-            .saturating_sub(state_width + project_width + agent_width + 10 + 22);
+        let available = body.width.saturating_sub(3 * icon_width + 10 + 22);
         (body.width * 2 / 5).min(available.max(15))
     };
     let widths = [
-        Constraint::Length(state_width),
-        Constraint::Length(project_width),
-        Constraint::Length(agent_width),
+        Constraint::Length(icon_width),
+        Constraint::Length(icon_width),
+        Constraint::Length(icon_width),
         Constraint::Min(4),
         Constraint::Length(links_width),
     ];
@@ -103,7 +99,7 @@ pub(super) fn draw_task_table(frame: &mut Frame, app: &mut App, body: Rect) {
     let links_column = columns[4];
     let headers = [
         "State",
-        "Project",
+        "Proj",
         "Agent",
         if text_width >= 11 {
             "Description"
@@ -160,31 +156,21 @@ pub(super) fn draw_task_table(frame: &mut Frame, app: &mut App, body: Rect) {
         if link_lines.is_empty() {
             link_lines.push(Line::from("-"));
         }
-        let state_label = if narrow
-            && task.status != TaskStatus::Completed
-            && task.state == TaskState::InProgress
-        {
-            "In prog"
-        } else {
-            task.state_label()
-        };
+        let done = task.status == TaskStatus::Completed;
+        let state_entry = if done { "✓" } else { state_icon(task.state) };
+
         let prefix = if app.merge_ids.contains(&task.id) {
             "[x] "
         } else {
             ""
         };
-        let done = task.status == TaskStatus::Completed;
-        let mut description = wrap_description(
-            &format!("{prefix}{}", task.description),
-            text_width.saturating_sub(if done { 2 } else { 0 }),
-        );
+        let mut description =
+            wrap_description(&format!("{prefix}{}", task.description), text_width);
         if done {
-            for (index, line) in description.lines.iter_mut().enumerate() {
+            for line in &mut description.lines {
                 for span in &mut line.spans {
                     span.style = span.style.add_modifier(Modifier::CROSSED_OUT);
                 }
-                line.spans
-                    .insert(0, Span::raw(if index == 0 { "✓ " } else { "  " }));
             }
         }
         let height = description.lines.len().max(link_lines.len());
@@ -192,21 +178,16 @@ pub(super) fn draw_task_table(frame: &mut Frame, app: &mut App, body: Rect) {
             let line = description.lines.get(index).cloned().unwrap_or_default();
             rows.push(
                 Row::new(vec![
-                    Cell::from(if index == 0 { state_label } else { "" }).style(if index == 0 {
+                    Cell::from(if index == 0 { state_entry } else { "" }).style(if index == 0 {
                         task_state_style(task)
                     } else {
                         Style::default()
                     }),
-                    Cell::from(
-                        if index != 0 {
-                            ""
-                        } else if project.is_empty() {
-                            "-"
-                        } else {
-                            project
-                        }
-                        .to_string(),
-                    )
+                    Cell::from(if index == 0 {
+                        project_entry(project).to_owned()
+                    } else {
+                        String::new()
+                    })
                     .style(enum_style(1, project)),
                     if index == 0 {
                         app.agents.cell(task)
@@ -258,7 +239,14 @@ pub(super) fn draw_task_table(frame: &mut Frame, app: &mut App, body: Rect) {
         inner.height.saturating_sub(2),
     );
     let border = TaskBorder::new(&app.row_heights, app.selected);
-    app.center_task_table(&border, rows_area.height);
+    if rows_area.height > 0 && std::mem::take(&mut app.center_selected_task) && !is_empty {
+        let viewport = usize::from(rows_area.height);
+        *app.table_state.offset_mut() = if height + 2 <= viewport {
+            border.start.saturating_sub((viewport - height - 2) / 2)
+        } else {
+            selected_row.saturating_sub(viewport / 2)
+        };
+    }
     frame.render_stateful_widget(
         Table::new(border.rows(rows), widths)
             .header(
@@ -399,8 +387,10 @@ pub(super) fn draw_state_picker(frame: &mut Frame, app: &App) {
         let selected = index == app.state_selected;
         lines.push(Line::from(vec![
             Span::raw(if selected { "> " } else { "  " }),
+            shortcut_hint(index + 1),
+            Span::raw(" "),
             Span::styled(
-                format!("{}  {:<12}", index + 1, state.label()),
+                format!("{} {:<12}", state_icon(*state), state.label()),
                 if selected {
                     state_style(*state).add_modifier(Modifier::BOLD)
                 } else {
@@ -563,6 +553,35 @@ mod tests {
     }
 
     #[test]
+    fn linked_work_task_is_centered_on_return_to_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        for index in 0..24 {
+            app.form.values = [format!("Work item {index}"), "work".into()];
+            save_form(&mut app, None).unwrap();
+        }
+        let task = &mut app.tasks.last_mut().unwrap().task;
+        task.description = "Linked task\nSecond line".into();
+        task.agent = Some(crate::agent::AgentSession {
+            session_id: "linked-session".into(),
+            worktree: dir.path().into(),
+            name: String::new(),
+        });
+        app.open_linked_task("linked-session").unwrap();
+        assert!(matches!(app.mode, Mode::Detail));
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+
+        let mut terminal = Terminal::new(TestBackend::new(100, 20)).unwrap();
+        terminal
+            .draw(|frame| draw_task_table(frame, &mut app, frame.area()))
+            .unwrap();
+        // The 16-line viewport has six lines on each side of the bordered two-line task.
+        let screen = terminal.backend().buffer();
+        assert_eq!(screen[(0, 9)].symbol(), "┏");
+        assert_eq!(screen[(0, 12)].symbol(), "┗");
+    }
+
+    #[test]
     fn zz_centers_selected_task_without_moving_selection() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
@@ -571,20 +590,20 @@ mod tests {
             save_form(&mut app, None).unwrap();
         }
         app.selected = 10;
-        let mut terminal = Terminal::new(TestBackend::new(100, 25)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(100, 20)).unwrap();
         type_text(&mut app, "z");
         terminal
-            .draw(|frame| draw_work_dashboard(frame, &mut app))
+            .draw(|frame| draw_task_table(frame, &mut app, frame.area()))
             .unwrap();
         assert_eq!(app.table_state.offset(), 0);
 
         type_text(&mut app, "z");
         terminal
-            .draw(|frame| draw_work_dashboard(frame, &mut app))
+            .draw(|frame| draw_task_table(frame, &mut app, frame.area()))
             .unwrap();
         assert_eq!(app.selected, 10);
-        assert_eq!(terminal.backend().buffer()[(0, 11)].symbol(), "┏");
-        assert_eq!(terminal.backend().buffer()[(0, 13)].symbol(), "┗");
+        assert_eq!(terminal.backend().buffer()[(0, 9)].symbol(), "┏");
+        assert_eq!(terminal.backend().buffer()[(0, 11)].symbol(), "┗");
     }
 
     #[test]
@@ -641,6 +660,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         handle_key(&mut app, KeyCode::Tab).unwrap();
         handle_key(&mut app, KeyCode::Char('w')).unwrap();
+        app.form.focus(CATEGORY_FIELD);
         for (width, height) in [(100, 24), (45, 16)] {
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             terminal.draw(|frame| draw(frame, &mut app)).unwrap();
@@ -660,7 +680,6 @@ mod tests {
             }
             assert!(text.contains("Decide later"));
         }
-        app.form.focus(CATEGORY_FIELD);
         app.form.state = TaskState::Waiting;
         for (shortcut, category) in [
             ('f', WorkCategory::Feature),
@@ -733,7 +752,17 @@ mod tests {
                 })
                 .unwrap();
             let text = row.iter().map(|cell| cell.symbol()).collect::<String>();
-            assert!(text.contains(state.label()));
+            assert!(text.contains(&format!(
+                "{} [{}] {}",
+                state_icon(*state),
+                index + 1,
+                state.label()
+            )));
+            assert!(row
+                .iter()
+                .any(|cell| cell.symbol() == (index + 1).to_string()
+                    && cell.fg == ACCENT
+                    && cell.modifier.contains(Modifier::BOLD)));
             let marker = row.iter().position(|cell| cell.symbol() == "●").unwrap();
             assert_eq!(marker, 5);
             assert_eq!(row[marker].fg, Color::Rgb(85, 100, 102));
@@ -862,7 +891,7 @@ mod tests {
             .buffer()
             .content
             .iter()
-            .any(|cell| cell.symbol() == "W"
+            .any(|cell| cell.symbol() == "Ⅱ"
                 && cell.bg == state_style(TaskState::Waiting).bg.unwrap()));
         assert_ne!(
             state_style(TaskState::Waiting).bg,
@@ -901,7 +930,7 @@ mod tests {
             .buffer()
             .content
             .iter()
-            .any(|cell| cell.symbol() == "D"
+            .any(|cell| cell.symbol() == "✓"
                 && cell.bg == green
                 && !cell.modifier.contains(Modifier::DIM)));
         for (index, state) in TaskState::ALL.iter().enumerate() {
@@ -920,7 +949,7 @@ mod tests {
             .buffer()
             .content
             .iter()
-            .any(|cell| cell.symbol() == "I"
+            .any(|cell| cell.symbol() == "▶"
                 && Some(cell.bg) == state_style(TaskState::InProgress).bg));
     }
 
@@ -978,8 +1007,7 @@ mod tests {
                 assert!(icons.contains(icon), "missing {icon} at width {width}");
             }
             let row = lines.iter().find(|line| line.contains("Item")).unwrap();
-            let state_label = if width < 70 { "In prog" } else { "In progress" };
-            for expected in [state_label, "work"] {
+            for expected in ["▶", "󰃖"] {
                 assert!(
                     row.contains(expected),
                     "missing {expected} at width {width}: {row}"
@@ -1000,12 +1028,12 @@ mod tests {
                 .iter()
                 .find(|line| line.contains("Description") && line.contains("State"))
                 .unwrap();
-            let positions: Vec<_> = ["State", "Project", "Agent", "Description", "Links"]
+            let positions: Vec<_> = ["State", "Proj", "Agent", "Description", "Links"]
                 .iter()
                 .map(|label| header.find(label).unwrap())
                 .collect();
             assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
-            let positions: Vec<_> = [state_label, "Item", "FSW-12345"]
+            let positions: Vec<_> = ["▶", "󰃖", "Item", "FSW-12345"]
                 .iter()
                 .map(|value| row.find(value).unwrap())
                 .collect();

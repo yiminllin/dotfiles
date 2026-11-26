@@ -80,8 +80,8 @@ struct App {
     row_heights: Vec<usize>,
     half_page: usize,
     list_prefix: Option<char>,
-    center_selected_task: bool,
     table_state: TableState,
+    center_selected_task: bool,
     status: TaskStatus,
     filter: String,
     project: Option<&'static str>,
@@ -105,6 +105,7 @@ struct App {
 
 const ACCENT: Color = Color::Indexed(109);
 const PROJECTS: &[&str] = &["", "improve", "work", "code", "note", "read", "opensource"];
+const PROJECT_FIELD: usize = 1;
 const STATE_FIELD: usize = 2;
 const LINKS_FIELD: usize = 3;
 const CATEGORY_FIELD: usize = 4;
@@ -114,6 +115,28 @@ fn enum_style(field: usize, value: &str) -> Style {
         (_, "") => Style::default().fg(Color::Indexed(244)),
         (1, _) => Style::default().fg(Color::Rgb(62, 113, 73)),
         _ => Style::default(),
+    }
+}
+
+fn state_icon(state: TaskState) -> &'static str {
+    match state {
+        TaskState::None => "–",
+        TaskState::Next => "→",
+        TaskState::InProgress => "▶",
+        TaskState::Waiting => "Ⅱ",
+    }
+}
+
+fn project_entry(project: &str) -> &str {
+    match project {
+        "work" => "󰃖",
+        "improve" => "󰖷",
+        "code" => "󰅴",
+        "note" => "󰎞",
+        "read" => "󰂺",
+        "opensource" => "󰘬",
+        "" => "–",
+        name => name,
     }
 }
 
@@ -165,7 +188,7 @@ impl Form {
 
     fn options(&self) -> &[&str] {
         match self.active {
-            1 => PROJECTS,
+            PROJECT_FIELD => PROJECTS,
             _ => &[],
         }
     }
@@ -279,6 +302,8 @@ impl Form {
             KeyCode::Char(ch @ '1'..='4') if self.active == STATE_FIELD => {
                 self.state = TaskState::ALL[(ch as u8 - b'1') as usize];
             }
+            KeyCode::Down if self.active == PROJECT_FIELD => self.choose(true),
+            KeyCode::Up if self.active == PROJECT_FIELD => self.choose(false),
             KeyCode::Down | KeyCode::Char('j')
                 if matches!(self.active, STATE_FIELD | CATEGORY_FIELD) =>
             {
@@ -291,14 +316,16 @@ impl Form {
             }
             KeyCode::Right | KeyCode::Char(' ') => self.choose(true),
             KeyCode::Left => self.choose(false),
-            KeyCode::Backspace | KeyCode::Delete if self.active == 1 => {
+            KeyCode::Backspace | KeyCode::Delete | KeyCode::Char('-')
+                if self.active == PROJECT_FIELD =>
+            {
                 self.values[self.active].clear();
             }
-            KeyCode::Char(ch) if self.active == 1 => {
+            KeyCode::Char(ch) if self.active == PROJECT_FIELD => {
                 if let Some(value) = self
                     .options()
                     .iter()
-                    .find(|value| !value.is_empty() && value.starts_with(ch))
+                    .find(|value| value.starts_with(ch.to_ascii_lowercase()))
                 {
                     self.values[self.active] = value.to_string();
                 } else if matches!(ch, 'h' | 'l') {
@@ -495,8 +522,8 @@ impl App {
             row_heights: Vec::new(),
             half_page: 1,
             list_prefix: None,
-            center_selected_task: false,
             table_state: TableState::default(),
+            center_selected_task: false,
             status: TaskStatus::Pending,
             filter: String::new(),
             project: None,
@@ -534,6 +561,7 @@ impl App {
             .iter()
             .position(|view| view.task.id == id)
             .expect("linked task is visible");
+        self.center_selected_task = true;
         if is_work {
             self.mode = Mode::Detail;
         }
@@ -628,6 +656,7 @@ impl App {
         self.selected = 0;
         self.selected_line = 0;
         self.row_heights.clear();
+        self.center_selected_task = false;
         self.table_state = TableState::default();
         self.mode = Mode::Normal;
     }
@@ -653,24 +682,6 @@ impl App {
                 .bg(background)
                 .add_modifier(Modifier::BOLD),
         )
-    }
-
-    fn center_task_table(&mut self, border: &TaskBorder, viewport: u16) {
-        if viewport == 0 || !std::mem::take(&mut self.center_selected_task) {
-            return;
-        }
-        let Some(selected_row) = self.table_state.selected() else {
-            return;
-        };
-        let viewport = usize::from(viewport);
-        let bordered_height = border.end - border.start + 2;
-        *self.table_state.offset_mut() = if bordered_height <= viewport {
-            border
-                .start
-                .saturating_sub((viewport - bordered_height) / 2)
-        } else {
-            selected_row.saturating_sub(viewport / 2)
-        };
     }
 
     fn move_half_page(&mut self, down: bool) {
@@ -1708,6 +1719,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
     let hint = match form.active {
         CATEGORY_FIELD if form.values[1] == "improve" => "Category: 1-6 or arrows; Enter continues",
         CATEGORY_FIELD => "Category: f/r/d/a/u or arrows; Enter continues",
+        PROJECT_FIELD => "Project: shortcut or arrows; Enter continues",
         STATE_FIELD => "State: 1-4 or arrows; Enter continues",
         LINKS_FIELD => "Useful links: Enter to manage; Tab continues",
         _ => "Description required | - means unset",
@@ -1737,12 +1749,19 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         let count = match index {
             CATEGORY_FIELD if form.values[1] == "improve" => ImproveCategory::ALL.len(),
             CATEGORY_FIELD => WorkCategory::ALL.len(),
+            PROJECT_FIELD if form.active == PROJECT_FIELD => PROJECTS.len(),
             STATE_FIELD if form.active == STATE_FIELD => TaskState::ALL.len(),
             _ => 0,
         };
         fields.extend((0..count).map(|choice| (index, Some(choice))));
     }
     let (selected_choice, choice_count) = match form.active {
+        PROJECT_FIELD => (
+            PROJECTS
+                .iter()
+                .position(|project| *project == form.values[1]),
+            PROJECTS.len(),
+        ),
         CATEGORY_FIELD if form.values[1] == "improve" => (
             ImproveCategory::ALL
                 .iter()
@@ -1797,6 +1816,14 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
             continue;
         }
         if let Some(choice) = choice {
+            if index == PROJECT_FIELD {
+                let project = PROJECTS[choice];
+                frame.render_widget(
+                    Paragraph::new(form_project_choice(project, project == form.values[1])),
+                    row,
+                );
+                continue;
+            }
             if index == STATE_FIELD {
                 frame.render_widget(Paragraph::new(form_state_choice(choice, form.state)), row);
                 continue;
@@ -1857,6 +1884,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         };
         if index == form.active {
             let options: Vec<&str> = match index {
+                PROJECT_FIELD => vec![value],
                 STATE_FIELD => vec![form.state.label()],
                 CATEGORY_FIELD if form.values[1] == "improve" => {
                     vec![form.improve_category.label()]
@@ -1880,6 +1908,27 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
     }
 }
 
+fn form_project_choice(project: &str, selected: bool) -> Line<'static> {
+    let icon = project_entry(project);
+    let label = match project {
+        "improve" => "Improve",
+        "work" => "Work",
+        "code" => "Code",
+        "note" => "Note",
+        "read" => "Read",
+        "opensource" => "Open source",
+        _ => "- No project",
+    };
+    let (shortcut, rest) = label.split_at(1);
+    let marker = if selected { "●" } else { " " };
+    let style = enum_style(PROJECT_FIELD, project);
+    Line::from(vec![
+        Span::styled(format!("    {marker} {icon} "), style),
+        shortcut_hint(shortcut),
+        Span::styled(rest, style),
+    ])
+}
+
 fn form_state_choice(choice: usize, selected: TaskState) -> Line<'static> {
     let state = TaskState::ALL[choice];
     let description = match state {
@@ -1888,11 +1937,22 @@ fn form_state_choice(choice: usize, selected: TaskState) -> Line<'static> {
         TaskState::InProgress => "Working on it",
         TaskState::Waiting => "Waiting on someone or something",
     };
-    form_category_choice(
-        (b'1' + choice as u8) as char,
-        state.label(),
-        description,
-        state == selected,
+    let marker = if state == selected { "●" } else { " " };
+    let icon = state_icon(state);
+    let label = state.label();
+    let style = form_option_style(state == selected);
+    Line::from(vec![
+        Span::styled(format!("    {marker} {icon} "), style),
+        shortcut_hint(choice + 1),
+        Span::styled(format!(" {label:<17} "), style),
+        Span::styled(description, Style::default().fg(Color::Rgb(140, 145, 145))),
+    ])
+}
+
+fn shortcut_hint(key: impl std::fmt::Display) -> Span<'static> {
+    Span::styled(
+        format!("[{key}]"),
+        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
     )
 }
 
@@ -1935,11 +1995,7 @@ fn form_category_choice(
     selected: bool,
 ) -> Line<'static> {
     let marker = if selected { "●" } else { " " };
-    let style = Style::default().fg(if selected {
-        Color::Rgb(85, 100, 102)
-    } else {
-        Color::Rgb(125, 133, 135)
-    });
+    let style = form_option_style(selected);
     Line::from(vec![
         Span::styled(format!("    {marker} {shortcut} {label:<17} "), style),
         Span::styled(
@@ -1947,6 +2003,14 @@ fn form_category_choice(
             Style::default().fg(Color::Rgb(140, 145, 145)),
         ),
     ])
+}
+
+fn form_option_style(selected: bool) -> Style {
+    Style::default().fg(if selected {
+        Color::Rgb(85, 100, 102)
+    } else {
+        Color::Rgb(125, 133, 135)
+    })
 }
 
 fn wrapped_form_description(form: &Form, width: usize) -> (Vec<Line<'static>>, (usize, usize)) {
@@ -2100,7 +2164,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect();
         assert!(screen.contains("[1 td]"));
-        assert!(screen.contains("Project"));
+        assert!(screen.contains("Proj"));
         app.select_project(Some("work"));
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         assert_eq!(app.form.field_count(), 5);
@@ -2895,9 +2959,11 @@ mod tests {
         assert!(rows.len() > 1);
         let description_start = rows[0]
             .iter()
-            .position(|cell| cell.symbol() == "✓")
-            .unwrap()
-            + 2;
+            .position(|cell| cell.symbol() == "w")
+            .unwrap();
+        assert!(rows[0][..description_start]
+            .iter()
+            .any(|cell| cell.symbol() == "✓"));
         for row in &rows {
             assert!(row[4..79]
                 .iter()
@@ -3278,6 +3344,33 @@ mod tests {
     }
 
     #[test]
+    fn add_form_shows_dashboard_project_icons_and_letter_shortcuts() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        handle_key(&mut app, KeyCode::Char('I')).unwrap();
+        assert_eq!(app.form.values[1], "improve");
+        let mut terminal = Terminal::new(TestBackend::new(45, 16)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let improve = buffer
+            .content
+            .chunks(45)
+            .find(|row| row.iter().any(|cell| cell.symbol() == "󰖷"))
+            .unwrap();
+        let text: String = improve.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("[I]mprove"));
+        assert!(improve.iter().any(|cell| cell.symbol() == "I"
+            && cell.fg == ACCENT
+            && cell.modifier.contains(Modifier::BOLD)));
+        handle_key(&mut app, KeyCode::Down).unwrap();
+        assert_eq!(app.form.values[1], "work");
+        handle_key(&mut app, KeyCode::Char('-')).unwrap();
+        assert!(app.form.values[1].is_empty());
+    }
+
+    #[test]
     fn choices_wrap_for_all_fields() {
         let mut form = Form {
             active: 1,
@@ -3307,16 +3400,7 @@ mod tests {
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         let buffer = terminal.backend().buffer();
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        for header in [
-            "",
-            "",
-            "",
-            "",
-            "Links",
-            "State",
-            "Project",
-            "Description",
-        ] {
+        for header in ["", "", "", "", "Links", "State", "Proj", "Description"] {
             assert!(text.contains(header), "missing {header}");
         }
         assert!(!text.contains("TASK LIST"));
@@ -3324,8 +3408,8 @@ mod tests {
         assert!(!text.contains("Urgency"));
         assert!(!text.contains("Status"));
         assert!(text.contains("test task"));
-        assert!(text.contains("Waiting"));
-        assert!(buffer.content.iter().any(|cell| cell.symbol() == "w"
+        assert!(text.contains("Ⅱ"));
+        assert!(buffer.content.iter().any(|cell| cell.symbol() == "󰃖"
             && Some(cell.fg) == enum_style(1, "work").fg
             && !cell.modifier.contains(Modifier::BOLD)));
         let marker = buffer

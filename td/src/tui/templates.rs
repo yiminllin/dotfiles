@@ -957,7 +957,7 @@ mod tests {
                         .map(|cell| cell.symbol())
                         .collect();
                     match app.quick_add.as_ref().unwrap().form.active {
-                        STATE_FIELD => assert!(text.contains("● 1 No state")),
+                        STATE_FIELD => assert!(text.contains("● – [1] No state")),
                         LINKS_FIELD => assert!(text.contains("Useful links:")),
                         CATEGORY_FIELD => {
                             assert!(text.contains("●"));
@@ -1008,12 +1008,12 @@ mod tests {
             .unwrap();
         let rendered = text(&terminal);
         assert!(rendered.contains("> State: [Next]"));
-        assert!(rendered.contains("● 2 Next"));
+        assert!(rendered.contains("● → [2] Next"));
         for state in TaskState::ALL {
             assert!(rendered.contains(state.label()));
         }
         let mut small = Terminal::new(TestBackend::new(30, 5)).unwrap();
-        for (key, marker) in [('1', "● 1 No state"), ('4', "● 4 Waiting")] {
+        for (key, marker) in [('1', "● – [1] No state"), ('4', "● Ⅱ [4] Waiting")] {
             super::super::handle_key(&mut app, KeyCode::Char(key)).unwrap();
             small
                 .draw(|frame| super::super::draw(frame, &mut app))

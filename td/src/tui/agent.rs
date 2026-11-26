@@ -29,9 +29,9 @@ impl Sessions {
         let (label, color) = match &task.agent {
             None => return Cell::default(),
             Some(agent) if self.running.iter().any(|session| session.matches(agent)) => {
-                ("A", Color::Rgb(75, 105, 77))
+                ("●", Color::Rgb(75, 105, 77))
             }
-            Some(_) => ("I", Color::Rgb(150, 105, 40)),
+            Some(_) => ("○", Color::Rgb(150, 105, 40)),
         };
         Cell::from(label).style(Style::default().fg(color).add_modifier(Modifier::BOLD))
     }
@@ -404,8 +404,8 @@ mod tests {
             pane: "%1".into(),
         }];
         let expected = [
-            ("A", Color::Rgb(75, 105, 77)),
-            ("I", Color::Rgb(150, 105, 40)),
+            ("●", Color::Rgb(75, 105, 77)),
+            ("○", Color::Rgb(150, 105, 40)),
         ];
         for project in [
             None,
@@ -444,8 +444,9 @@ mod tests {
                         .unwrap();
                     let state = header.find("State").unwrap();
                     let agent = header.find("Agent").unwrap();
-                    assert!(state < agent);
-                    assert!(header[state + 5..agent].contains("Project"));
+                    let project_column = header.find("Proj").unwrap();
+                    assert_eq!(project_column, state + 6);
+                    assert_eq!(agent, project_column + 6);
                     let agent_x = header[..agent].chars().count() as u16;
                     let cells: Vec<_> = (header_y + 1..24)
                         .map(|y| &buffer[(agent_x, y)])

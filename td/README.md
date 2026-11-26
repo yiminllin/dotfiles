@@ -418,9 +418,13 @@ Then press `p`, `w`. The sample references are fictional. This does not use
 
 ### General task behavior
 
+State icons: `✓` Done, `→` Next, `▶` In progress, `Ⅱ` Waiting, and `–` No state.
+Project icons (Nerd Font): `󰃖` Work, `󰖷` Improve, `󰅴` Code, `󰎞` Note,
+`󰂺` Read, and `󰘬` Open source. Custom projects show their names.
+Agent icons: `●` Active and `○` Inactive; blank means no linked agent.
+
 Every Pending view keeps tasks completed within the last 24 hours and puts them
-first. Completed rows are dimmed, with a ✓ marker and strikethrough
-on the description only. Project colors stay unchanged. Dimming depends on your
+first. Completed rows are dimmed, with strikethrough on the description only. Project colors stay unchanged. Dimming depends on your
 terminal; it does not change background transparency. Press `u` to reopen an
 accidental completion.
 After 24 hours they disappear from Pending on the next interaction, but remain
