@@ -96,19 +96,47 @@ pub(super) fn document_links(value: &str) -> Vec<Reference> {
     });
     let mut counts = BTreeMap::new();
     for link in &mut links {
-        let rest = link.url.split_once("://").unwrap().1;
-        let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
-        let kind = match host {
-            "docs.google.com" => "Google Doc",
-            "drive.google.com" => "Google Drive",
-            host if host.ends_with(".atlassian.net") && path.starts_with("wiki/") => "Confluence",
-            _ => "Doc",
-        };
+        let (kind, _) = web_link_kind(&link.url);
         let number = counts.entry(kind).or_insert(0);
         *number += 1;
         link.label = format!("{kind} {number}");
     }
     links
+}
+
+pub(super) fn web_link_kind(url: &str) -> (&'static str, &'static str) {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let rest = rest.split(['?', '#']).next().unwrap_or("");
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    match host.to_ascii_lowercase().as_str() {
+        "docs.google.com" if path.starts_with("spreadsheets/") => ("Google Sheet", ""),
+        "docs.google.com" if path.starts_with("presentation/") => ("Google Slides", ""),
+        "docs.google.com" if path.starts_with("forms/") => ("Google Form", ""),
+        "forms.gle" => ("Google Form", ""),
+        "docs.google.com" => ("Google Doc", ""),
+        "drive.google.com" if path.starts_with("drive/folders/") => ("Google Drive folder", ""),
+        "drive.google.com" => ("Google Drive", ""),
+        "youtube.com" | "www.youtube.com" | "m.youtube.com" | "youtu.be" | "loom.com"
+        | "www.loom.com" => ("Video", ""),
+        "app.slack.com" | "teams.microsoft.com" => ("Thread", ""),
+        host if host.ends_with(".slack.com") => ("Thread", ""),
+        "notion.so" | "www.notion.so" => ("Notion", ""),
+        host if host.ends_with(".notion.site") => ("Notion", ""),
+        host if host.ends_with(".atlassian.net") && path.starts_with("wiki/") => {
+            ("Confluence", "")
+        }
+        "github.com" => {
+            let parts: Vec<_> = path.trim_end_matches('/').split('/').collect();
+            match parts.as_slice() {
+                [_, _, "issues", _, ..] => ("GitHub issue", ""),
+                [_, _, "wiki", ..] => ("GitHub wiki", ""),
+                [_, _, "releases", ..] => ("GitHub release", ""),
+                [_, repo] if !repo.is_empty() => ("GitHub repo", ""),
+                _ => ("Doc", ""),
+            }
+        }
+        _ => ("Doc", ""),
+    }
 }
 
 pub(super) fn normalize_jira(value: &str) -> String {

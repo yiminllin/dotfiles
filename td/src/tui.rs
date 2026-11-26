@@ -183,7 +183,7 @@ impl Form {
 
     fn field_count(&self) -> usize {
         if self.values[1] == "work" {
-            10
+            8
         } else if self.values[1] == "improve" {
             6
         } else {
@@ -193,12 +193,12 @@ impl Form {
 
     fn focus(&mut self, active: usize) {
         self.active = active;
-        self.insert = active == 8;
+        self.insert = active == 7;
         self.cursor = if self.insert { self.text().len() } else { 0 };
     }
 
     fn is_text(&self) -> bool {
-        self.active == 0 || self.active == 8
+        self.active == 0 || self.active == 7
     }
 
     fn editing_mode(&self) -> &'static str {
@@ -214,7 +214,7 @@ impl Form {
     fn help(&self) -> &'static str {
         if self.references.is_some() {
             "Enter add/edit  Tab back to form  Esc cancel input/back"
-        } else if matches!(self.active, 6 | 7 | 9) {
+        } else if self.active == LINKS_FIELD {
             "Enter manage references  Tab next  :wq save  Esc cancel"
         } else if !self.is_text() {
             "Arrows/Space cycle  Letter select  Enter/Tab next  :wq save  Esc cancel"
@@ -227,7 +227,7 @@ impl Form {
 
     fn text(&self) -> &str {
         match self.active {
-            8 => &self.work.notes,
+            7 => &self.work.notes,
             _ => &self.values[0],
         }
     }
@@ -326,7 +326,7 @@ impl Form {
 
     fn edit_description(&mut self, key: KeyCode) {
         let text = match self.active {
-            8 => &mut self.work.notes,
+            7 => &mut self.work.notes,
             _ => &mut self.values[0],
         };
         if self.insert {
@@ -407,33 +407,17 @@ impl Form {
     }
 }
 
+const LINKS_FIELD: usize = 6;
+
 fn open_reference_editor(form: &mut Form) {
     if form.references.is_none() {
-        form.references = Some(if form.active == 9 {
-            references::ReferenceEditor::documents(&form.work.design_docs)
-        } else {
-            references::ReferenceEditor::new(
-                if form.active == 7 {
-                    &form.work.prs
-                } else {
-                    &form.work.jira
-                },
-                form.active == 7,
-            )
-        });
+        form.references = Some(references::ReferenceEditor::new(&form.work));
     }
 }
 
 fn handle_reference_key(form: &mut Form, key: KeyCode) {
     if form.references.as_mut().unwrap().key(key) {
-        let editor = form.references.take().unwrap();
-        if form.active == 9 {
-            form.work.design_docs = editor.value();
-        } else if form.active == 7 {
-            form.work.prs = editor.value();
-        } else {
-            form.work.jira = editor.value();
-        }
+        form.references.take().unwrap().apply(&mut form.work);
         if matches!(key, KeyCode::Tab | KeyCode::BackTab) {
             form.active = if key == KeyCode::Tab {
                 (form.active + 1) % form.field_count()
@@ -441,7 +425,7 @@ fn handle_reference_key(form: &mut Form, key: KeyCode) {
                 form.active - 1
             };
         }
-        form.insert = form.active == 8;
+        form.insert = form.active == 7;
         form.cursor = if form.insert { form.text().len() } else { 0 };
     }
 }
@@ -592,11 +576,7 @@ impl App {
         {
             self.visible_tasks()
                 .iter()
-                .flat_map(|view| {
-                    pr_links(&view.task.work.prs)
-                        .into_iter()
-                        .chain(hyperlinks::document_links(&view.task.work.design_docs))
-                })
+                .flat_map(|view| references::title_links(&view.task.work))
                 .map(|reference| reference.url)
                 .collect()
         } else {
@@ -718,7 +698,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
             } else if matches!(app.mode, Mode::Search | Mode::Command(_)) {
                 app.input.push_str(value);
             } else if matches!(app.mode, Mode::Form(_)) {
-                if matches!(app.form.active, 6 | 7 | 9) {
+                if app.form.active == LINKS_FIELD {
                     open_reference_editor(&mut app.form);
                     app.form.references.as_mut().unwrap().paste(value);
                 } else if app.form.is_text() {
@@ -827,14 +807,8 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         app.g_pressed = false;
         let urls: Vec<_> = app
             .selected_task()
-            .map(|view| {
-                pr_links(&view.task.work.prs)
-                    .into_iter()
-                    .chain(hyperlinks::document_links(&view.task.work.design_docs))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default()
             .into_iter()
+            .flat_map(|view| references::title_links(&view.task.work))
             .map(|reference| reference.url)
             .collect();
         app.pr_titles.refresh(urls);
@@ -857,7 +831,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                 handle_reference_key(&mut app.form, key);
                 return Ok(false);
             }
-            if matches!(app.form.active, 6 | 7 | 9)
+            if app.form.active == LINKS_FIELD
                 && (key == KeyCode::Enter || matches!(key, KeyCode::Char(ch) if ch != ':'))
             {
                 open_reference_editor(&mut app.form);
@@ -866,7 +840,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                 }
                 return Ok(false);
             }
-            if matches!(app.form.active, 6 | 7 | 9)
+            if app.form.active == LINKS_FIELD
                 && !matches!(
                     key,
                     KeyCode::Esc | KeyCode::Tab | KeyCode::BackTab | KeyCode::Char(':')
@@ -1761,7 +1735,18 @@ fn draw(frame: &mut Frame, app: &mut App) {
                             "Description",
                         ]
                         .into_iter()
-                        .zip(["🚩", "⏳", "🔄", "🤖", "📁", "📝"])
+                        .zip([
+                            "",
+                            "",
+                            "",
+                            "",
+                            if app.project == Some("improve") {
+                                ""
+                            } else {
+                                ""
+                            },
+                            "",
+                        ])
                         .map(|(label, icon)| {
                             let icon = if narrow && matches!(label, "P" | "E") {
                                 ""
@@ -1914,9 +1899,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         5 if form.values[1] == "improve" => "Category: 1-6 or arrows; Enter continues",
         5 => "Category: f/r/d/a/u or arrows; Enter continues",
         4 => "State: 1-4 or arrows; Enter continues",
-        6 => "Jira: Enter to manage tickets; Tab continues",
-        7 => "PRs: Enter to manage chains; Tab continues",
-        9 => "Design docs: Enter to manage links; Tab continues",
+        LINKS_FIELD => "Useful links: Enter to manage; Tab continues",
         _ => "Description required | - means unset",
     };
     let block = Block::default()
@@ -1932,10 +1915,8 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         "Estimate",
         "State",
         "Category",
-        "Jira",
-        "PR chains",
+        "Useful links",
         "Notes",
-        "Design docs",
     ];
     let (description_lines, description_cursor) =
         wrapped_form_description(form, inner.width as usize);
@@ -2060,35 +2041,22 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
             4 => form.state.label(),
             5 if form.values[1] == "improve" => form.improve_category.label(),
             5 => form.work.category.label(),
-            6 | 7 => {
-                reference_labels = if index == 6 {
-                    jira_links(&form.work.jira)
-                        .into_iter()
-                        .map(|link| link.label)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                } else {
-                    form.work
-                        .prs
-                        .split(';')
-                        .map(|chain| {
-                            pr_links(chain)
-                                .into_iter()
-                                .map(|link| link.label)
-                                .collect::<Vec<_>>()
-                                .join(" → ")
-                        })
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                };
+            LINKS_FIELD => {
+                reference_labels = references::display_links(&form.work)
+                    .into_iter()
+                    .map(|(icon, _, reference)| match reference {
+                        Some(reference) => references::link_label(&icon, &reference.label),
+                        None => icon,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("  ");
                 if reference_labels.is_empty() {
                     "-"
                 } else {
                     &reference_labels
                 }
             }
-            8 => &form.work.notes,
-            9 => &form.work.design_docs,
+            7 => &form.work.notes,
             _ => &form.values[index],
         };
         if index == form.active && form.is_text() {
@@ -2323,7 +2291,7 @@ mod tests {
         assert!(screen.contains("Category"));
         app.select_project(Some("work"));
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
-        assert_eq!(app.form.field_count(), 10);
+        assert_eq!(app.form.field_count(), 8);
         app.form.values[1] = "code".into();
         assert_eq!(app.form.field_count(), 5);
     }
@@ -2812,7 +2780,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(matches!(app.mode, Mode::Normal));
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
-        app.form.active = 8;
+        app.form.active = 7;
         app.form.insert = true;
         handle_key(&mut app, KeyCode::Char('λ')).unwrap();
         handle_key(&mut app, KeyCode::Esc).unwrap();
@@ -3508,7 +3476,7 @@ mod tests {
                         let label: String = (link.area.x..link.area.right())
                             .map(|x| buffer[(x, link.area.y)].symbol())
                             .collect();
-                        assert!(matches!(label.as_str(), "FSW-12345" | "#64310"));
+                        assert!(label.ends_with("FSW-12345") || label.ends_with("#64310"));
                     }
                     if project == "work" {
                         assert_eq!(app.hyperlinks.len(), 4);
@@ -3554,12 +3522,12 @@ mod tests {
         let buffer = terminal.backend().buffer();
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         for header in [
-            "🚩",
-            "⏳",
-            "🔄",
-            "🤖",
-            "📁",
-            "📝",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
             "Priority",
             "Estimate",
             "State",

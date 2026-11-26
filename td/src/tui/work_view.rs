@@ -41,7 +41,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
     let hints = if narrow {
         "c chat  C settings  Enter details  a add  e edit\nAgent: A active / I inactive / blank none\nj/k move  Tab view  p project  / search  q quit"
     } else {
-        "c chat  C settings  Enter details  a add  A template  e edit\nj/k move  s state  S cycle  y copy  m merge  r refresh PRs  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit"
+        "c chat  C settings  Enter details  a add  A template  e edit\nj/k move  s state  S cycle  y copy  m merge  r refresh links  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit"
     };
     frame.render_widget(
         Paragraph::new(hints).style(Style::default().add_modifier(Modifier::DIM)),
@@ -50,51 +50,34 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
 
     let visible = app.visible_tasks();
     let has_titles = visible.iter().any(|view| {
-        pr_links(&view.task.work.prs)
-            .into_iter()
-            .chain(hyperlinks::document_links(&view.task.work.design_docs))
+        references::title_links(&view.task.work)
             .any(|reference| app.pr_titles.title(&reference.url).is_some())
     });
-    let (priority_width, estimate_width, state_width, jira_width, mut prs_width) =
-        if body.width >= 100 {
-            (3, 3, 12, 10, 10)
-        } else if body.width >= 70 {
-            (3, 3, 11, 11, 9)
-        } else {
-            (1, 1, 8, 9, 6)
-        };
+    let (priority_width, estimate_width, state_width, mut links_width) = if body.width >= 100 {
+        (3, 3, 12, 17)
+    } else if body.width >= 70 {
+        (3, 3, 11, 15)
+    } else {
+        (1, 1, 8, 12)
+    };
     if has_titles {
-        // Reserve space for task text and the fixed metadata columns.
         let available = body
             .width
-            .saturating_sub(priority_width + estimate_width + jira_width + state_width + 24);
-        prs_width = prs_width.max((body.width * 2 / 5).min(available));
+            .saturating_sub(priority_width + estimate_width + state_width + 24);
+        links_width = links_width.max((body.width * 2 / 5).min(available));
     }
     let widths = [
         Constraint::Length(priority_width),
         Constraint::Length(estimate_width),
-        Constraint::Length(jira_width),
         Constraint::Length(state_width),
         Constraint::Length(5),
         Constraint::Min(if narrow { 4 } else { 8 }),
-        Constraint::Length(prs_width),
+        Constraint::Length(links_width),
     ];
-    let has_documents = visible
-        .iter()
-        .any(|view| !view.task.work.design_docs.is_empty());
-    let reference_header = if has_documents { "Links" } else { "PRs" };
-    let headers = if body.width >= 70 {
-        [
-            "Pri",
-            "Est",
-            "Jira",
-            "State",
-            "Agent",
-            "Task",
-            reference_header,
-        ]
+    let headers = if narrow {
+        ["P", "E", "State", "Agent", "Task", "Useful links"]
     } else {
-        ["P", "E", "Jira", "State", "Agent", "Task", reference_header]
+        ["Pri", "Est", "State", "Agent", "Task", "Useful links"]
     };
     let block = Block::default()
         .title(Line::from(vec![
@@ -114,7 +97,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         .flex(Flex::Start)
         .spacing(1)
         .split(columns_area);
-    let text_width = columns[5].width as usize;
+    let text_width = columns[4].width as usize;
     let mut rows = Vec::new();
     let mut row_links = Vec::new();
     let mut heights = Vec::new();
@@ -131,48 +114,38 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         } else {
             style
         };
-        let jira = jira_links(&work.jira);
-        if let [reference] = jira.as_slice() {
-            row_links.push((start, 2, reference.clone()));
-        }
-        let prs = pr_links(&work.prs);
-        let mut pr_lines = Vec::new();
-        for (index, label) in pr_labels(&work.prs, &prs).into_iter().enumerate() {
-            let reference = prs.get(index);
-            let title = reference.and_then(|reference| app.pr_titles.title(&reference.url));
-            for line in pr_title_lines(&label, title, columns[6].width as usize) {
-                if let Some(reference) = reference {
+        let mut link_lines = Vec::new();
+        for (icon, kind, reference) in references::display_links(work) {
+            let label = reference.as_ref().map_or_else(
+                || icon.clone(),
+                |link| references::link_label(&icon, &link.label),
+            );
+            let title = reference
+                .as_ref()
+                .and_then(|link| app.pr_titles.title(&link.url));
+            let width = columns[5].width as usize;
+            let lines = if kind == references::Kind::Document {
+                wrap_description(
+                    &title.map_or(label, |title| references::link_label(&icon, title)),
+                    width,
+                )
+                .lines
+            } else {
+                pr_title_lines(&label, title, width)
+            };
+            for line in lines {
+                if let Some(reference) = &reference {
                     row_links.push((
-                        start + pr_lines.len(),
-                        6,
-                        Reference {
-                            label: line.to_string(),
-                            url: reference.url.clone(),
-                        },
+                        start + link_lines.len(),
+                        line.width(),
+                        reference.url.clone(),
                     ));
                 }
-                pr_lines.push(line);
+                link_lines.push(line);
             }
         }
-        for reference in hyperlinks::document_links(&work.design_docs) {
-            let label = app
-                .pr_titles
-                .title(&reference.url)
-                .unwrap_or(&reference.label);
-            for line in wrap_description(label, columns[6].width as usize).lines {
-                row_links.push((
-                    start + pr_lines.len(),
-                    6,
-                    Reference {
-                        label: line.to_string(),
-                        url: reference.url.clone(),
-                    },
-                ));
-                pr_lines.push(line);
-            }
-        }
-        if pr_lines.is_empty() {
-            pr_lines.push(Line::from("-"));
+        if link_lines.is_empty() {
+            link_lines.push(Line::from("-"));
         }
         let state_label = if narrow
             && task.status != TaskStatus::Completed
@@ -183,7 +156,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
             task.state_label()
         };
         let description = wrap_description(&task.description, text_width);
-        let height = description.lines.len().max(pr_lines.len());
+        let height = description.lines.len().max(link_lines.len());
         for index in 0..height {
             let line = description.lines.get(index).cloned().unwrap_or_default();
             rows.push(
@@ -200,11 +173,6 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                         String::new()
                     })
                     .style(enum_style(3, task.estimate.as_deref().unwrap_or(""))),
-                    Cell::from(if index == 0 {
-                        jira_summary(&work.jira)
-                    } else {
-                        String::new()
-                    }),
                     Cell::from(if index == 0 { state_label } else { "" }).style(if index == 0 {
                         task_state_style(task)
                     } else {
@@ -216,7 +184,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
                         Cell::default()
                     },
                     Cell::from(line).style(task_description_style(description_style)),
-                    Cell::from(pr_lines.get(index).cloned().unwrap_or_default()).style(
+                    Cell::from(link_lines.get(index).cloned().unwrap_or_default()).style(
                         Style::default()
                             .fg(Color::Rgb(114, 125, 134))
                             .remove_modifier(Modifier::BOLD),
@@ -230,7 +198,6 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
     if visible.is_empty() {
         for line in wrap_description("No tasks here. Press a to add one.", text_width).lines {
             rows.push(Row::new(vec![
-                Cell::default(),
                 Cell::default(),
                 Cell::default(),
                 Cell::default(),
@@ -259,15 +226,12 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
     frame.render_stateful_widget(
         Table::new(border.rows(rows), widths)
             .header(
-                Row::new(
-                    headers
-                        .into_iter()
-                        .zip(["🚩", "⏳", "🎫", "🔄", "🤖", "📝", "🔗"])
-                        .map(|(label, icon)| {
-                            let icon = if matches!(label, "P" | "E") { "" } else { icon };
-                            Cell::from(format!("{icon}\n{label}"))
-                        }),
-                )
+                Row::new(headers.into_iter().zip(["", "", "", "", "", ""]).map(
+                    |(label, icon)| {
+                        let icon = if matches!(label, "P" | "E") { "" } else { icon };
+                        Cell::from(format!("{icon}\n{label}"))
+                    },
+                ))
                 .height(2)
                 .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
             )
@@ -293,8 +257,9 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
             .bg
             .unwrap_or(Color::Reset),
     );
-    if columns[6].width > 0 {
-        let separator_x = columns[6].x - 1;
+    let links_column = columns[5];
+    if links_column.width > 0 {
+        let separator_x = links_column.x - 1;
         for row in 0..app.row_heights.iter().sum() {
             if let Some(y) = border.row_y(row, app.table_state.offset(), rows_area) {
                 frame.buffer_mut()[(separator_x, y)]
@@ -307,33 +272,12 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
             }
         }
     }
-    for (row, column, reference) in row_links {
+    for (row, width, url) in row_links {
         if let Some(y) = border.row_y(row, app.table_state.offset(), rows_area) {
-            let area = Rect::new(
-                columns[column].x,
-                y,
-                (Line::from(reference.label.as_str()).width() as u16).min(columns[column].width),
-                1,
-            );
-            app.hyperlinks.push(Hyperlink {
-                area,
-                url: reference.url,
-            });
+            let area = Rect::new(links_column.x, y, (width as u16).min(links_column.width), 1);
+            app.hyperlinks.push(Hyperlink { area, url });
         }
     }
-}
-
-fn reference_summary(value: &str, plural: &str, references: Vec<Reference>) -> String {
-    match references.as_slice() {
-        [] if value.trim().is_empty() => "-".into(),
-        [] => value.trim().into(),
-        [reference] => reference.label.clone(),
-        _ => format!("{} {plural}", references.len()),
-    }
-}
-
-fn jira_summary(value: &str) -> String {
-    reference_summary(value, "tickets", jira_links(value))
 }
 
 fn pr_title_lines(label: &str, title: Option<&str>, width: usize) -> Vec<Line<'static>> {
@@ -341,7 +285,7 @@ fn pr_title_lines(label: &str, title: Option<&str>, width: usize) -> Vec<Line<'s
         .fg(Color::Rgb(76, 91, 98))
         .remove_modifier(Modifier::BOLD);
     let indent = Line::from(label).width() + 2;
-    let Some(title) = title.filter(|_| width > indent) else {
+    let Some(title) = title.filter(|_| width.saturating_sub(indent) >= 4) else {
         return wrap_description(label, width)
             .lines
             .into_iter()
@@ -364,21 +308,6 @@ fn pr_title_lines(label: &str, title: Option<&str>, width: usize) -> Vec<Line<'s
             ])
         })
         .collect()
-}
-
-fn pr_labels(value: &str, references: &[Reference]) -> Vec<String> {
-    if references.is_empty() {
-        if value.trim().is_empty() {
-            Vec::new()
-        } else {
-            vec![value.trim().into()]
-        }
-    } else {
-        references
-            .iter()
-            .map(|reference| reference.label.clone())
-            .collect()
-    }
 }
 
 pub(super) fn task_state_style(task: &crate::data::Task) -> Style {
@@ -507,56 +436,23 @@ pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
             ),
             None,
         );
-        if !work.jira.is_empty() {
-            push("\nJIRA", None);
-            let references = jira_links(&work.jira);
-            if references.is_empty() {
-                push(&work.jira, None);
-            } else {
-                for reference in references {
-                    push(&reference.label, Some(&reference.url));
-                }
-            }
-        }
-        if !work.prs.is_empty() {
-            push("\nPR LINKS / TREE (manual)", None);
-            for chain in work
-                .prs
-                .split(';')
-                .map(str::trim)
-                .filter(|chain| !chain.is_empty())
-            {
-                for (depth, pr) in chain.split('>').map(str::trim).enumerate() {
-                    let references = pr_links(pr);
-                    let url = if references.len() == 1 {
-                        Some(references[0].url.as_str())
-                    } else {
-                        None
+        let links = references::display_links(work);
+        if !links.is_empty() {
+            push("\nUSEFUL LINKS", None);
+            for (icon, kind, reference) in links {
+                if let Some(reference) = reference {
+                    let title = app.pr_titles.title(&reference.url);
+                    let label = match (kind, title) {
+                        (references::Kind::Document, Some(title)) => title.to_string(),
+                        (references::Kind::Jira, Some(title)) => {
+                            format!("{}  {title}", reference.label)
+                        }
+                        _ => reference.label,
                     };
-                    push(
-                        &format!(
-                            "{}{}{}",
-                            "  ".repeat(depth),
-                            if depth == 0 { "" } else { "└─ " },
-                            if references.len() == 1 {
-                                &references[0].label
-                            } else {
-                                pr
-                            }
-                        ),
-                        url,
-                    );
+                    push(&references::link_label(&icon, &label), Some(&reference.url));
+                } else {
+                    push(&icon, None);
                 }
-            }
-        }
-        if !work.design_docs.is_empty() {
-            push("\nDESIGN DOCUMENTS", None);
-            for reference in hyperlinks::document_links(&work.design_docs) {
-                let label = app
-                    .pr_titles
-                    .title(&reference.url)
-                    .unwrap_or(&reference.label);
-                push(label, Some(&reference.url));
             }
         }
         if let Some(agent) = &task.agent {
@@ -641,7 +537,7 @@ mod tests {
         type_text(&mut app, "Review startup");
         handle_key(&mut app, KeyCode::Tab).unwrap();
         handle_key(&mut app, KeyCode::Char('w')).unwrap();
-        assert_eq!(app.form.field_count(), 10);
+        assert_eq!(app.form.field_count(), 8);
         for _ in 0..4 {
             handle_key(&mut app, KeyCode::Tab).unwrap();
         }
@@ -649,15 +545,10 @@ mod tests {
         handle_key(&mut app, KeyCode::Char('r')).unwrap();
         assert_eq!(app.form.state, TaskState::None);
         handle_key(&mut app, KeyCode::Tab).unwrap();
-        type_text(&mut app, "12345");
-        handle_key(&mut app, KeyCode::Tab).unwrap();
-        type_text(&mut app, "https://github.com/example/repo/pull/1");
-        handle_key(&mut app, KeyCode::Enter).unwrap();
-        type_text(&mut app, "2");
-        handle_key(&mut app, KeyCode::Enter).unwrap();
-        handle_key(&mut app, KeyCode::Down).unwrap();
-        handle_key(&mut app, KeyCode::Enter).unwrap();
-        type_text(&mut app, "#3");
+        type_text(
+            &mut app,
+            "FSW-12345 https://github.com/example/repo/pull/1 > #2 #3",
+        );
         handle_key(&mut app, KeyCode::Tab).unwrap();
         type_text(&mut app, "Try λ cases");
         handle_key(&mut app, KeyCode::Esc).unwrap();
@@ -988,25 +879,6 @@ mod tests {
     }
 
     #[test]
-    fn reference_columns_format_ids_without_changing_saved_text() {
-        assert_eq!(jira_summary(""), "-");
-        assert_eq!(
-            jira_summary("https://example.atlassian.net/browse/FSW-12345?x=1"),
-            "FSW-12345"
-        );
-        assert_eq!(jira_summary("FSW-12345; FSW-12346"), "2 tickets");
-        let labels = |value: &str| pr_labels(value, &pr_links(value));
-        assert!(labels("").is_empty());
-        assert_eq!(
-            labels("https://github.com/example/repo/pull/12345/files"),
-            ["#12345"]
-        );
-        assert_eq!(labels("#1 > #2; #3"), ["#1", "#2", "#3"]);
-        assert_eq!(labels("#1 > #2; #1"), ["#1", "#2"]);
-        assert_eq!(labels("custom reference"), ["custom reference"]);
-    }
-
-    #[test]
     fn work_columns_show_metadata_and_keep_long_task_tails_reachable() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
@@ -1027,16 +899,16 @@ mod tests {
                 .chunks(width as usize)
                 .map(|row| row.iter().map(|cell| cell.symbol()).collect())
                 .collect();
-            let icons = lines.iter().find(|line| line.contains("🎫")).unwrap();
-            for icon in ["🎫", "🔗", "🔄", "🤖", "📝"] {
+            let icons = lines.iter().find(|line| line.contains("")).unwrap();
+            for icon in ["", "", "", ""] {
                 assert!(icons.contains(icon), "missing {icon} at width {width}");
             }
             if width >= 70 {
-                assert!(icons.contains("🚩") && icons.contains("⏳"));
+                assert!(icons.contains("") && icons.contains(""));
             }
             let row = lines.iter().find(|line| line.contains("Item")).unwrap();
             let state_label = if width < 70 { "In prog" } else { "In progress" };
-            for expected in ["H", "D", state_label, "FSW-12345", "#64310"] {
+            for expected in ["H", "D", state_label, "", "FSW-12345"] {
                 assert!(
                     row.contains(expected),
                     "missing {expected} at width {width}: {row}"
@@ -1046,20 +918,20 @@ mod tests {
                 .iter()
                 .position(|line| line.contains("#64310"))
                 .unwrap();
-            assert!(lines[first + 1].contains("#64311"));
-            assert!(lines[first + 2].contains("#64312"));
-            assert!(!lines.iter().any(|line| line.contains("3 PRs")));
-            assert_eq!(app.row_heights, [3]);
+            assert!(lines[first].contains(""));
+            assert!(lines[first + 1].contains("↳") && lines[first + 1].contains("#64311"));
+            assert!(lines[first + 2].contains("") && lines[first + 2].contains("#64312"));
+            assert_eq!(app.row_heights, [4]);
             let header = lines
                 .iter()
                 .find(|line| line.contains("Task") && line.contains("State"))
                 .unwrap();
-            let positions: Vec<_> = ["Jira", "State", "Task", "PRs"]
+            let positions: Vec<_> = ["State", "Task", "Useful links"]
                 .iter()
                 .map(|label| header.find(label).unwrap())
                 .collect();
             assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
-            let positions: Vec<_> = ["FSW-12345", state_label, "Item", "#64310"]
+            let positions: Vec<_> = [state_label, "Item", "FSW-12345"]
                 .iter()
                 .map(|value| row.find(value).unwrap())
                 .collect();
@@ -1107,7 +979,7 @@ mod tests {
             .unwrap();
         }
         small.draw(|frame| draw(frame, &mut app)).unwrap();
-        assert_eq!(app.row_heights, [30]);
+        assert_eq!(app.row_heights, [31]);
         assert_eq!(app.selected, 0);
         assert!(app
             .hyperlinks
@@ -1118,7 +990,10 @@ mod tests {
             let label = (link.area.x..link.area.right())
                 .map(|x| small.backend().buffer()[(x, link.area.y)].symbol())
                 .collect::<String>();
-            assert!(link.url.ends_with(&format!("/{}", &label[1..])));
+            let number = label
+                .split_once('#')
+                .map_or(label.as_str(), |(_, number)| number);
+            assert!(link.url.ends_with(&format!("/{number}")));
         }
         assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
     }
@@ -1154,14 +1029,11 @@ mod tests {
             "M".into(),
             "H".into(),
         ];
-        app.form.focus(9);
+        app.form.focus(LINKS_FIELD);
         open_reference_editor(&mut app.form);
         app.form.references.as_mut().unwrap().paste("https://example.com/design\nhttps://example.com/followup#notes\nhttps://example.com/design");
         handle_reference_key(&mut app.form, KeyCode::Tab);
-        assert_eq!(
-            app.form.active, 0,
-            "last reference field wraps to description"
-        );
+        assert_eq!(app.form.active, 7, "Useful links advances to Notes");
         let docs = "https://example.com/design https://example.com/followup#notes";
         assert_eq!(app.form.work.design_docs, docs);
         save_form(&mut app, None).unwrap();
@@ -1248,7 +1120,8 @@ mod tests {
         std::fs::write(&path, serde_json::to_vec(&cache).unwrap()).unwrap();
         app.pr_titles = pr_titles::Cache::load(path);
         for width in [100, 80, 45] {
-            let mut terminal = Terminal::new(TestBackend::new(width, 12)).unwrap();
+            let height = if width == 45 { 14 } else { 12 };
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             app.selected_line = 0;
             app.table_state = TableState::default();
             terminal.draw(|frame| draw(frame, &mut app)).unwrap();
@@ -1262,13 +1135,13 @@ mod tests {
             assert!(text.contains("#64310"));
             if width == 45 {
                 assert!(!text.contains("Camera"));
-                assert_eq!(app.row_heights, [3]);
+                assert_eq!(app.row_heights, [2]);
             } else {
                 assert!(text.contains("Camera"));
                 let link = &app.hyperlinks[0];
                 let buffer = terminal.backend().buffer();
                 let number = &buffer[(link.area.x, link.area.y)];
-                let title = &buffer[(link.area.x + 8, link.area.y)];
+                let title = &buffer[(link.area.x + 10, link.area.y)];
                 assert_eq!(number.fg, Color::Rgb(76, 91, 98));
                 assert_eq!(title.fg, Color::Rgb(114, 125, 134));
                 assert!(!number.modifier.contains(Modifier::BOLD));
@@ -1281,9 +1154,9 @@ mod tests {
                     .content
                     .windows(3)
                     .position(|cells| {
-                        cells[0].symbol() == "P"
-                            && cells[1].symbol() == "R"
-                            && cells[2].symbol() == "s"
+                        cells[0].symbol() == "U"
+                            && cells[1].symbol() == "s"
+                            && cells[2].symbol() == "e"
                     })
                     .unwrap()
                     % width as usize;
@@ -1292,7 +1165,15 @@ mod tests {
                 assert!(pr_width >= 12);
                 assert!(text.contains("Agent"));
             }
+            let has_second_pr = |app: &App| {
+                app.hyperlinks
+                    .iter()
+                    .any(|link| link.url.ends_with("/pull/64311"))
+            };
             for _ in 0..100 {
+                if has_second_pr(&app) {
+                    break;
+                }
                 handle_key_event(
                     &mut app,
                     KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
@@ -1300,14 +1181,15 @@ mod tests {
                 .unwrap();
                 terminal.draw(|frame| draw(frame, &mut app)).unwrap();
             }
+            assert!(
+                has_second_pr(&app),
+                "second PR is not visible at width {width}: {:?}",
+                app.hyperlinks
+            );
             assert!(app
                 .hyperlinks
                 .iter()
-                .any(|link| link.url.ends_with("/pull/64311")));
-            assert!(app
-                .hyperlinks
-                .iter()
-                .all(|link| link.area.right() <= width && link.area.bottom() <= 12));
+                .all(|link| link.area.right() <= width && link.area.bottom() <= height));
             for link in &app.hyperlinks {
                 let separator = &terminal.backend().buffer()[(link.area.x - 1, link.area.y)];
                 assert_eq!(separator.symbol(), "│");
@@ -1343,7 +1225,7 @@ mod tests {
             let label = (link.area.x..link.area.right())
                 .map(|x| terminal.backend().buffer()[(x, link.area.y)].symbol())
                 .collect::<String>();
-            assert_eq!(label, expected);
+            assert!(label.ends_with(expected));
             assert!(link.url.ends_with(&format!("/{}", &expected[1..])));
         }
         let link = &app.hyperlinks[0];
@@ -1354,7 +1236,7 @@ mod tests {
         let label = (link.area.x..link.area.right())
             .map(|x| terminal.backend().buffer()[(x, link.area.y)].symbol())
             .collect::<String>();
-        assert_eq!(label, "FSW-65048");
+        assert_eq!(label, " FSW-65048");
         handle_key(&mut app, KeyCode::Enter).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         let urls: std::collections::BTreeSet<_> = app
@@ -1664,7 +1546,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         assert_eq!(app.form.work.category, WorkCategory::Uncategorized);
         assert_eq!(app.form.state, TaskState::None);
-        app.form.active = 8;
+        app.form.active = 7;
         let mut small = Terminal::new(TestBackend::new(45, 8)).unwrap();
         small.draw(|frame| draw(frame, &mut app)).unwrap();
         let screen = small

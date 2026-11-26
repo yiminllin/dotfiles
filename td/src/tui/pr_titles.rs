@@ -14,6 +14,10 @@ use uuid::Uuid;
 
 use super::{hyperlinks, title_lookup};
 
+fn cache_key(url: &str) -> String {
+    hyperlinks::normalize_prs(&hyperlinks::normalize_jira(url))
+}
+
 const REFRESH_INTERVAL: Duration = Duration::from_secs(600);
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -62,7 +66,7 @@ impl Cache {
 
     pub(super) fn title(&self, url: &str) -> Option<&str> {
         self.entries
-            .get(&hyperlinks::normalize_prs(url))
+            .get(&cache_key(url))
             .map(|entry| entry.title.as_str())
     }
 
@@ -71,7 +75,7 @@ impl Cache {
     }
 
     pub(super) fn refresh(&mut self, urls: impl IntoIterator<Item = String>) {
-        for url in urls.into_iter().map(|url| hyperlinks::normalize_prs(&url)) {
+        for url in urls.into_iter().map(|url| cache_key(&url)) {
             if !self.forced.contains(&url)
                 && !self
                     .pending
@@ -119,7 +123,7 @@ impl Cache {
         let now = OffsetDateTime::now_utc().unix_timestamp();
         let url = self.forced.pop_front().or_else(|| {
             urls.into_iter()
-                .map(|url| hyperlinks::normalize_prs(&url))
+                .map(|url| cache_key(&url))
                 .find(|url| self.due(url, now))
         });
         let Some(url) = url else {
@@ -131,10 +135,12 @@ impl Cache {
         let worker_url = url.clone();
         let (sender, result) = mpsc::channel();
         thread::spawn(move || {
-            let title = if hyperlinks::pr_links(&worker_url).is_empty() {
-                title_lookup::document_title(&worker_url, &worker_request)
-            } else {
+            let title = if !hyperlinks::jira_links(&worker_url).is_empty() {
+                title_lookup::jira_title(&worker_url, &worker_request)
+            } else if !hyperlinks::pr_links(&worker_url).is_empty() {
                 title_lookup::pr_title(&worker_url, &worker_request)
+            } else {
+                title_lookup::document_title(&worker_url, &worker_request)
             };
             let entry = title.map(|title| Entry {
                 title,

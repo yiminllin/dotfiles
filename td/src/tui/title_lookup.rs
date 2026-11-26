@@ -21,7 +21,12 @@ pub(super) enum Source {
 pub(super) fn start(source: Source, reference: String) -> Receiver<Option<String>> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let _ = sender.send(lookup_title(source, &reference));
+        let request = Request::default();
+        let title = match source {
+            Source::Pr => pr_title(&reference, &request),
+            Source::Jira => jira_title(&reference, &request),
+        };
+        let _ = sender.send(title);
     });
     receiver
 }
@@ -43,28 +48,17 @@ fn clean_title(value: &str) -> Option<String> {
     (!title.is_empty()).then_some(title)
 }
 
-fn lookup_title(source: Source, reference: &str) -> Option<String> {
-    let mut command;
-    let output = match source {
-        Source::Pr => return pr_title(reference, &Request::default()),
-        Source::Jira => {
-            // The configured Jira CLI only resolves tickets on the user's Jira host.
-            if !reference.starts_with("https://flyzipline.atlassian.net/browse/") {
-                return None;
-            }
-            let key = jira_links(reference).into_iter().next()?.label;
-            command = Command::new("jira");
-            command.args(["issue", "view", &key, "--raw"]);
-            let raw = bounded_output(command)?;
-            serde_json::from_str::<serde_json::Value>(&raw)
-                .ok()?
-                .get("fields")?
-                .get("summary")?
-                .as_str()?
-                .to_string()
-        }
-    };
-    clean_title(&output)
+pub(super) fn jira_title(reference: &str, request: &Request) -> Option<String> {
+    // The configured Jira CLI only resolves tickets on the user's Jira host.
+    if !reference.starts_with("https://flyzipline.atlassian.net/browse/") {
+        return None;
+    }
+    let key = jira_links(reference).into_iter().next()?.label;
+    let mut command = Command::new("jira");
+    command.args(["issue", "view", &key, "--raw"]);
+    let raw = request.output(command)?;
+    let issue: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    clean_title(issue.get("fields")?.get("summary")?.as_str()?)
 }
 
 pub(super) fn document_title(reference: &str, request: &Request) -> Option<String> {
@@ -135,6 +129,7 @@ fn confluence_title(page: &str, request: &Request) -> Option<String> {
     clean_title(value.get("title")?.as_str()?)
 }
 
+#[cfg(test)]
 fn bounded_output(command: Command) -> Option<String> {
     Request::default().output(command)
 }

@@ -1,171 +1,230 @@
 use super::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Kind {
+pub(super) enum Kind {
     Jira,
     Pr,
     Document,
 }
 
+#[derive(Clone, PartialEq, Eq)]
+struct Artifact {
+    kind: Kind,
+    urls: Vec<String>,
+}
+
+impl Artifact {
+    fn icon(&self) -> &'static str {
+        match self.kind {
+            Kind::Jira => "",
+            Kind::Pr if self.urls.len() > 1 => "",
+            Kind::Pr => "",
+            Kind::Document => hyperlinks::web_link_kind(&self.urls[0]).1,
+        }
+    }
+
+    fn references(&self) -> Vec<Reference> {
+        let value = self.urls.join(" ");
+        match self.kind {
+            Kind::Jira => jira_links(&value),
+            Kind::Pr => pr_links(&value),
+            Kind::Document => hyperlinks::document_links(&value),
+        }
+    }
+}
+
+pub(super) fn link_label(icon: &str, label: &str) -> String {
+    format!("{icon} {label}")
+}
+
+fn artifacts(work: &WorkDetails) -> Vec<Artifact> {
+    let entries = |kind, links: Vec<Reference>| {
+        links.into_iter().map(move |link| Artifact {
+            kind,
+            urls: vec![link.url],
+        })
+    };
+    entries(Kind::Jira, jira_links(&work.jira))
+        .chain(work.prs.split(';').flat_map(|group| {
+            let links = pr_links(group);
+            if group.contains('>') && !links.is_empty() {
+                vec![Artifact {
+                    kind: Kind::Pr,
+                    urls: links.into_iter().map(|link| link.url).collect(),
+                }]
+            } else {
+                entries(Kind::Pr, links).collect()
+            }
+        }))
+        .chain(entries(
+            Kind::Document,
+            hyperlinks::document_links(&work.design_docs),
+        ))
+        .collect()
+}
+
+pub(super) fn title_links(work: &WorkDetails) -> impl Iterator<Item = Reference> {
+    pr_links(&work.prs)
+        .into_iter()
+        .chain(jira_links(&work.jira))
+        .chain(hyperlinks::document_links(&work.design_docs))
+}
+
+pub(super) fn display_links(work: &WorkDetails) -> Vec<(String, Kind, Option<Reference>)> {
+    let entries = artifacts(work);
+    let documents = hyperlinks::document_links(&work.design_docs);
+    let mut links = Vec::new();
+    for entry in entries {
+        for (index, mut reference) in entry.references().into_iter().enumerate() {
+            if entry.kind == Kind::Document {
+                if let Some(document) = documents.iter().find(|doc| doc.url == reference.url) {
+                    reference.label.clone_from(&document.label);
+                }
+            }
+            let icon = if index == 0 { entry.icon() } else { " ↳" };
+            links.push((icon.into(), entry.kind, Some(reference)));
+        }
+    }
+    for (value, empty, icon, kind) in [
+        (
+            &work.jira,
+            jira_links(&work.jira).is_empty(),
+            "",
+            Kind::Jira,
+        ),
+        (&work.prs, pr_links(&work.prs).is_empty(), "", Kind::Pr),
+    ] {
+        if empty && !value.trim().is_empty() {
+            links.push((link_label(icon, value.trim()), kind, None));
+        }
+    }
+    links
+}
+
+fn parse_link(token: &str) -> Option<Artifact> {
+    let (kind, url) = if !pr_links(token).is_empty() {
+        (Kind::Pr, hyperlinks::normalize_prs(token))
+    } else if !jira_links(token).is_empty() {
+        (Kind::Jira, hyperlinks::normalize_jira(token))
+    } else {
+        (Kind::Document, hyperlinks::document_links(token).pop()?.url)
+    };
+    Some(Artifact {
+        kind,
+        urls: vec![url],
+    })
+}
+
+fn parse_draft(draft: &str) -> Option<Vec<Artifact>> {
+    let mut entries: Vec<Artifact> = Vec::new();
+    let mut chain = false;
+    for token in draft
+        .replace('>', " > ")
+        .split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';'))
+    {
+        if token.is_empty() {
+            continue;
+        }
+        if token == ">" {
+            if chain || entries.last().is_none_or(|entry| entry.kind != Kind::Pr) {
+                return None;
+            }
+            chain = true;
+            continue;
+        }
+        let entry = parse_link(token)?;
+        if chain {
+            if entry.kind != Kind::Pr {
+                return None;
+            }
+            entries.last_mut()?.urls.extend(entry.urls);
+            chain = false;
+        } else {
+            entries.push(entry);
+        }
+    }
+    (!chain).then_some(entries)
+}
+
 #[derive(Clone)]
 pub(super) struct ReferenceEditor {
-    kind: Kind,
-    groups: Vec<Vec<String>>,
+    entries: Vec<Artifact>,
     selected: usize,
     draft: String,
     cursor: usize,
     editing: bool,
-    error: String,
+    error: bool,
 }
 
 impl ReferenceEditor {
-    pub(super) fn new(value: &str, prs: bool) -> Self {
-        let groups = if prs {
-            value
-                .split(';')
-                .filter(|part| !part.trim().is_empty())
-                .map(|part| {
-                    let links = pr_links(part);
-                    if links.is_empty() {
-                        vec![part.trim().to_string()]
-                    } else {
-                        links
-                            .into_iter()
-                            .map(|link| hyperlinks::normalize_prs(&link.url))
-                            .collect()
-                    }
-                })
-                .collect()
-        } else {
-            let links = jira_links(value);
-            vec![if links.is_empty() && !value.trim().is_empty() {
-                vec![value.trim().to_string()]
-            } else {
-                links
-                    .into_iter()
-                    .map(|link| hyperlinks::normalize_jira(&link.url))
-                    .collect()
-            }]
-        };
-        let mut editor = Self {
-            kind: if prs { Kind::Pr } else { Kind::Jira },
-            groups,
-            selected: 0,
+    pub(super) fn new(work: &WorkDetails) -> Self {
+        let entries = artifacts(work);
+        Self {
+            selected: entries.len(),
+            entries,
             draft: String::new(),
             cursor: 0,
             editing: false,
-            error: String::new(),
-        };
-        if editor.groups.is_empty() {
-            editor.groups.push(Vec::new());
+            error: false,
         }
-        editor.selected = editor.groups[0].len();
-        editor
     }
 
-    pub(super) fn documents(value: &str) -> Self {
-        let mut editor = Self::new("", false);
-        editor.kind = Kind::Document;
-        editor.groups = vec![hyperlinks::document_links(value)
-            .into_iter()
-            .map(|link| link.url)
-            .collect()];
-        editor.selected = editor.groups[0].len();
-        editor
-    }
-
-    // Each group has its entries followed by an Add row; PRs also have Add chain.
-    fn rows(&self) -> Vec<(usize, usize)> {
-        let mut rows: Vec<_> = self
-            .groups
-            .iter()
-            .enumerate()
-            .flat_map(|(group, entries)| (0..=entries.len()).map(move |entry| (group, entry)))
-            .collect();
-        if self.kind == Kind::Pr {
-            rows.push((self.groups.len(), 0));
-        }
-        rows
-    }
-
-    pub(super) fn value(&self) -> String {
-        self.groups
-            .iter()
-            .filter(|group| !group.is_empty())
-            .map(|group| group.join(if self.kind == Kind::Pr { " > " } else { " " }))
-            .collect::<Vec<_>>()
-            .join("; ")
-    }
-
-    fn links(&self, value: &str) -> Vec<Reference> {
-        match self.kind {
-            Kind::Pr => pr_links(value),
-            Kind::Jira => jira_links(value),
-            Kind::Document => hyperlinks::document_links(value),
+    pub(super) fn apply(self, work: &mut WorkDetails) {
+        let before = artifacts(work);
+        for (kind, field, separator) in [
+            (Kind::Jira, &mut work.jira, " "),
+            (Kind::Pr, &mut work.prs, "; "),
+            (Kind::Document, &mut work.design_docs, " "),
+        ] {
+            let old = before.iter().filter(|entry| entry.kind == kind);
+            let new = self.entries.iter().filter(|entry| entry.kind == kind);
+            if !old.eq(new.clone()) {
+                *field = new
+                    .map(|entry| entry.urls.join(" > "))
+                    .collect::<Vec<_>>()
+                    .join(separator);
+            }
         }
     }
 
     fn accept(&mut self) -> bool {
-        if self.draft.trim().is_empty() {
-            self.editing = false;
-            return true;
-        }
-        let links = self.links(&self.draft);
-        let tokens: Vec<_> = self
-            .draft
-            .split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';' | '>'))
-            .filter(|token| !token.is_empty())
-            .collect();
-        if links.is_empty() || tokens.iter().any(|token| self.links(token).is_empty()) {
-            self.error = if self.kind == Kind::Document {
-                "Use an http:// or https:// document URL"
-            } else {
-                "Use a number, ID, or Jira/PR URL"
-            }
-            .into();
+        let Some(mut entries) = parse_draft(&self.draft) else {
+            self.error = true;
             return false;
-        }
-        let (group, entry) = self.rows()[self.selected];
-        let mut entries = self.groups[group].clone();
-        if entry < entries.len() {
-            entries.remove(entry);
-        }
-        let mut insert_at = entry.min(entries.len());
-        for link in links {
-            let url = match self.kind {
-                Kind::Pr => hyperlinks::normalize_prs(&link.url),
-                Kind::Jira => hyperlinks::normalize_jira(&link.url),
-                Kind::Document => link.url,
-            };
-            if !entries.contains(&url)
-                && !self
-                    .groups
-                    .iter()
-                    .enumerate()
-                    .any(|(index, other)| index != group && other.contains(&url))
+        };
+        if !entries.is_empty() {
+            let end = (self.selected + 1).min(self.entries.len());
+            let mut seen = std::collections::HashSet::new();
+            for entry in self.entries[..self.selected]
+                .iter()
+                .chain(&self.entries[end..])
             {
-                entries.insert(insert_at, url);
-                insert_at += 1;
+                for url in &entry.urls {
+                    let normalized = match entry.kind {
+                        Kind::Jira => hyperlinks::normalize_jira(url),
+                        Kind::Pr => hyperlinks::normalize_prs(url),
+                        Kind::Document => url.clone(),
+                    };
+                    seen.insert(normalized);
+                }
             }
+            for entry in &mut entries {
+                entry.urls.retain(|url| seen.insert(url.clone()));
+            }
+            entries.retain(|entry| !entry.urls.is_empty());
+            self.entries.splice(self.selected..end, entries);
+            self.selected = self.entries.len();
         }
-        self.groups[group] = entries;
-        self.selected = self
-            .groups
-            .iter()
-            .take(group)
-            .map(|entries| entries.len() + 1)
-            .sum::<usize>()
-            + self.groups[group].len();
         self.draft.clear();
         self.cursor = 0;
         self.editing = false;
-        self.error.clear();
+        self.error = false;
         true
     }
 
-    // true returns to the Work form. Changes remain a draft until :wq.
+    // Changes remain a draft until the parent form saves.
     pub(super) fn key(&mut self, key: KeyCode) -> bool {
-        if key == KeyCode::Tab || key == KeyCode::BackTab {
+        if matches!(key, KeyCode::Tab | KeyCode::BackTab) {
             return self.accept();
         }
         if self.editing {
@@ -174,7 +233,7 @@ impl ReferenceEditor {
                     self.draft.clear();
                     self.cursor = 0;
                     self.editing = false;
-                    self.error.clear();
+                    self.error = false;
                 }
                 KeyCode::Enter => {
                     self.accept();
@@ -200,40 +259,37 @@ impl ReferenceEditor {
             }
             return false;
         }
-        let rows = self.rows();
-        let (group, entry) = rows[self.selected];
+        let index = self.selected;
         match key {
             KeyCode::Esc => return true,
             KeyCode::Down | KeyCode::Char('j') => {
-                self.selected = (self.selected + 1).min(rows.len() - 1)
+                self.selected = (index + 1).min(self.entries.len())
             }
-            KeyCode::Up | KeyCode::Char('k') => self.selected = self.selected.saturating_sub(1),
-            KeyCode::Char('J' | 'K')
-                if group < self.groups.len() && entry < self.groups[group].len() =>
-            {
-                let other = if key == KeyCode::Char('J') {
-                    (entry + 1).min(self.groups[group].len() - 1)
+            KeyCode::Up | KeyCode::Char('k') => self.selected = index.saturating_sub(1),
+            KeyCode::Char('J' | 'K') if index < self.entries.len() => {
+                let direction = key == KeyCode::Char('J');
+                let kind = self.entries[index].kind;
+                let other = if direction {
+                    (index + 1..self.entries.len()).find(|&i| self.entries[i].kind == kind)
                 } else {
-                    entry.saturating_sub(1)
+                    (0..index).rev().find(|&i| self.entries[i].kind == kind)
                 };
-                self.groups[group].swap(entry, other);
-                self.selected = self.selected + other - entry;
+                if let Some(other) = other {
+                    self.entries.swap(index, other);
+                    self.selected = other;
+                }
             }
-            KeyCode::Delete | KeyCode::Char('x')
-                if group < self.groups.len() && entry < self.groups[group].len() =>
-            {
-                self.groups[group].remove(entry);
+            KeyCode::Delete | KeyCode::Char('x') if index < self.entries.len() => {
+                self.entries.remove(index);
             }
             KeyCode::Enter | KeyCode::Char('e') => {
-                if group == self.groups.len() {
-                    self.groups.push(Vec::new());
-                } else if entry < self.groups[group].len() {
-                    self.draft = self.groups[group][entry].clone();
+                if let Some(entry) = self.entries.get(index) {
+                    self.draft = entry.urls.join(" > ");
                 }
                 self.cursor = self.draft.len();
                 self.editing = true;
             }
-            KeyCode::Char(ch) if group < self.groups.len() && entry == self.groups[group].len() => {
+            KeyCode::Char(ch) if index == self.entries.len() => {
                 self.editing = true;
                 self.draft.push(ch);
                 self.cursor = self.draft.len();
@@ -245,9 +301,7 @@ impl ReferenceEditor {
 
     pub(super) fn paste(&mut self, value: &str) {
         if !self.editing {
-            self.key(KeyCode::Enter);
-            self.draft.clear();
-            self.cursor = 0;
+            self.editing = true;
         }
         self.draft.insert_str(self.cursor, value);
         self.cursor += value.len();
@@ -261,55 +315,29 @@ impl ReferenceEditor {
             Constraint::Length(2),
         ])
         .areas(area);
-        let title = match self.kind {
-            Kind::Pr => "PR chains · base PR first",
-            Kind::Jira => "Jira tickets",
-            Kind::Document => "Design documents",
-        };
-        let block = Block::default().title(title).borders(Borders::ALL);
+        let block = Block::bordered().title("Useful links");
         let inner = block.inner(body);
         frame.render_widget(block, body);
-        let rows = self.rows();
         let start = self
             .selected
             .saturating_sub(inner.height.saturating_sub(1) as usize);
-        for (index, &(group, entry)) in rows
-            .iter()
-            .enumerate()
-            .skip(start)
-            .take(inner.height as usize)
-        {
-            let text = if group == self.groups.len() {
-                "+ Add chain".to_string()
-            } else if entry == self.groups[group].len() {
-                match self.kind {
-                    Kind::Pr => format!("Chain {}  + Add PR", group + 1),
-                    Kind::Jira => "+ Add Jira".into(),
-                    Kind::Document => "+ Add document".into(),
-                }
-            } else {
-                let value = &self.groups[group][entry];
-                let links = if self.kind == Kind::Document {
-                    self.links(&self.value())
-                } else {
-                    self.links(value)
-                };
-                let label = links
-                    .iter()
-                    .find(|link| link.url == *value)
-                    .or_else(|| links.first())
-                    .map(|link| link.label.clone())
-                    .unwrap_or_else(|| value.clone());
-                if self.kind == Kind::Pr {
-                    if entry == 0 {
-                        format!("Chain {}  {label}", group + 1)
+        for index in (start..=self.entries.len()).take(inner.height as usize) {
+            let text = self.entries.get(index).map_or_else(
+                || "+ Add link".into(),
+                |entry| {
+                    let label = if entry.kind == Kind::Document {
+                        entry.urls.join(" ")
                     } else {
-                        format!("         → {label}")
-                    }
-                } else {
-                    label
-                }
-            };
+                        entry
+                            .references()
+                            .into_iter()
+                            .map(|link| link.label)
+                            .collect::<Vec<_>>()
+                            .join(" → ")
+                    };
+                    link_label(entry.icon(), &label)
+                },
+            );
             let selected = index == self.selected;
             frame.render_widget(
                 Paragraph::new(format!("{} {text}", if selected { ">" } else { " " })).style(
@@ -322,13 +350,11 @@ impl ReferenceEditor {
                 Rect::new(inner.x, inner.y + (index - start) as u16, inner.width, 1),
             );
         }
-        let block = Block::default()
-            .title(if self.error.is_empty() {
-                "Paste number, ID, or URL"
-            } else {
-                &self.error
-            })
-            .borders(Borders::ALL);
+        let block = Block::bordered().title(if self.error {
+            "Use a URL, Jira key, #PR or #PR > #PR"
+        } else {
+            "Paste URLs, Jira keys, or PRs (use > for a chain)"
+        });
         let inner = block.inner(input);
         frame.render_widget(block, input);
         if self.editing {
@@ -340,7 +366,7 @@ impl ReferenceEditor {
                 inner,
             );
         }
-        frame.render_widget(Paragraph::new("Enter add/edit · j/k select · x delete · J/K reorder\nTab back to form · Esc cancel input/back"), help);
+        frame.render_widget(Paragraph::new("Enter add/edit · j/k select · x delete · J/K reorder within type\nTab back to form · Esc cancel input/back"), help);
     }
 }
 
@@ -349,67 +375,52 @@ mod tests {
     use super::*;
 
     #[test]
-    fn paste_normalizes_deduplicates_and_groups_without_separator_input() {
-        let mut editor = ReferenceEditor::new("", true);
-        editor.paste("123\nhttps://github.com/ZiplineTeam/FlightSystems/pull/124/files?x=1");
-        assert_eq!(editor.groups[0].len(), 2);
-        assert!(editor.groups[0][0].ends_with("/pull/123"));
-        assert!(editor.groups[0][1].ends_with("/pull/124"));
-        editor.paste("#123");
-        assert_eq!(editor.groups[0].len(), 2);
-        editor.key(KeyCode::Down);
-        editor.key(KeyCode::Enter);
-        editor.paste("https://github.com/other/repo/pull/8");
-        assert_eq!(editor.value(), "https://github.com/ZiplineTeam/FlightSystems/pull/123 > https://github.com/ZiplineTeam/FlightSystems/pull/124; https://github.com/other/repo/pull/8");
-        editor.key(KeyCode::Up);
-        editor.key(KeyCode::Char('x'));
-        assert_eq!(editor.groups[1].len(), 0);
+    fn mixed_paste_preserves_chains_and_document_targets() {
+        let mut work = WorkDetails::default();
+        let mut editor = ReferenceEditor::new(&work);
+        editor.paste("FSW-42\n#123 > #124\n#125\nhttps://example.com/design?q=1#intro\n#123");
+        assert_eq!(editor.entries.len(), 4);
+        editor.apply(&mut work);
+        assert_eq!(work.jira, "https://flyzipline.atlassian.net/browse/FSW-42");
+        assert_eq!(work.prs, "https://github.com/ZiplineTeam/FlightSystems/pull/123 > https://github.com/ZiplineTeam/FlightSystems/pull/124; https://github.com/ZiplineTeam/FlightSystems/pull/125");
+        assert_eq!(work.design_docs, "https://example.com/design?q=1#intro");
+        let icons: Vec<_> = display_links(&work)
+            .into_iter()
+            .map(|(icon, _, _)| icon)
+            .collect();
+        assert_eq!(icons, ["", "", " ↳", "", ""]);
     }
 
     #[test]
-    fn existing_entries_can_be_reordered_replaced_and_rendered_as_short_ids() {
-        let mut editor =
-            ReferenceEditor::new("#1 > https://github.com/other/repo/pull/2; #3", true);
-        editor.key(KeyCode::Up);
-        editor.key(KeyCode::Char('K'));
-        assert!(editor.groups[0][0].contains("other/repo"));
-        editor.paste("https://github.com/another/repo/pull/4/files");
-        assert_eq!(
-            editor.groups[0][0],
-            "https://github.com/another/repo/pull/4"
-        );
-        editor.key(KeyCode::Enter);
-        let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(60, 12)).unwrap();
-        terminal
-            .draw(|frame| editor.draw(frame, frame.area()))
-            .unwrap();
-        let screen = terminal
-            .backend()
-            .buffer()
-            .content
+    fn web_links_use_artifact_icons_without_changing_targets() {
+        let work = WorkDetails {
+            design_docs: "https://docs.google.com/spreadsheets/d/1/edit#gid=0 https://youtu.be/demo?t=10 https://github.com/org/repo/issues/42 https://example.com".into(),
+            ..Default::default()
+        };
+        let links = display_links(&work);
+        let icons: Vec<_> = links.iter().map(|(icon, _, _)| icon.as_str()).collect();
+        assert_eq!(icons, ["", "", "", ""]);
+        let urls: Vec<_> = links
             .iter()
-            .map(|cell| cell.symbol())
-            .collect::<String>();
-        assert!(screen.contains("Chain 1") && screen.contains("#4") && screen.contains("#1"));
-        assert!(screen.contains("Chain 2") && screen.contains("#3"));
-        assert!(!screen.contains("https://"));
-        assert!(!screen.contains("> :"));
-        let reloaded = ReferenceEditor::new(&editor.value(), true);
-        assert_eq!(reloaded.groups, editor.groups);
+            .map(|(_, _, link)| link.as_ref().unwrap().url.as_str())
+            .collect();
+        assert_eq!(
+            urls,
+            work.design_docs.split_whitespace().collect::<Vec<_>>()
+        );
     }
 
     #[test]
-    fn invalid_input_stays_editable_and_jira_numbers_normalize() {
-        let mut editor = ReferenceEditor::new("", false);
-        editor.paste("12345");
-        assert_eq!(
-            editor.value(),
-            "https://flyzipline.atlassian.net/browse/FSW-12345"
-        );
-        editor.paste("not-a-ticket");
-        assert!(!editor.error.is_empty());
+    fn invalid_chain_does_not_change_saved_links() {
+        let mut work = WorkDetails {
+            prs: "#42 > #43".into(),
+            ..Default::default()
+        };
+        let mut editor = ReferenceEditor::new(&work);
+        editor.paste("#1 > FSW-42");
         assert!(!editor.key(KeyCode::Tab));
         editor.key(KeyCode::Esc);
-        assert!(editor.key(KeyCode::Esc));
+        editor.apply(&mut work);
+        assert_eq!(work.prs, "#42 > #43");
     }
 }

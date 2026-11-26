@@ -117,7 +117,7 @@ impl QuickAdd {
         if self.template == Template::Improvement {
             &[0, 2, 5]
         } else if self.template == Template::DocumentReview {
-            &[0, 9, 2]
+            &[0, LINKS_FIELD, 2]
         } else {
             &[0, 2]
         }
@@ -202,7 +202,7 @@ pub(super) fn paste(app: &mut App, value: &str) {
         if !quick.confirm_discard && !quick.is_saving() {
             if let Some(command) = quick.command.as_mut() {
                 command.push_str(value);
-            } else if quick.form.active == 9 {
+            } else if quick.form.active == LINKS_FIELD {
                 open_reference_editor(&mut quick.form);
                 quick.form.references.as_mut().unwrap().paste(value);
                 quick.error.clear();
@@ -301,7 +301,7 @@ pub(super) fn handle_key(app: &mut App, key: KeyCode) -> Result<()> {
         }
         return Ok(());
     }
-    if quick.form.active == 9
+    if quick.form.active == LINKS_FIELD
         && (key == KeyCode::Enter || matches!(key, KeyCode::Char(ch) if ch != ':'))
     {
         open_reference_editor(&mut quick.form);
@@ -310,7 +310,7 @@ pub(super) fn handle_key(app: &mut App, key: KeyCode) -> Result<()> {
         }
         return Ok(());
     }
-    if quick.form.active == 9
+    if quick.form.active == LINKS_FIELD
         && !matches!(
             key,
             KeyCode::Esc | KeyCode::Tab | KeyCode::BackTab | KeyCode::Char(':')
@@ -512,12 +512,15 @@ pub(super) fn draw(frame: &mut Frame, app: &App) {
     form.active = if quick.active == 0 { 0 } else { 2 };
     let (mut lines, cursor) =
         wrapped_form_text(&form, body.width as usize, quick.template.input_label());
-    let documents_row = lines.len();
+    let links_row = lines.len();
     if quick.template == Template::DocumentReview {
-        let count = hyperlinks::document_links(&quick.form.work.design_docs).len();
         lines.push(Line::from(format!(
-            "{} Design docs: {count} links · Enter to manage",
-            if quick.form.active == 9 { ">" } else { " " }
+            "{} Useful links: Enter to manage",
+            if quick.form.active == LINKS_FIELD {
+                ">"
+            } else {
+                " "
+            }
         )));
     }
     let priority_row = lines.len();
@@ -556,7 +559,7 @@ pub(super) fn draw(frame: &mut Frame, app: &App) {
     }
     let focus = match quick.active {
         0 => cursor.1,
-        _ if quick.form.active == 9 => documents_row,
+        _ if quick.form.active == LINKS_FIELD => links_row,
         _ if quick.form.active == 2 => priority_row,
         _ => {
             let choice = if body.height as usize > ImproveCategory::ALL.len() {
@@ -702,7 +705,7 @@ mod tests {
             "document links are required"
         );
         handle_key(&mut app, KeyCode::Tab).unwrap();
-        assert_eq!(app.quick_add.as_ref().unwrap().form.active, 9);
+        assert_eq!(app.quick_add.as_ref().unwrap().form.active, LINKS_FIELD);
         handle_key(&mut app, KeyCode::Enter).unwrap();
         paste(&mut app, "https://example.com/design\nhttps://example.com/review#notes\nhttps://example.com/design");
         handle_key(&mut app, KeyCode::Tab).unwrap();
@@ -959,7 +962,7 @@ mod tests {
                         .collect();
                     match app.quick_add.as_ref().unwrap().form.active {
                         2 => assert!(text.contains("Priority:")),
-                        9 => assert!(text.contains("Design docs:")),
+                        LINKS_FIELD => assert!(text.contains("Useful links:")),
                         5 => {
                             assert!(text.contains("●"));
                             assert!(text.contains("Uncategorized"));
