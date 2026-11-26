@@ -472,6 +472,8 @@ starts in normal mode:
 - `0`/`$`: start/end; `w`/`b`: next/previous word
 - `i`/`a`: insert before/after the cursor; `I`/`A`: insert at start/end
 - `x`: delete the character under the cursor
+- `dw`: delete from the cursor to the next word on the same line
+- `dd`: delete the current line, including any text that wraps on screen
 - In insert mode: type text, use arrows/Home/End, Backspace, or Delete
 
 Project, priority, and estimate are choice fields. Use left/right arrows or Space

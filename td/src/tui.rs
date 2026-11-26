@@ -159,6 +159,7 @@ struct Form {
     active: usize,
     cursor: usize,
     insert: bool,
+    delete_pending: bool,
     work: WorkDetails,
     improve_category: ImproveCategory,
     references: Option<references::ReferenceEditor>,
@@ -194,6 +195,7 @@ impl Form {
     fn focus(&mut self, active: usize) {
         self.active = active;
         self.insert = active == 7;
+        self.delete_pending = false;
         self.cursor = if self.insert { self.text().len() } else { 0 };
     }
 
@@ -221,7 +223,7 @@ impl Form {
         } else if self.insert {
             "Arrows move  Enter/Tab next  Esc normal  :wq in normal mode saves"
         } else {
-            "h/l 0/$ w/b move  i/a I/A insert  x delete  Enter/Tab next  :wq save  Esc cancel"
+            "h/l 0/$ w/b move  i/a I/A insert  x/dw/dd delete  Enter/Tab next  :wq save  Esc cancel"
         }
     }
 
@@ -351,7 +353,37 @@ impl Form {
             }
             return;
         }
+        if std::mem::take(&mut self.delete_pending) {
+            let line_end = text[self.cursor..]
+                .find('\n')
+                .map_or(text.len(), |offset| self.cursor + offset);
+            match key {
+                KeyCode::Char('d') => {
+                    let start = line_start(text, self.cursor);
+                    if line_end < text.len() {
+                        text.drain(start..line_end + 1);
+                        self.cursor = start;
+                    } else if start > 0 {
+                        text.truncate(start - 1);
+                        self.cursor = line_start(text, text.len());
+                    } else {
+                        text.clear();
+                        self.cursor = 0;
+                    }
+                }
+                KeyCode::Char('w') => {
+                    let end = next_word(&text[..line_end], self.cursor);
+                    text.drain(self.cursor..end);
+                }
+                _ => {}
+            }
+            if matches!(key, KeyCode::Char('d' | 'w')) {
+                self.cursor = self.cursor.min(previous(text, text.len()));
+                return;
+            }
+        }
         match key {
+            KeyCode::Char('d') => self.delete_pending = true,
             KeyCode::Char('i') => self.insert = true,
             KeyCode::Char('a') => {
                 self.cursor = next(text, self.cursor);
@@ -369,17 +401,7 @@ impl Form {
             KeyCode::Right | KeyCode::Char('l') => self.cursor = next(text, self.cursor),
             KeyCode::Home | KeyCode::Char('0') => self.cursor = 0,
             KeyCode::End | KeyCode::Char('$') => self.cursor = previous(text, text.len()),
-            KeyCode::Char('w') => {
-                let kind = text[self.cursor..].chars().next().map(word_kind);
-                while text[self.cursor..].chars().next().map(word_kind) == kind
-                    && self.cursor < text.len()
-                {
-                    self.cursor = next(text, self.cursor);
-                }
-                while text[self.cursor..].starts_with(char::is_whitespace) {
-                    self.cursor = next(text, self.cursor);
-                }
-            }
+            KeyCode::Char('w') => self.cursor = next_word(text, self.cursor),
             KeyCode::Char('b') => {
                 self.cursor = previous(text, self.cursor);
                 while self.cursor > 0 && text[self.cursor..].starts_with(char::is_whitespace) {
@@ -439,6 +461,21 @@ fn previous(text: &str, cursor: usize) -> usize {
 
 fn next(text: &str, cursor: usize) -> usize {
     cursor + text[cursor..].chars().next().map_or(0, char::len_utf8)
+}
+
+fn line_start(text: &str, cursor: usize) -> usize {
+    text[..cursor].rfind('\n').map_or(0, |index| index + 1)
+}
+
+fn next_word(text: &str, mut cursor: usize) -> usize {
+    let kind = text[cursor..].chars().next().map(word_kind);
+    while cursor < text.len() && text[cursor..].chars().next().map(word_kind) == kind {
+        cursor = next(text, cursor);
+    }
+    while text[cursor..].starts_with(char::is_whitespace) {
+        cursor = next(text, cursor);
+    }
+    cursor
 }
 
 fn word_kind(ch: char) -> u8 {
@@ -701,7 +738,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 if app.form.active == LINKS_FIELD {
                     open_reference_editor(&mut app.form);
                     app.form.references.as_mut().unwrap().paste(value);
-                } else if app.form.is_text() {
+                } else if app.form.is_text() && app.form.insert {
                     for ch in value.chars() {
                         app.form.edit_description(KeyCode::Char(ch));
                     }
@@ -853,6 +890,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     app.form.insert = false;
                     app.form.cursor = previous(app.form.text(), app.form.cursor);
                 }
+                KeyCode::Esc if std::mem::take(&mut app.form.delete_pending) => {}
                 KeyCode::Esc => {
                     app.mode =
                         if app.merge_ids.len() >= 2 || app.form.has_changes(&app.initial_form) {
@@ -873,6 +911,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     app.form.focus(active);
                 }
                 KeyCode::Char(':') if !app.form.is_text() || !app.form.insert => {
+                    app.form.delete_pending = false;
                     app.input = ":".to_string();
                     app.mode = Mode::Command(id);
                 }
@@ -2442,6 +2481,40 @@ mod tests {
             assert_eq!(tasks[&source.task.id].description, source.task.description);
             assert_eq!(tasks[&source.task.id].work, source.task.work);
             assert!(app.merge_ids.is_empty());
+        }
+    }
+
+    #[test]
+    fn form_description_deletes_words_and_lines_in_normal_mode() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        for ch in "dd dw".chars() {
+            handle_key(&mut app, KeyCode::Char(ch)).unwrap();
+        }
+        assert_eq!(app.form.text(), "dd dw");
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        app.form.values[0] = "keep\n仕事 remove\nlast".into();
+        app.form.cursor = "keep\n".len();
+
+        for key in [KeyCode::Char('d'), KeyCode::Esc, KeyCode::Char('w')] {
+            handle_key(&mut app, key).unwrap();
+        }
+        assert_eq!(app.form.text(), "keep\n仕事 remove\nlast");
+        assert_eq!(&app.form.text()[app.form.cursor..], "remove\nlast");
+
+        app.form.cursor = "keep\n".len();
+        for (keys, expected) in [
+            ("dw", "keep\nremove\nlast"),
+            ("dw", "keep\n\nlast"),
+            ("dd", "keep\nlast"),
+            ("dd", "keep"),
+            ("dd", ""),
+        ] {
+            for ch in keys.chars() {
+                handle_key(&mut app, KeyCode::Char(ch)).unwrap();
+            }
+            assert_eq!(app.form.text(), expected);
         }
     }
 
