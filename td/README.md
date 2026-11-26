@@ -179,7 +179,7 @@ readable.
 - `e`: open the edit form for the selected task
 - `c`: open or jump to the task's Pi chat
 - `C`: agent settings; Session ID + Enter links through Agent Board, `dd` unlinks
-- `y`: copy the selected task's full description to the clipboard (also in Work details).
+- `y`: copy the selected task's full description to the clipboard.
   Uses tmux clipboard forwarding inside tmux, or OSC 52 otherwise. Your terminal
   must allow clipboard writes; this also works over SSH.
 - `m`: mark/unmark the current pending task for merging; move and press `m` on
@@ -190,7 +190,7 @@ readable.
 - `x`: delete
 - `s`: open the state picker; arrows or `j`/`k` move, Enter applies, `1`–`4` selects directly, Esc cancels
 - `S` (Shift+s): cycle No state → Next → In progress → Waiting → No state.
-  State controls also work in Work details; completed tasks are unchanged.
+  State controls do not change completed tasks.
 - `/`: filter tasks in the current view
 - Esc from a project view: return to All projects; Esc from All projects: quit
 - `q`: quit from any task list
@@ -281,12 +281,11 @@ Old events need no rewrite: category changes append update events.
 Use `p`, then `w` to open Work. Other project views keep the original table.
 
 - `0` / `1` / `2` / `3` / `4` / `5`: All / Features / Reviews / Design and learning / Administrative / Uncategorized
-- Enter: open details; `j` / `k` scroll details; Esc returns to the dashboard
 - `a` / `e`: add / edit; ordinary add starts as Uncategorized / No state
 - `A`: quick-add from a template with a preset category
-- `r`: refresh the selected task's PR and document titles in the background (also in details)
+- `r`: refresh the selected task's PR and document titles in the background
 - Tab: Pending / Done within the selected category
-- `/`: search descriptions and Work details
+- `/`: search descriptions and link references
 - Esc from the dashboard: All projects; `q`: quit
 
 For Work reviews, choosing Waiting records the review-round time. Move the review
@@ -301,8 +300,6 @@ Link icons distinguish PRs, PR chains, tickets, documents, spreadsheets, slides,
 forms, videos, threads, wikis, repositories, folders, and other web links.
 Each PR in a chain has its own URL. The table wraps descriptions and link titles.
 If there is no cached title, it shows a short label such as `#123` or `Google Doc 1`.
-Review time and legacy inline notes are in Work task details (Enter).
-
 ### Cached link titles
 
 Work refreshes missing titles and titles at least 10 minutes old in the background.
@@ -353,7 +350,7 @@ paths. Document URLs keep their queries and fragments.
 
 #### Keyboard hyperlinks over SSH
 
-Each link in the table and details emits its own OSC 8 hyperlink. Wrapped lines
+Each link in the table emits its own OSC 8 hyperlink. Wrapped lines
 keep their target. Unrecognized legacy references appear as plain text.
 
 Bare Jira IDs resolve to `https://flyzipline.atlassian.net/browse/<ID>`; bare

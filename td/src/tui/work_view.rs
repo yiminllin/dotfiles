@@ -39,9 +39,9 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
     );
     let narrow = body.width < 70;
     let hints = if narrow {
-        "c chat  C settings  Enter details  a add  e edit\nAgent: ● active / ○ inactive / blank none\nj/k move  Tab view  p project  / search  q quit"
+        "c chat  C settings  a add  e edit\nAgent: ● active / ○ inactive / blank none\nj/k move  Tab view  p project  / search  q quit"
     } else {
-        "c chat  C settings  Enter details  a add  A template  e edit\nj/k move  s state  S cycle  y copy  m merge  r refresh links  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit"
+        "c chat  C settings  a add  A template  e edit\nj/k move  s state  S cycle  y copy  m merge  r refresh links  / search\n0-5 category  Tab Pending/Done  p project  Esc All projects  q quit"
     };
     frame.render_widget(
         Paragraph::new(hints).style(Style::default().add_modifier(Modifier::DIM)),
@@ -426,121 +426,6 @@ pub(super) fn draw_state_picker(frame: &mut Frame, app: &App) {
     );
 }
 
-pub(super) fn draw_work_detail(frame: &mut Frame, app: &mut App) {
-    let [body, help] =
-        Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(frame.area());
-    let block = Block::default()
-        .title(" Work details ")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(ACCENT));
-    let inner = block.inner(body);
-    let Some(view) = app.selected_task() else {
-        return;
-    };
-    let task = &view.task;
-    let work = &task.work;
-    let mut lines = Vec::new();
-    let mut linked_lines = Vec::new();
-    {
-        let mut push = |text: &str, url: Option<&str>| {
-            for line in wrap_description(text.trim_end_matches('\n'), inner.width as usize).lines {
-                if let Some(url) = url {
-                    linked_lines.push((lines.len(), line.width() as u16, url.to_string()));
-                }
-                lines.push(line);
-            }
-        };
-        push(
-            &format!(
-                "{}\n{} · {} · {}",
-                task.description,
-                work.category.label(),
-                task.state_label(),
-                task.status.as_str(),
-            ),
-            None,
-        );
-        let links = references::display_links(work);
-        if !links.is_empty() {
-            push("\nUSEFUL LINKS", None);
-            for (icon, kind, reference) in links {
-                if let Some(reference) = reference {
-                    let title = app.pr_titles.title(&reference.url);
-                    let label = match (kind, title) {
-                        (references::Kind::Document, Some(title)) => title.to_string(),
-                        (references::Kind::Jira, Some(title)) => {
-                            format!("{}  {title}", reference.label)
-                        }
-                        _ => reference.label,
-                    };
-                    push(&references::link_label(&icon, &label), Some(&reference.url));
-                } else {
-                    push(&icon, None);
-                }
-            }
-        }
-        if let Some(agent) = &task.agent {
-            push(
-                &format!(
-                    "\nPI SESSION (c chat / C settings)\n{}\n{}\n{}",
-                    if agent.name.is_empty() {
-                        &task.description
-                    } else {
-                        &agent.name
-                    },
-                    agent.session_id,
-                    agent.worktree.display()
-                ),
-                None,
-            );
-        }
-        if let Some(at) = &work.reviewed_at {
-            push(&format!("\nLAST REVIEW ROUND\n{at}"), None);
-        }
-        if !work.notes.is_empty() {
-            push(&format!("\nNOTES\n{}", work.notes), None);
-        }
-        if work.jira.is_empty()
-            && work.prs.is_empty()
-            && work.design_docs.is_empty()
-            && work.notes.is_empty()
-        {
-            push("\nPress e to add optional links or notes.", None);
-        }
-    }
-    let help_text = "c chat  C settings  j/k scroll  e edit  s state  r refresh  Esc back  q";
-    let max_scroll = lines
-        .len()
-        .saturating_sub(inner.height as usize)
-        .min(u16::MAX as usize) as u16;
-    app.detail_scroll = app.detail_scroll.min(max_scroll);
-    for (line, width, url) in linked_lines {
-        if let Some(relative) = line.checked_sub(app.detail_scroll as usize) {
-            if relative < inner.height as usize && width > 0 {
-                app.hyperlinks.push(Hyperlink {
-                    area: Rect::new(
-                        inner.x,
-                        inner.y + relative as u16,
-                        width.min(inner.width),
-                        1,
-                    ),
-                    url,
-                });
-            }
-        }
-    }
-    frame.render_widget(
-        Paragraph::new(Text::from(lines))
-            .scroll((app.detail_scroll, 0))
-            .block(block),
-        body,
-    );
-    frame.render_widget(
-        Paragraph::new(help_text).style(Style::default().add_modifier(Modifier::DIM)),
-        help,
-    );
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -568,8 +453,7 @@ mod tests {
             name: String::new(),
         });
         app.open_linked_task("linked-session").unwrap();
-        assert!(matches!(app.mode, Mode::Detail));
-        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
 
         let mut terminal = Terminal::new(TestBackend::new(100, 20)).unwrap();
         terminal
@@ -636,15 +520,13 @@ mod tests {
         );
         assert_eq!(loaded.selected_task().unwrap().task.work.prs,
             "https://github.com/example/repo/pull/1 > https://github.com/ZiplineTeam/FlightSystems/pull/2; https://github.com/ZiplineTeam/FlightSystems/pull/3");
-        handle_key(&mut loaded, KeyCode::Enter).unwrap();
         handle_key(&mut loaded, KeyCode::Char('s')).unwrap();
         handle_key(&mut loaded, KeyCode::Char('4')).unwrap();
-        assert!(matches!(loaded.mode, Mode::Detail));
+        assert!(matches!(loaded.mode, Mode::Normal));
         let task = &loaded.selected_task().unwrap().task;
         assert_eq!(task.status, TaskStatus::Pending);
         assert_eq!(task.state, TaskState::Waiting);
-        assert!(task.work.reviewed_at.is_some());
-        handle_key(&mut loaded, KeyCode::Esc).unwrap();
+        assert!(task.work.reviewed_at.is_none());
         assert_eq!(loaded.project, Some("work"));
         handle_key(&mut loaded, KeyCode::Char('s')).unwrap();
         handle_key(&mut loaded, KeyCode::Char('2')).unwrap();
@@ -803,7 +685,7 @@ mod tests {
         app.work_category = Some(WorkCategory::Review);
         app.selected = 0;
         let id = app.selected_task().unwrap().task.id;
-        let mut expected = app.selected_task().unwrap().task.work.clone();
+        let expected = app.selected_task().unwrap().task.work.clone();
         for state in [
             TaskState::Next,
             TaskState::InProgress,
@@ -820,17 +702,8 @@ mod tests {
             assert_eq!(task.id, id);
             assert_eq!(task.status, TaskStatus::Pending);
             assert_eq!(task.state, state);
-            if state == TaskState::Waiting {
-                assert!(task.work.reviewed_at.is_some());
-                expected.reviewed_at = task.work.reviewed_at.clone();
-            }
             assert_eq!(task.work, expected);
         }
-        handle_key(&mut app, KeyCode::Enter).unwrap();
-        handle_key(&mut app, KeyCode::Char('S')).unwrap();
-        assert!(matches!(app.mode, Mode::Detail));
-        assert_eq!(app.selected_task().unwrap().task.state, TaskState::Next);
-        handle_key(&mut app, KeyCode::Esc).unwrap();
         handle_key(&mut app, KeyCode::Char('d')).unwrap();
         let before = std::fs::read(&app.path).unwrap();
         handle_key(&mut app, KeyCode::Char('S')).unwrap();
@@ -883,7 +756,7 @@ mod tests {
         let task = &app.selected_task().unwrap().task;
         assert_eq!(task.state, TaskState::Waiting);
         assert_eq!(task.status, TaskStatus::Pending);
-        assert!(task.work.reviewed_at.is_some());
+        assert!(task.work.reviewed_at.is_none());
         let mut terminal = Terminal::new(TestBackend::new(100, 16)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         assert!(terminal
@@ -1150,44 +1023,39 @@ mod tests {
         })).unwrap()).unwrap();
         app.pr_titles = pr_titles::Cache::load(path);
         let before = std::fs::read_to_string(&app.path).unwrap();
-        for mode in [Mode::Normal, Mode::Detail] {
-            app.mode = mode;
-            let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
-            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
-            let text: String = terminal
-                .backend()
-                .buffer()
-                .content
-                .iter()
-                .map(|cell| cell.symbol())
-                .collect();
-            assert!(text.contains("Design architecture"));
-            if matches!(mode, Mode::Normal) {
-                for link in &app.hyperlinks {
-                    let cell = &terminal.backend().buffer()[(link.area.x, link.area.y)];
-                    assert_eq!(cell.fg, Color::Rgb(114, 125, 134));
-                    assert!(!cell.modifier.contains(Modifier::BOLD));
-                    assert_eq!(
-                        terminal.backend().buffer()[(link.area.x - 1, link.area.y)].symbol(),
-                        "│"
-                    );
-                }
-            }
-            assert!(text.contains("Doc 2"));
-            assert!(!text.contains("https://example.com"));
-            assert!(app
-                .hyperlinks
-                .iter()
-                .any(|link| link.url == "https://example.com/design"));
-            assert!(app
-                .hyperlinks
-                .iter()
-                .any(|link| link.url == "https://example.com/followup#notes"));
-            assert!(app
-                .hyperlinks
-                .iter()
-                .all(|link| link.area.right() <= 120 && link.area.bottom() <= 30));
+        let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let text: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(text.contains("Design architecture"));
+        for link in &app.hyperlinks {
+            let cell = &terminal.backend().buffer()[(link.area.x, link.area.y)];
+            assert_eq!(cell.fg, Color::Rgb(114, 125, 134));
+            assert!(!cell.modifier.contains(Modifier::BOLD));
+            assert_eq!(
+                terminal.backend().buffer()[(link.area.x - 1, link.area.y)].symbol(),
+                "│"
+            );
         }
+        assert!(text.contains("Doc 2"));
+        assert!(!text.contains("https://example.com"));
+        assert!(app
+            .hyperlinks
+            .iter()
+            .any(|link| link.url == "https://example.com/design"));
+        assert!(app
+            .hyperlinks
+            .iter()
+            .any(|link| link.url == "https://example.com/followup#notes"));
+        assert!(app
+            .hyperlinks
+            .iter()
+            .all(|link| link.area.right() <= 120 && link.area.bottom() <= 30));
         assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
     }
 
@@ -1537,7 +1405,7 @@ mod tests {
     }
 
     #[test]
-    fn dashboard_filters_categories_and_renders_details_in_small_terminals() {
+    fn dashboard_filters_categories_in_small_terminals() {
         let dir = tempfile::tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         for (category, title) in WorkCategory::ALL.into_iter().zip([
@@ -1555,7 +1423,6 @@ mod tests {
                 app.form.state = TaskState::Waiting;
             }
             app.form.work.prs = "#1 > #2; #3".into();
-            app.form.work.notes = "Investigate".into();
             save_form(&mut app, None).unwrap();
         }
         app.select_project(Some("work"));
@@ -1640,22 +1507,6 @@ mod tests {
         app.mode = Mode::Normal;
         app.filter = "#2".into();
         assert_eq!(app.visible_tasks().len(), 1);
-        handle_key(&mut app, KeyCode::Enter).unwrap();
-        small.draw(|frame| draw(frame, &mut app)).unwrap();
-        for _ in 0..50 {
-            handle_key(&mut app, KeyCode::Char('j')).unwrap();
-        }
-        small.draw(|frame| draw(frame, &mut app)).unwrap();
-        let screen = small
-            .backend()
-            .buffer()
-            .content
-            .iter()
-            .map(|cell| cell.symbol())
-            .collect::<String>();
-        assert!(screen.contains("Investigate"));
-        handle_key(&mut app, KeyCode::Esc).unwrap();
-        small.draw(|frame| draw(frame, &mut app)).unwrap();
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert_eq!(app.project, None);
     }

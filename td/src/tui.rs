@@ -38,7 +38,7 @@ mod templates;
 mod title_lookup;
 mod work_view;
 use hyperlinks::{jira_links, pr_links, Hyperlink, Reference};
-use work_view::{draw_work_dashboard, draw_work_detail};
+use work_view::draw_work_dashboard;
 
 pub fn run(path: PathBuf, pi_session: Option<&str>) -> Result<()> {
     let mut app = App::new(path)?;
@@ -87,7 +87,6 @@ struct App {
     project: Option<&'static str>,
     work_category: Option<WorkCategory>,
     improve_category: Option<ImproveCategory>,
-    detail_scroll: u16,
     state_selected: usize,
     input: String,
     form: Form,
@@ -507,8 +506,7 @@ enum Mode {
     Merge,
     Search,
     Project,
-    Detail,
-    State(bool),
+    State,
 }
 
 impl App {
@@ -529,7 +527,6 @@ impl App {
             project: None,
             work_category: None,
             improve_category: None,
-            detail_scroll: 0,
             state_selected: 0,
             input: String::new(),
             form: Form::default(),
@@ -562,9 +559,6 @@ impl App {
             .position(|view| view.task.id == id)
             .expect("linked task is visible");
         self.center_selected_task = true;
-        if is_work {
-            self.mode = Mode::Detail;
-        }
         Ok(())
     }
 
@@ -636,7 +630,7 @@ impl App {
 
     fn update_pr_titles(&mut self) -> bool {
         let urls: Vec<_> = if self.project == Some("work")
-            && matches!(self.mode, Mode::Normal | Mode::Detail | Mode::State(_))
+            && matches!(self.mode, Mode::Normal | Mode::State)
         {
             self.visible_tasks()
                 .iter()
@@ -862,13 +856,13 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         agent::handle_key(app, key)?;
         return Ok(false);
     }
-    if matches!(app.mode, Mode::Normal | Mode::Detail) && matches!(key, KeyCode::Char('c' | 'C')) {
+    if matches!(app.mode, Mode::Normal) && matches!(key, KeyCode::Char('c' | 'C')) {
         let opened = agent::begin(app, key == KeyCode::Char('C'))?;
         return Ok(opened && std::env::var("TD_POPUP").is_ok_and(|value| value == "1"));
     }
     if key == KeyCode::Char('r')
         && app.project == Some("work")
-        && matches!(app.mode, Mode::Normal | Mode::Detail)
+        && matches!(app.mode, Mode::Normal)
     {
         let urls: Vec<_> = app
             .selected_task()
@@ -879,7 +873,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         app.pr_titles.refresh(urls);
         return Ok(false);
     }
-    if key == KeyCode::Char('y') && matches!(app.mode, Mode::Normal | Mode::Detail) {
+    if key == KeyCode::Char('y') && matches!(app.mode, Mode::Normal) {
         app.clipboard = app
             .selected_task()
             .map(|view| view.task.description.clone());
@@ -1004,26 +998,9 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             }
             return Ok(false);
         }
-        Mode::Detail => {
+        Mode::State => {
             match key {
-                KeyCode::Esc | KeyCode::Enter => app.mode = Mode::Normal,
-                KeyCode::Char('q') => return Ok(true),
-                KeyCode::Down | KeyCode::Char('j') => {
-                    app.detail_scroll = app.detail_scroll.saturating_add(1)
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    app.detail_scroll = app.detail_scroll.saturating_sub(1)
-                }
-                KeyCode::Char('e') => open_edit_form(app),
-                KeyCode::Char('s') => open_state_picker(app, true),
-                KeyCode::Char('S') => cycle_state(app)?,
-                _ => {}
-            }
-            return Ok(false);
-        }
-        Mode::State(detail) => {
-            match key {
-                KeyCode::Esc => app.mode = if detail { Mode::Detail } else { Mode::Normal },
+                KeyCode::Esc => app.mode = Mode::Normal,
                 KeyCode::Down | KeyCode::Char('j') | KeyCode::Up | KeyCode::Char('k') => {
                     let count = TaskState::ALL.len();
                     let step = if matches!(key, KeyCode::Down | KeyCode::Char('j')) {
@@ -1040,7 +1017,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     };
                     if let Some(state) = TaskState::ALL.get(index) {
                         set_selected_state(app, *state)?;
-                        app.mode = if detail { Mode::Detail } else { Mode::Normal };
+                        app.mode = Mode::Normal;
                     }
                 }
                 _ => {}
@@ -1105,11 +1082,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             app.selected_line = 0;
             app.table_state = TableState::default();
         }
-        KeyCode::Enter if app.project == Some("work") && app.selected_task().is_some() => {
-            app.detail_scroll = 0;
-            app.mode = Mode::Detail;
-        }
-        KeyCode::Char('s') if app.selected_task().is_some() => open_state_picker(app, false),
+        KeyCode::Char('s') if app.selected_task().is_some() => open_state_picker(app),
         KeyCode::Char('S') => cycle_state(app)?,
         KeyCode::Char('g') if repeated => app.selected = 0,
         KeyCode::Char('z') if repeated => app.center_selected_task = true,
@@ -1263,17 +1236,6 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
     work.jira = hyperlinks::normalize_jira(&work.jira);
     work.prs = hyperlinks::normalize_prs(&work.prs);
     let save_details = is_work || work != app.initial_form.work;
-    if is_work
-        && work.category == WorkCategory::Review
-        && app.form.state == TaskState::Waiting
-        && (work.reviewed_at.is_none()
-            || app
-                .tasks
-                .iter()
-                .any(|view| Some(view.task.id) == id && view.task.state != TaskState::Waiting))
-    {
-        work.reviewed_at = Some(crate::data::now_string()?);
-    }
     let event = if id.is_some() {
         Event::TaskUpdated {
             description: Some(description),
@@ -1390,16 +1352,6 @@ fn set_selected_state(app: &mut App, state: TaskState) -> Result<()> {
         .filter(|view| view.task.status == TaskStatus::Pending)
     {
         let id = view.task.id;
-        let work = if view.task.project.as_deref() == Some("work")
-            && view.task.work.category == WorkCategory::Review
-            && state == TaskState::Waiting
-        {
-            let mut work = view.task.work.clone();
-            work.reviewed_at = Some(crate::data::now_string()?);
-            Some(work)
-        } else {
-            None
-        };
         let event = Event::TaskUpdated {
             description: None,
             project: None,
@@ -1407,7 +1359,7 @@ fn set_selected_state(app: &mut App, state: TaskState) -> Result<()> {
             estimate: None,
             state: Some(state),
             blocked: None,
-            work,
+            work: None,
             improve_category: None,
         };
         append_event(&app.path, &new_envelope(id, "tui", event)?)?;
@@ -1434,7 +1386,7 @@ fn cycle_state(app: &mut App) -> Result<()> {
     Ok(())
 }
 
-fn open_state_picker(app: &mut App, detail: bool) {
+fn open_state_picker(app: &mut App) {
     if let Some(view) = app
         .selected_task()
         .filter(|view| view.task.status == TaskStatus::Pending)
@@ -1443,7 +1395,7 @@ fn open_state_picker(app: &mut App, detail: bool) {
             .iter()
             .position(|state| *state == view.task.state)
             .unwrap_or(0);
-        app.mode = Mode::State(detail);
+        app.mode = Mode::State;
     }
 }
 
@@ -1464,16 +1416,12 @@ fn draw(frame: &mut Frame, app: &mut App) {
         templates::draw(frame, app);
         return;
     }
-    if let Mode::State(detail) = app.mode {
-        app.mode = if detail { Mode::Detail } else { Mode::Normal };
+    if matches!(app.mode, Mode::State) {
+        app.mode = Mode::Normal;
         draw(frame, app);
-        app.mode = Mode::State(detail);
+        app.mode = Mode::State;
         app.hyperlinks.clear();
         work_view::draw_state_picker(frame, app);
-        return;
-    }
-    if matches!(app.mode, Mode::Detail) {
-        draw_work_detail(frame, app);
         return;
     }
     if app.project == Some("work") && matches!(app.mode, Mode::Normal) {
@@ -1527,7 +1475,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
             },
             "Enter runs :wq save or :q! discard  Esc returns to the form",
         ),
-        Mode::Detail | Mode::State(_) | Mode::Templates | Mode::QuickAdd | Mode::Agent | Mode::ConfirmDone(_) => unreachable!(),
+        Mode::State | Mode::Templates | Mode::QuickAdd | Mode::Agent | Mode::ConfirmDone(_) => unreachable!(),
         Mode::Search => ("FILTER", "Enter apply  Esc cancel"),
         Mode::Project => (
             "PROJECT VIEWS: [i]mprove [w]ork [c]ode [n]ote [r]ead [o]pensource [-] no project [a]ll",
@@ -1583,8 +1531,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
         chunks[2],
     );
     match app.mode {
-        Mode::Detail
-        | Mode::State(_)
+        Mode::State
         | Mode::Templates
         | Mode::QuickAdd
         | Mode::Agent
@@ -2247,12 +2194,8 @@ mod tests {
         let before = std::fs::read(&app.path).unwrap();
         app.selected = 1;
         let expected = app.selected_task().unwrap().task.description.clone();
-        for mode in [Mode::Normal, Mode::Detail] {
-            app.mode = mode;
-            assert!(!handle_key(&mut app, KeyCode::Char('y')).unwrap());
-            assert_eq!(app.clipboard.take().as_deref(), Some(expected.as_str()));
-        }
-        app.mode = Mode::Normal;
+        assert!(!handle_key(&mut app, KeyCode::Char('y')).unwrap());
+        assert_eq!(app.clipboard.take().as_deref(), Some(expected.as_str()));
         app.select_project(Some("work"));
         app.selected = 1;
         handle_key(&mut app, KeyCode::Char('y')).unwrap();
