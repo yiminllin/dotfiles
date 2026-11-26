@@ -28,7 +28,9 @@
     },
     "npm:pi-hermes-memory",
     "npm:@ff-labs/pi-fff",
-    "npm:@juicesharp/rpiv-ask-user-question"
+    "npm:@juicesharp/rpiv-ask-user-question",
+    "npm:pi-vim",
+    "./extensions/vim-transcript/binding.ts"
   ],
   "lastChangelogVersion": "1.6.0",
   "hideThinkingBlock": true,
