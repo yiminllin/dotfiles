@@ -223,6 +223,7 @@ pub(super) fn draw_work_dashboard(frame: &mut Frame, app: &mut App) {
         inner.height.saturating_sub(2),
     );
     let border = TaskBorder::new(&app.row_heights, app.selected);
+    app.center_task_table(&border, rows_area.height);
     frame.render_stateful_widget(
         Table::new(border.rows(rows), widths)
             .header(
@@ -526,6 +527,31 @@ mod tests {
         for ch in text.chars() {
             handle_key(app, KeyCode::Char(ch)).unwrap();
         }
+    }
+
+    #[test]
+    fn zz_centers_selected_task_without_moving_selection() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        for index in 0..24 {
+            app.form.values[0] = format!("Task {index}");
+            save_form(&mut app, None).unwrap();
+        }
+        app.selected = 10;
+        let mut terminal = Terminal::new(TestBackend::new(100, 25)).unwrap();
+        type_text(&mut app, "z");
+        terminal
+            .draw(|frame| draw_work_dashboard(frame, &mut app))
+            .unwrap();
+        assert_eq!(app.table_state.offset(), 0);
+
+        type_text(&mut app, "z");
+        terminal
+            .draw(|frame| draw_work_dashboard(frame, &mut app))
+            .unwrap();
+        assert_eq!(app.selected, 10);
+        assert_eq!(terminal.backend().buffer()[(0, 11)].symbol(), "┏");
+        assert_eq!(terminal.backend().buffer()[(0, 13)].symbol(), "┗");
     }
 
     #[test]

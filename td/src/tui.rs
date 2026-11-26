@@ -79,7 +79,8 @@ struct App {
     selected_line: usize,
     row_heights: Vec<usize>,
     half_page: usize,
-    g_pressed: bool,
+    list_prefix: Option<char>,
+    center_selected_task: bool,
     table_state: TableState,
     status: TaskStatus,
     filter: String,
@@ -518,7 +519,8 @@ impl App {
             selected_line: 0,
             row_heights: Vec::new(),
             half_page: 1,
-            g_pressed: false,
+            list_prefix: None,
+            center_selected_task: false,
             table_state: TableState::default(),
             status: TaskStatus::Pending,
             filter: String::new(),
@@ -678,6 +680,24 @@ impl App {
         )
     }
 
+    fn center_task_table(&mut self, border: &TaskBorder, viewport: u16) {
+        if viewport == 0 || !std::mem::take(&mut self.center_selected_task) {
+            return;
+        }
+        let Some(selected_row) = self.table_state.selected() else {
+            return;
+        };
+        let viewport = usize::from(viewport);
+        let bordered_height = border.end - border.start + 2;
+        *self.table_state.offset_mut() = if bordered_height <= viewport {
+            border
+                .start
+                .saturating_sub((viewport - bordered_height) / 2)
+        } else {
+            selected_row.saturating_sub(viewport / 2)
+        };
+    }
+
     fn move_half_page(&mut self, down: bool) {
         let current =
             self.row_heights.iter().take(self.selected).sum::<usize>() + self.selected_line;
@@ -806,7 +826,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
 
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Result<bool> {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
-        app.g_pressed = false;
+        app.list_prefix = None;
         if matches!(app.mode, Mode::Agent) {
             app.agent_form.unlink_pending = false;
             match key.code {
@@ -828,6 +848,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Result<bool> {
 }
 
 fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
+    let list_prefix = app.list_prefix.take();
     if let Mode::ConfirmDone(id) = app.mode {
         match key {
             KeyCode::Char('y' | 'Y') => {
@@ -863,7 +884,6 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         && app.project == Some("work")
         && matches!(app.mode, Mode::Normal | Mode::Detail)
     {
-        app.g_pressed = false;
         let urls: Vec<_> = app
             .selected_task()
             .into_iter()
@@ -874,7 +894,6 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         return Ok(false);
     }
     if key == KeyCode::Char('y') && matches!(app.mode, Mode::Normal | Mode::Detail) {
-        app.g_pressed = false;
         app.clipboard = app
             .selected_task()
             .map(|view| view.task.description.clone());
@@ -1058,15 +1077,14 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                 }
                 return Ok(false);
             }
-            KeyCode::Down | KeyCode::Up | KeyCode::Char('j' | 'k' | 'g' | 'G') => {}
+            KeyCode::Down | KeyCode::Up | KeyCode::Char('j' | 'k' | 'g' | 'G' | 'z') => {}
             _ => return Ok(false),
         },
         Mode::Agent | Mode::ConfirmDone(_) => unreachable!(),
         Mode::Normal => {}
     }
-    let double_g = app.g_pressed && key == KeyCode::Char('g');
-    app.g_pressed = key == KeyCode::Char('g') && !double_g;
-    if double_g
+    let repeated = list_prefix.is_some_and(|prefix| key == KeyCode::Char(prefix));
+    if (repeated && key == KeyCode::Char('g'))
         || matches!(
             key,
             KeyCode::Down
@@ -1107,7 +1125,9 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         }
         KeyCode::Char('s') if app.selected_task().is_some() => open_state_picker(app, false),
         KeyCode::Char('S') => cycle_state(app)?,
-        KeyCode::Char('g') if double_g => app.selected = 0,
+        KeyCode::Char('g') if repeated => app.selected = 0,
+        KeyCode::Char('z') if repeated => app.center_selected_task = true,
+        KeyCode::Char(prefix @ ('g' | 'z')) => app.list_prefix = Some(prefix),
         KeyCode::Char('G') => {
             app.selected = app.visible_tasks().len().saturating_sub(1);
             app.selected_line = app
@@ -1768,6 +1788,7 @@ fn draw(frame: &mut Frame, app: &mut App) {
                 chunks[1].width,
                 chunks[1].height.saturating_sub(4),
             );
+            app.center_task_table(&border, rows_area.height);
             let table = Table::new(border.rows(rows), widths)
                 .header(
                     Row::new(

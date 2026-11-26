@@ -139,7 +139,7 @@ Associations use append-only events. Rebuild older `td` binaries before they rea
 logs containing these events. Completion can close a confirmed live agent, but it
 never deletes session history.
 
-Press `tmux prefix + Ctrl-T` in a Pi pane to open its linked td entry.
+Press `tmux prefix + t` in a Pi pane to open its linked td entry.
 Use `prefix + T` to open the full task list instead.
 
 ## Urgency and ordering
@@ -166,6 +166,7 @@ Update `src/urgency.rs` to change the weights.
 - Esc in the project picker: cancel without changing the current view
 - `j`/`k` or arrows: move
 - `gg` / `G`: first / last task in the current view
+- `zz`: center the selected task without changing the selection
 - Ctrl-U / Ctrl-D: move up / down half a page (based on the visible table height)
 - `a`: open the add form
 - `A` (Shift+a): add from a preset template
