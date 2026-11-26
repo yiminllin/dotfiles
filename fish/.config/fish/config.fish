@@ -153,7 +153,7 @@ abbr -a gsra git-spice rebase abort
 abbr -a gsrs git-spice repo sync
 
 # Note
-abbr -a note --set-cursor 'echo "- %" >> ~/notes/main/quick_notes.md'
+abbr -a note --set-cursor 'echo "- %" >> ~/notes/docs/reference/quick_notes.md'
 
 # Git Worktree Helper
 function git_worktree_add --description "Interactive Adding Git Worktree"
@@ -302,6 +302,18 @@ function pi --description "Run Pi and name its tmux Agent Board entry"
     set -l status_token
     if set -q TMUX_PANE; and test -n "$TMUX_PANE"; and command -q tmux; and command -q python3; and test -f "$status_reader"
         set status_token (command python3 "$status_reader" start "$TMUX_PANE" 2>/dev/null)
+    end
+
+    set -l scratch_root (command git rev-parse --show-toplevel 2>/dev/null)
+    if not set -q scratch_root[1]
+        set scratch_root "$PWD"
+    end
+    set -lx PI_SCRATCH_DIR "$HOME/.pi/scratch/"(path resolve -- "$scratch_root" | string replace -r '^/' '')
+    if not set -q QUIET_TOOLS_ARTIFACT_DIR
+        set -fx QUIET_TOOLS_ARTIFACT_DIR "$PI_SCRATCH_DIR/quiet-tools/outputs"
+    end
+    if not set -q QUIET_TOOLS_INDEX
+        set -fx QUIET_TOOLS_INDEX "$PI_SCRATCH_DIR/quiet-tools/index.jsonl"
     end
 
     set -lx PI_FFF_MODE tools-only

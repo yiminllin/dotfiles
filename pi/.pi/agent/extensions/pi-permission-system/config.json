@@ -11,7 +11,12 @@
       "/home/vscode/**": "allow",
       "/workspaces/FlightSystems": "allow",
       "/workspaces/FlightSystems/**": "allow",
-      "/Users/yiminlin/notes/**": "allow",
+      "~/notes": "allow",
+      "~/notes/**": "allow",
+      "~/.pi/scratch": "allow",
+      "~/.pi/scratch/**": "allow",
+      "~/.pi/artifacts": "allow",
+      "~/.pi/artifacts/**": "allow",
       "/Users/yiminlin/dotfiles/**": "allow",
       "/Users/yiminlin/.tmux/**": "allow",
       "/Users/yiminlin/.pi/agent/sessions/--Users-yiminlin-dotfiles--/subagent-artifacts/**": "allow"

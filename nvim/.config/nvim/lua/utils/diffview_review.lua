@@ -2087,6 +2087,7 @@ function M.start_agent_reply_polling(ctx)
 	if M.agent_reply_poll_timer then
 		return
 	end
+	require("utils.diffview_review_history").save(ctx.state_path, load_state(ctx).comments, notify)
 	M.agent_reply_poll_timer = vim.fn.timer_start(1000, M.process_agent_reply_artifacts, { ["repeat"] = -1 })
 end
 

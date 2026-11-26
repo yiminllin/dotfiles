@@ -246,8 +246,7 @@ missing tools, or a five-second timeout uses the reference as the task descripti
 Existing authentication is used; quick-add does not log in. Esc during lookup
 returns to the draft without saving.
 
-Design doc review keeps your own Description and requires at least one document
-URL in Useful links. Saving does not wait for title lookup.
+Design doc review keeps your Description and requires a document link in **Useful links**. Saving does not wait for title lookup.
 
 Saving opens the template's project/category and clears the text filter so the
 new task is visible. Use ordinary `e` afterward to change any other field.
@@ -335,6 +334,10 @@ Vim keys as Description.
 
 - Paste URLs, Jira keys such as `FSW-12345`, or PR numbers such as `#123`.
   A bare number means a FlightSystems PR. Spaces, commas, and newlines separate entries.
+- To link a file in `~/notes`, paste a relative path such as `projects/repo/docs/plan.md`.
+  Use `notes:path` for other file types, or start the path with `~/notes/`. Use paths without spaces.
+  td stores relative paths and shows icons for docs, reviews, tables, and images.
+  Opening local links depends on the terminal.
 - To add a PR chain, enter `#123 > #124`, with the base PR first.
 - Use arrows or `j`/`k` to select an entry. Enter edits it; `x` deletes it.
   `J`/`K` reorders entries of the same type. Esc cancels the current input.

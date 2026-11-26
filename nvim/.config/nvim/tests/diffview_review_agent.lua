@@ -247,5 +247,33 @@ pi.send_to_named_agent = original_send
 review.refresh_visible = original_refresh
 review.clear_active_guide_context()
 
+local directory = vim.fs.joinpath(temp_dir, "pr-reviews", "123")
+local local_state = vim.fs.joinpath(directory, "diffview-review.json")
+local history_path = vim.fs.joinpath(directory, "review-history.json")
+local review_state = require("utils.diffview_review_state")
+local function json_file(relative_path, value)
+  local path = vim.fs.joinpath(directory, relative_path)
+  vim.fn.mkdir(vim.fs.dirname(path), "p")
+  assert(vim.fn.writefile({ vim.json.encode(value) }, path) == 0)
+end
+local function save(comments)
+  assert(review_state.save({ root = temp_dir, state_path = local_state }, {
+    viewed = { ["one.lua"] = true },
+    comments = comments,
+  }, error))
+  return vim.json.decode(table.concat(vim.fn.readfile(history_path), "\n"))
+end
+json_file("review-history.json", { version = 1, comments = { { body = "Earlier archived comment" } } })
+json_file("agent-requests/one.json", { request_id = "one", prompt = "Context\nComment: Why?\nState (read-only): path" })
+json_file("agent-replies/one.json", { request_id = "one", body = "Because.", status = "answered", activity = { "tool" } })
+local comments = { { body = "New comment", line = 7, agent_unread = true } }
+local history = save(comments)
+assert_equal(history.comments, { { body = "Earlier archived comment" }, { body = "New comment", line = 7 } })
+assert_equal(history.questions, { { request_id = "one", body = "Why?" } })
+assert_equal(history.answers, { { request_id = "one", body = "Because." } })
+assert_equal(history.viewed, nil)
+assert_equal(save({}), history, "closing or deleting a thread does not remove archived interactions")
+assert_equal(save(comments), history, "unchanged interactions are not duplicated")
+
 vim.fn.delete(temp_dir, "rf")
 print("diffview_review_agent: all tests passed")

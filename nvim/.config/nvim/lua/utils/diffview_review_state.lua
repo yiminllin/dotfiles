@@ -80,6 +80,7 @@ function M.save(ctx, state, notify)
     return false
   end
 
+  require("utils.diffview_review_history").save(ctx.state_path, document.comments, notify)
   return true
 end
 

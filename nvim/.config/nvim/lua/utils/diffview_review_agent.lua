@@ -72,6 +72,9 @@ function M.enqueue(state_path, request, directory_name)
     assert(vim.fn.writefile({ vim.json.encode(request) }, path .. ".tmp") == 0, "Could not write review request")
     assert(vim.fn.rename(path .. ".tmp", path) == 0, "Could not publish review request")
   end)
+  if ok and directory_name == "guide-requests" then
+    require("utils.diffview_review_history").save(state_path)
+  end
   return ok, error_message
 end
 
@@ -84,7 +87,11 @@ function M.control(state_path, request_id, action)
   vim.fn.mkdir(directory, "p")
   local path = vim.fs.joinpath(directory, request_id .. ".json")
   vim.fn.writefile({ vim.json.encode(action) }, path .. ".tmp")
-  return vim.fn.rename(path .. ".tmp", path) == 0
+  local saved = vim.fn.rename(path .. ".tmp", path) == 0
+  if saved and action.value ~= nil then
+    require("utils.diffview_review_history").save(state_path)
+  end
+  return saved
 end
 
 function M.build_prompt(opts)

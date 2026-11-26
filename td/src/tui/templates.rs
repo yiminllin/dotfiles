@@ -146,7 +146,7 @@ impl QuickAdd {
                 single_reference(&input, false).ok_or("Enter one Jira ticket link or key.")?
             }
             Template::DocumentReview => {
-                if hyperlinks::document_links(&form.work.design_docs).is_empty() {
+                if !references::has_document_link(&form.work) {
                     return Err("Add at least one design document link.");
                 }
                 form.values[0] = input;

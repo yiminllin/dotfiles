@@ -158,6 +158,10 @@ The service stores requests, replies, controls, and child histories beside
 `guide.json`. This includes inherited main-session context. Treat these files as
 private review data. They persist until you remove the review directory.
 
+Diffview automatically saves comments, questions, replies, and source anchors in
+`review-history.json`. Stage it with the guide. The archive does not restore live
+UI state or worker sessions.
+
 ## LSP boundary
 
 `gdO` preserves the pinned diff and opens a separate source tab only when HEAD

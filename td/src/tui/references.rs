@@ -19,7 +19,9 @@ impl Artifact {
             Kind::Jira => "",
             Kind::Pr if self.urls.len() > 1 => "",
             Kind::Pr => "",
-            Kind::Document => hyperlinks::web_link_kind(&self.urls[0]).1,
+            Kind::Document => self.urls[0]
+                .strip_prefix("notes:")
+                .map_or_else(|| hyperlinks::web_link_kind(&self.urls[0]).1, note_icon),
         }
     }
 
@@ -28,13 +30,91 @@ impl Artifact {
         match self.kind {
             Kind::Jira => jira_links(&value),
             Kind::Pr => pr_links(&value),
-            Kind::Document => hyperlinks::document_links(&value),
+            Kind::Document => match value.strip_prefix("notes:") {
+                Some(path) => note_reference(path).into_iter().collect(),
+                None => hyperlinks::document_links(&value),
+            },
         }
     }
 }
 
 pub(super) fn link_label(icon: &str, label: &str) -> String {
     format!("{icon} {label}")
+}
+
+fn note_path(token: &str) -> Option<&str> {
+    let path = token
+        .strip_prefix("notes:")
+        .or_else(|| token.strip_prefix("~/notes/"))
+        .or_else(|| note_extension(token).map(|_| token))?;
+    (!path.contains([':', '\\'])
+        && !path.chars().any(char::is_control)
+        && path.split('/').all(|part| !matches!(part, "" | "." | "..")))
+    .then_some(path)
+}
+
+fn note_extension(path: &str) -> Option<&str> {
+    let extension = path.rsplit('/').next()?.rsplit_once('.')?.1;
+    matches!(
+        extension,
+        "md" | "txt" | "pdf" | "html" | "csv" | "tsv" | "svg" | "png" | "jpg" | "jpeg"
+    )
+    .then_some(extension)
+}
+
+fn note_icon(path: &str) -> &'static str {
+    if path
+        .split('/')
+        .any(|part| matches!(part, "pr-reviews" | "branch-reviews"))
+    {
+        return "";
+    }
+    match note_extension(path) {
+        Some("csv" | "tsv") => "",
+        Some("svg" | "png" | "jpg" | "jpeg") => "",
+        _ => "",
+    }
+}
+
+fn note_reference(path: &str) -> Option<Reference> {
+    let home = std::env::var("HOME").ok()?;
+    if !home.starts_with('/') {
+        return None;
+    }
+    let mut url = String::from("file://");
+    for byte in format!("{}/notes/{path}", home.trim_end_matches('/')).bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'_' | b'.' | b'~') {
+            url.push(char::from(byte));
+        } else {
+            use std::fmt::Write;
+            let _ = write!(url, "%{byte:02X}");
+        }
+    }
+    Some(Reference {
+        label: path.into(),
+        url,
+    })
+}
+
+fn document_artifacts(value: &str) -> impl Iterator<Item = Artifact> + '_ {
+    let mut seen = std::collections::HashSet::new();
+    value
+        .split(|ch: char| ch.is_whitespace() || matches!(ch, ';' | ',' | '>'))
+        .filter_map(move |token| {
+            let url = if token.starts_with("notes:") {
+                format!("notes:{}", note_path(token)?)
+            } else {
+                hyperlinks::document_links(token).pop()?.url
+            };
+            seen.insert(url.clone()).then_some(Artifact {
+                kind: Kind::Document,
+                urls: vec![url],
+            })
+        })
+}
+
+pub(super) fn has_document_link(work: &WorkDetails) -> bool {
+    document_artifacts(&work.design_docs).next().is_some()
 }
 
 fn artifacts(work: &WorkDetails) -> Vec<Artifact> {
@@ -56,10 +136,7 @@ fn artifacts(work: &WorkDetails) -> Vec<Artifact> {
                 entries(Kind::Pr, links).collect()
             }
         }))
-        .chain(entries(
-            Kind::Document,
-            hyperlinks::document_links(&work.design_docs),
-        ))
+        .chain(document_artifacts(&work.design_docs))
         .collect()
 }
 
@@ -102,7 +179,11 @@ pub(super) fn display_links(work: &WorkDetails) -> Vec<(String, Kind, Option<Ref
 }
 
 fn parse_link(token: &str) -> Option<Artifact> {
-    let (kind, url) = if !pr_links(token).is_empty() {
+    let (kind, url) = if let Some(path) = note_path(token) {
+        (Kind::Document, format!("notes:{path}"))
+    } else if token.starts_with("notes:") || token.starts_with("~/notes/") {
+        return None;
+    } else if !pr_links(token).is_empty() {
         (Kind::Pr, hyperlinks::normalize_prs(token))
     } else if !jira_links(token).is_empty() {
         (Kind::Jira, hyperlinks::normalize_jira(token))
@@ -351,9 +432,9 @@ impl ReferenceEditor {
             );
         }
         let block = Block::bordered().title(if self.error {
-            "Use a URL, Jira key, #PR or #PR > #PR"
+            "Use a URL, Jira key, #PR, or notes:path"
         } else {
-            "Paste URLs, Jira keys, or PRs (use > for a chain)"
+            "Paste links or notes:path (use > for a PR chain)"
         });
         let inner = block.inner(input);
         frame.render_widget(block, input);
@@ -382,7 +463,10 @@ mod tests {
         assert_eq!(editor.entries.len(), 4);
         editor.apply(&mut work);
         assert_eq!(work.jira, "https://flyzipline.atlassian.net/browse/FSW-42");
-        assert_eq!(work.prs, "https://github.com/ZiplineTeam/FlightSystems/pull/123 > https://github.com/ZiplineTeam/FlightSystems/pull/124; https://github.com/ZiplineTeam/FlightSystems/pull/125");
+        assert_eq!(
+            work.prs,
+            "https://github.com/ZiplineTeam/FlightSystems/pull/123 > https://github.com/ZiplineTeam/FlightSystems/pull/124; https://github.com/ZiplineTeam/FlightSystems/pull/125"
+        );
         assert_eq!(work.design_docs, "https://example.com/design?q=1#intro");
         let icons: Vec<_> = display_links(&work)
             .into_iter()
@@ -408,6 +492,39 @@ mod tests {
             urls,
             work.design_docs.split_whitespace().collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn notes_paths_round_trip_with_icons_and_file_targets() {
+        let mut work = WorkDetails::default();
+        let mut editor = ReferenceEditor::new(&work);
+        editor.paste("projects/repo/docs/plan.md https://example.com ~/notes/projects/repo/pr-reviews/42/guide.md notes:docs/data#1.csv notes:projects/repo/docs/plan.md");
+        editor.apply(&mut work);
+        assert_eq!(
+            work.design_docs,
+            "notes:projects/repo/docs/plan.md https://example.com notes:projects/repo/pr-reviews/42/guide.md notes:docs/data#1.csv"
+        );
+        let links = display_links(&work);
+        assert_eq!(
+            links
+                .iter()
+                .map(|(icon, _, _)| icon.as_str())
+                .collect::<Vec<_>>(),
+            ["", "", "", ""]
+        );
+        let data = links[3].2.as_ref().unwrap();
+        assert_eq!(data.label, "docs/data#1.csv");
+        assert!(data.url.starts_with("file:///"));
+        assert!(data.url.ends_with("/notes/docs/data%231.csv"));
+        assert_eq!(title_links(&work).count(), 1);
+        for invalid in [
+            "../private.md",
+            "notes:../private.md",
+            "notes:/private.md",
+            "file:///private.md",
+        ] {
+            assert!(parse_link(invalid).is_none());
+        }
     }
 
     #[test]

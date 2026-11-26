@@ -126,7 +126,7 @@ local function append_quick_note(prefix)
 		if not prompt then
 			return
 		end
-		local notes_file = vim.fn.expand("~/notes/main/quick_notes.md")
+		local notes_file = vim.fn.expand("~/notes/docs/reference/quick_notes.md")
 		local file = io.open(notes_file, "a")
 		file:write(string.format("- %s: %s\n", prefix, prompt))
 		file:close()
