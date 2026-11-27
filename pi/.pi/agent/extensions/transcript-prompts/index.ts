@@ -1,5 +1,5 @@
 import { AssistantMessageComponent, SkillInvocationMessageComponent, UserMessageComponent, parseSkillBlock, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Input, SelectList, Text, matchesKey, parseColor, replaceControlCharacters, stripTerminalSequences, styleText, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { Input, SelectList, Text, matchesKey, parseColor, replaceControlCharacters, stripTerminalSequences, styleText, truncateToWidth, visibleWidth, type TUI } from "@earendil-works/pi-tui";
 
 // Pi 1.6 internals: the fullscreen scroll box owns the rendered document.
 // Use component identity for scroll targets: text can repeat, and live components can lack an ID.
@@ -82,6 +82,13 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
+  function toggleMark(id: string) {
+    const mark = !marked.has(id);
+    pi.appendEntry(MARK_ENTRY, { id, marked: mark });
+    if (mark) marked.add(id);
+    else marked.delete(id);
+  }
+
   const cache = new WeakMap<readonly string[], readonly string[]>();
   const restoreRender: (() => void)[] = [];
   pi.on("session_start", (_event, ctx) => {
@@ -115,7 +122,16 @@ export default function (pi: ExtensionAPI) {
       });
     }
   });
+  const stopMarking = pi.events.on("transcript:toggle-latest-reply-mark", (data) => {
+    const { tui, ctx } = data as { tui: TUI; ctx: ExtensionContext };
+    loadMarks(ctx);
+    const latest = readTranscript(tui, messageIds)?.messages.findLast(({ isReply }) => isReply);
+    if (!latest?.id) return;
+    toggleMark(latest.id);
+    tui.requestRender();
+  });
   pi.on("session_shutdown", () => {
+    stopMarking();
     for (const restore of restoreRender.splice(0)) restore();
   });
 
@@ -256,10 +272,7 @@ export default function (pi: ExtensionAPI) {
                 const id = messages[Number(selected.value)].id;
                 if (!id) return;
                 const index = matches.findIndex(({ value }) => value === selected.value);
-                const mark = !marked.has(id);
-                pi.appendEntry(MARK_ENTRY, { id, marked: mark });
-                if (mark) marked.add(id);
-                else marked.delete(id);
+                toggleMark(id);
                 ({ list, matches } = makeList());
                 if (matches.length) list.setSelectedIndex(Math.min(index, matches.length - 1));
               } else if (selectionKeys.some((key) => keys.matches(data, key))) {

@@ -8,7 +8,7 @@ export default function (pi: ExtensionAPI) {
 
     ctx.ui.setEditorComponent((tui, theme, keys) => {
       const editor = previous(tui, theme, keys);
-      const viewport = tui as typeof tui & { scrollToBottom?: () => void };
+      const viewport = tui as typeof tui & { mode?: string; scrollToBottom?: () => void };
       // pi-vim reports Ex as Normal. Keep Ex and pending Vim commands such as dG intact.
       const vim = editor as typeof editor & {
         getMode?: () => string;
@@ -22,17 +22,21 @@ export default function (pi: ExtensionAPI) {
       const handleInput = editor.handleInput?.bind(editor);
       editor.handleInput = (data) => {
         if (
-          matchesKey(data, "shift+g") &&
           !isKeyRelease(data) &&
           vim.getMode?.() === "normal" &&
           vim.pendingExCommand === null &&
           !vim.prefixCount &&
           !vim.isRepeatRecordingInProgress?.() &&
-          !vim.isShowingAutocomplete?.() &&
-          viewport.scrollToBottom
+          !vim.isShowingAutocomplete?.()
         ) {
-          viewport.scrollToBottom();
-          return;
+          if (matchesKey(data, "shift+g") && viewport.scrollToBottom) {
+            viewport.scrollToBottom();
+            return;
+          }
+          if (matchesKey(data, "m") && viewport.mode === "fullscreen") {
+            pi.events.emit("transcript:toggle-latest-reply-mark", { tui, ctx });
+            return;
+          }
         }
         handleInput?.(data);
       };
