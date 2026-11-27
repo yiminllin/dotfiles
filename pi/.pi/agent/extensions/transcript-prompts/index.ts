@@ -135,6 +135,78 @@ export default function (pi: ExtensionAPI) {
     for (const restore of restoreRender.splice(0)) restore();
   });
 
+  async function recallPrompt(ctx: ExtensionContext) {
+    const prompts = ctx.sessionManager.getBranch().flatMap((entry) => {
+      if (entry.type !== "message" || entry.message.role !== "user") return [];
+      const content = entry.message.content;
+      const text = typeof content === "string" ? content : content.flatMap((part) => part.type === "text" ? [part.text] : []).join("");
+      const skill = parseSkillBlock(text);
+      const prompt = skill ? skill.userMessage || `/skill:${skill.name}` : text;
+      return prompt.trim() ? [prompt] : [];
+    }).reverse();
+    const items = [...new Set(prompts)].reverse().map((value) => ({
+      value,
+      label: replaceControlCharacters(stripTerminalSequences(value).replace(/\s+/g, " ").trim()),
+    }));
+    const prompt = await ctx.ui.custom<string | undefined>((tui, theme, keys, done) => {
+      const input = new Input({ prompt: "/ ", placeholder: "Search previous prompts" });
+      const muted = (text: string) => theme.fg("muted", text);
+      const accent = (text: string) => theme.fg("accent", text);
+      function makeList() {
+        const query = input.getValue().trim().toLowerCase();
+        const matches = items.filter(({ label }) => label.toLowerCase().includes(query));
+        const list = new SelectList(matches, Math.max(1, Math.min(8, tui.terminal.rows - 5)), {
+          selectedPrefix: accent,
+          selectedText: accent,
+          description: muted,
+          scrollInfo: muted,
+          noMatch: () => muted(items.length ? "No matching prompts" : "No prompts in this session"),
+        });
+        const index = Math.max(0, matches.length - 1);
+        list.setSelectedIndex(index);
+        return { list, count: matches.length, index };
+      }
+      let { list, count, index } = makeList();
+      return {
+        get focused() { return input.focused; },
+        set focused(focused: boolean) { input.focused = focused; },
+        render(width: number) {
+          return [
+            accent(truncateToWidth("Prompt history", width)),
+            ...list.render(width),
+            ...input.render(width),
+          ];
+        },
+        invalidate() { input.invalidate(); list.invalidate(); },
+        handleInput(data: string) {
+          if (keys.matches(data, "tui.select.cancel")) return done(undefined);
+          if (keys.matches(data, "tui.select.confirm")) {
+            const item = list.getSelectedItem();
+            if (item) done(item.value);
+          } else if (count && (matchesKey(data, "ctrl+r") || keys.matches(data, "tui.select.up"))) {
+            list.setSelectedIndex(index = (index + count - 1) % count);
+          } else if (count && keys.matches(data, "tui.select.down")) {
+            list.setSelectedIndex(index = (index + 1) % count);
+          } else {
+            const previous = input.getValue();
+            input.handleInput(data);
+            if (input.getValue() !== previous) {
+              ({ list, count, index } = makeList());
+            }
+          }
+        },
+      };
+    });
+    if (prompt !== undefined) ctx.ui.setEditorText(prompt);
+  }
+  pi.events.on("transcript:recall-prompt", ({ ctx }) => {
+    void recallPrompt(ctx).catch((error) => ctx.ui.notify(String(error), "error"));
+  });
+  pi.registerShortcut("ctrl+r", {
+    description: "Search and reuse prompts from the current session",
+    handler: recallPrompt,
+  });
+
   for (const markedOnly of [false, true]) {
     const title = markedOnly ? "Marked messages" : "Transcript messages";
     pi.registerShortcut(markedOnly ? "alt+m" : "alt+p", {

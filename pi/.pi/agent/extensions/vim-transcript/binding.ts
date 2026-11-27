@@ -21,6 +21,13 @@ export default function (pi: ExtensionAPI) {
 
       const handleInput = editor.handleInput?.bind(editor);
       editor.handleInput = (data) => {
+        const mode = vim.getMode?.();
+        // pi-vim consumes Ctrl+r for redo before Pi can dispatch extension shortcuts.
+        if (!isKeyRelease(data) && (mode === "normal" || mode === "insert") &&
+            vim.pendingExCommand === null && matchesKey(data, "ctrl+r")) {
+          pi.events.emit("transcript:recall-prompt", { ctx });
+          return;
+        }
         if (
           !isKeyRelease(data) &&
           vim.getMode?.() === "normal" &&
