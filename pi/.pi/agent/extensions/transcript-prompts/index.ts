@@ -19,7 +19,11 @@ type RenderedComponent = {
   };
 };
 
-type ScrollView = { scrollTo(row: number, options: { disableFollow: boolean }): void };
+type ScrollView = {
+  scrollTop: number;
+  viewportHeight: number;
+  scrollTo(row: number, options: { disableFollow: boolean }): void;
+};
 type LayoutBox = {
   component: RenderedComponent;
   children: readonly LayoutBox[];
@@ -38,18 +42,19 @@ function readTranscript(tui: unknown, messageIds: WeakMap<object, string>) {
   const document = box?.children[0]?.component;
   if (!scroll || !document?.childLines || !box?.scrollContentLines) return;
 
-  const messages: { component: RenderedComponent; row: number; text: string; isReply?: boolean; id?: string }[] = [];
+  const messages: { component: RenderedComponent; row: number; lastRow: number; text: string; isReply?: boolean; id?: string }[] = [];
   function visit(component: RenderedComponent, lines: readonly string[], row: number) {
     if (!lines.length) return;
+    const lastRow = row + lines.length - 1;
     if (component.lastMessage?.role === "assistant") {
       const reply = component.lastMessage;
       const id = component.messageId ?? messageIds.get(reply);
       const text = reply.content.filter((block) => block.type === "text").map((block) => block.text).join("\n");
-      if (text.trim()) messages.push({ component, row, text, isReply: true, id });
+      if (text.trim()) messages.push({ component, row, lastRow, text, isReply: true, id });
     } else if (typeof component.text === "string" && "messageId" in component && lines[0].startsWith(ZONE_START)) {
-      messages.push({ component, row, text: component.text, id: component.messageId ?? messageIds.get(component) });
+      messages.push({ component, row, lastRow, text: component.text, id: component.messageId ?? messageIds.get(component) });
     } else if (component.skillBlock && !component.skillBlock.userMessage) {
-      messages.push({ component, row, text: `/skill:${component.skillBlock.name}`, id: component.messageId ?? messageIds.get(component) });
+      messages.push({ component, row, lastRow, text: `/skill:${component.skillBlock.name}`, id: component.messageId ?? messageIds.get(component) });
     } else if (component.childLines?.lines === lines) {
       const { children, parts } = component.childLines;
       for (let i = 0; i < children.length; i++) {
@@ -127,7 +132,9 @@ export default function (pi: ExtensionAPI) {
             return new Text("");
           }
 
-          const { messages } = transcript;
+          const { messages, scroll } = transcript;
+          const top = scroll.scrollTop;
+          const bottom = top + Math.max(0, scroll.viewportHeight - 1);
           // Live prompts lack IDs. Match the ordered suffix of the active branch so
           // repeated text cannot select a different copy of a prompt.
           if (ctx.isIdle()) {
@@ -170,7 +177,6 @@ export default function (pi: ExtensionAPI) {
 
           let filtering = false;
           const input = new Input({ prompt: "/ ", placeholder: "Filter messages", placeholderStyle: muted });
-          input.focused = true;
 
           const listTheme = {
             selectedPrefix: selected,
@@ -186,9 +192,22 @@ export default function (pi: ExtensionAPI) {
               (!markedOnly || (id && marked.has(id))) && text.toLowerCase().includes(query),
             ).map(({ value, text, isReply, id }) => ({
               value,
-              label: `${id && marked.has(id) ? BOOKMARK : " "} ${isReply ? "  󰚩" : "󰀄"} ${text}`,
+              label: `${id && marked.has(id) ? BOOKMARK : " "} ${isReply ? "  󰚩" : "󰀄"}: ${text}`,
             }));
             const list = new SelectList(matches, visible, listTheme);
+            let nearest = 0;
+            let distance = Infinity;
+            for (let i = 0; i < matches.length; i++) {
+              const { row, lastRow } = messages[Number(matches[i].value)];
+              // Prefer visible messages, starting near the bottom of the viewport.
+              const outside = Math.max(row - bottom, top - lastRow, 0);
+              const gap = outside ? scroll.viewportHeight + outside : Math.max(0, bottom - lastRow);
+              if (gap < distance) {
+                nearest = i;
+                distance = gap;
+              }
+            }
+            if (matches.length) list.setSelectedIndex(nearest);
             list.onSelect = ({ value }) => {
               const target = messages[Number(value)].component;
               const current = readTranscript(tui, messageIds);
@@ -208,11 +227,11 @@ export default function (pi: ExtensionAPI) {
               const rule = "─".repeat(bodyWidth);
               const row = (line: string) => border("│") + styleText(fit(line, bodyWidth), { fg: text, bg: panel }, mode) + border("│");
               const footer = filtering
-                ? " ↑/↓ Move   Tab Mark/unmark   Enter Jump   Esc Close"
+                ? " ↑/↓ Move   Tab Mark/unmark   Enter Lock filter   Esc Close"
                 : " j/k Move   / Filter   m Mark/unmark   Enter Jump   Esc Close";
               return [
                 border("╭" + heading + "─".repeat(bodyWidth - visibleWidth(heading)) + "╮"),
-                ...(filtering ? input.render(bodyWidth - 1).map((line) => row(" " + line)) : []),
+                ...(filtering || input.getValue().trim() ? input.render(bodyWidth - 1).map((line) => row(" " + line)) : []),
                 ...list.render(bodyWidth).map(row),
                 border("├" + rule + "┤"),
                 row(muted(truncateToWidth(footer, bodyWidth))),
@@ -225,6 +244,11 @@ export default function (pi: ExtensionAPI) {
             },
             handleInput(data: string) {
               if (keys.matches(data, "tui.select.cancel")) return done(undefined);
+              if (filtering && keys.matches(data, "tui.select.confirm")) {
+                filtering = false;
+                input.focused = false;
+                return;
+              }
               const selectionKeys = ["tui.select.up", "tui.select.down", "tui.select.pageUp", "tui.select.pageDown", "tui.select.confirm"] as const;
               if (matchesKey(data, "tab") || (!filtering && matchesKey(data, "m"))) {
                 const selected = list.getSelectedItem();
@@ -241,8 +265,10 @@ export default function (pi: ExtensionAPI) {
               } else if (selectionKeys.some((key) => keys.matches(data, key))) {
                 list.handleInput(data);
               } else if (!filtering) {
-                if (matchesKey(data, "/")) filtering = true;
-                else if (matchesKey(data, "j")) list.handleInput("\x1b[B");
+                if (matchesKey(data, "/")) {
+                  filtering = true;
+                  input.focused = true;
+                } else if (matchesKey(data, "j")) list.handleInput("\x1b[B");
                 else if (matchesKey(data, "k")) list.handleInput("\x1b[A");
               } else {
                 const previous = input.getValue();
