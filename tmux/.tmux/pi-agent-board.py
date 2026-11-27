@@ -24,6 +24,7 @@ FIELDS = (
     "@pi_agent_status", "@pi_agent_status_owner", "pane_pipe", "@pi_agent_input_wait",
     "@pi_agent_dimmed", "@pi_agent_slot", "@pi_agent_progress",
     "@pi_session_id", "@pi_session_cwd", "@pi_session_owner", "@pi_agent_last_message",
+    "@pi_agent_run_state",
 )
 PANE_FORMAT = SEPARATOR.join("#{" + field + "}" for field in FIELDS)
 STALE_AFTER_MS = 24 * 60 * 60 * 1000
@@ -139,6 +140,9 @@ def agent_state(pane):
         state = {"working": "RUN", "blocked": "BLOCKED", "idle": "WAIT", "done": "WAIT", "error": "ERR"}.get(status)
         if state:
             return state
+    state = pane["@pi_agent_run_state"]
+    if state in ("RUN", "WAIT") and alive(pane["@pi_session_owner"]):
+        return state
     try:
         content = "\n".join(tmux("capture-pane", "-p", "-t", pane["pane_id"]).splitlines()[-7:])
     except subprocess.CalledProcessError:

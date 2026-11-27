@@ -55,6 +55,22 @@ def isolated_tmux():
             subprocess.run(base + ["kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+class StatusTests(unittest.TestCase):
+    def test_direct_launch_uses_live_extension_status(self):
+        pane = dict.fromkeys(board.FIELDS, "")
+        pane.update({"pane_id": "%1", "@pi_session_owner": str(os.getpid())})
+        with patch.object(board, "tmux", return_value="────") as capture:
+            for state in ("WAIT", "RUN", "WAIT"):
+                pane["@pi_agent_run_state"] = state
+                self.assertEqual(board.agent_state(pane), state)
+            pane["@pi_agent_input_wait"] = str(os.getpid())
+            self.assertEqual(board.agent_state(pane), "BLOCKED")
+            capture.assert_not_called()
+            pane.update({"@pi_agent_input_wait": "", "@pi_session_owner": "", "@pi_agent_run_state": "RUN"})
+            self.assertEqual(board.agent_state(pane), "WAIT")
+            capture.assert_called_once_with("capture-pane", "-p", "-t", "%1")
+
+
 class GridTests(unittest.TestCase):
     def test_equal_blocks_fill_four_columns_then_rows(self):
         for count in (1, 4, 5, 8, 9, 12):

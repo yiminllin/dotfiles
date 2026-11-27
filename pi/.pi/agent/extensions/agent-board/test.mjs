@@ -34,7 +34,7 @@ test("progress publishes full snapshots without the dialog bridge", async (t) =>
   const loaded = await loadExtensions([progressSource], process.cwd());
   assert.deepEqual(loaded.errors, []);
   const branch = [];
-  const ctx = { mode: "tui", ui: { setWidget() {} }, sessionManager: { getBranch: () => branch, getSessionId: () => "td-session-test", getCwd: () => process.cwd() } };
+  const ctx = { mode: "tui", isIdle: () => true, ui: { setWidget() {} }, sessionManager: { getBranch: () => branch, getSessionId: () => "td-session-test", getCwd: () => process.cwd() } };
   loaded.runtime.appendEntry = (customType, data) => branch.push({ type: "custom", customType, data: structuredClone(data) });
   const extension = loaded.extensions[0];
   const event = async (name) => {
@@ -92,6 +92,12 @@ test("progress publishes full snapshots without the dialog bridge", async (t) =>
   const lastMessage = () => tmux("show-options", "-pqv", "-t", pane, "@pi_agent_last_message");
   await bridgeEvent("session_start");
   assert.equal(lastMessage(), String(old));
+  const runState = () => tmux("show-options", "-pqv", "-t", pane, "@pi_agent_run_state");
+  assert.equal(runState(), "WAIT");
+  await bridgeEvent("agent_start");
+  assert.equal(runState(), "RUN");
+  await bridgeEvent("agent_settled");
+  assert.equal(runState(), "WAIT");
   await bridgeEvent("message_end", { message: toolResult.message });
   assert.equal(lastMessage(), String(old));
   await bridgeEvent("message_end", { message: { role: "assistant", timestamp: old + 2 } });
@@ -113,5 +119,6 @@ test("progress publishes full snapshots without the dialog bridge", async (t) =>
   assert.equal(wait(), "");
   await bridgeEvent("session_shutdown");
   assert.equal(lastMessage(), "");
+  assert.equal(runState(), "");
   assert.equal(tmux("show-options", "-pqv", "-t", pane, "@pi_session_id"), "");
 });

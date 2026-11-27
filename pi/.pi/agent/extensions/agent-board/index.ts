@@ -56,7 +56,8 @@ export default function (pi: ExtensionAPI) {
           "set-option", "-pt", pane, "@pi_session_id", ctx.sessionManager.getSessionId(), ";",
           "set-option", "-pt", pane, "@pi_session_owner", String(process.pid), ";",
           "set-option", "-pt", pane, "@pi_session_cwd", ctx.sessionManager.getCwd(), ";",
-          "set-option", "-pt", pane, "@pi_agent_last_message", latestMessageTime(ctx.sessionManager),
+          "set-option", "-pt", pane, "@pi_agent_last_message", latestMessageTime(ctx.sessionManager), ";",
+          "set-option", "-pt", pane, "@pi_agent_run_state", ctx.isIdle() ? "WAIT" : "RUN",
         ], { stdio: "ignore", timeout: 1000 });
       } catch {
         // Task navigation must not prevent Pi startup.
@@ -64,6 +65,21 @@ export default function (pi: ExtensionAPI) {
     }
     publish();
   });
+  // Direct launches can bypass the Fish wrapper that attaches the OSC status pipe.
+  function publishRunState(state: "RUN" | "WAIT") {
+    if (!active) return;
+    try {
+      execFileSync("tmux", ["set-option", "-pt", pane, "@pi_agent_run_state", state], {
+        stdio: "ignore", timeout: 1000,
+      });
+    } catch {
+      // The pane may already be gone.
+    }
+  }
+
+  pi.on("agent_start", () => publishRunState("RUN"));
+  pi.on("agent_settled", () => publishRunState("WAIT"));
+
   const publishMessageTime = (time: string) => {
     try {
       execFileSync("tmux", ["set-option", "-pt", pane, "@pi_agent_last_message", time], {
@@ -90,7 +106,8 @@ export default function (pi: ExtensionAPI) {
           "set-option", "-pt", pane, "-u", "@pi_session_id", ";",
           "set-option", "-pt", pane, "-u", "@pi_session_owner", ";",
           "set-option", "-pt", pane, "-u", "@pi_session_cwd", ";",
-          "set-option", "-pt", pane, "-u", "@pi_agent_last_message",
+          "set-option", "-pt", pane, "-u", "@pi_agent_last_message", ";",
+          "set-option", "-pt", pane, "-u", "@pi_agent_run_state",
         ], { stdio: "ignore", timeout: 1000 });
       } catch {
         // The pane may already be gone.
