@@ -65,6 +65,8 @@ pub(super) fn document_title(reference: &str, request: &Request) -> Option<Strin
     if let Some(page) = confluence_page_id(reference) {
         return confluence_title(page, request);
     }
+    let abstract_url = super::hyperlinks::arxiv_paper_id(reference)
+        .map(|id| format!("https://arxiv.org/abs/{id}"));
     let mut command = Command::new("curl");
     command.args([
         "--fail",
@@ -77,9 +79,16 @@ pub(super) fn document_title(reference: &str, request: &Request) -> Option<Strin
         "--proto-redir",
         "=http,https",
         "--",
-        reference,
+        abstract_url.as_deref().unwrap_or(reference),
     ]);
-    clean_title(&html_title(&request.output(command)?)?)
+    let html = request.output(command)?;
+    let title = html_title(&html)?;
+    let title = if let Some(id) = super::hyperlinks::arxiv_paper_id(reference) {
+        title.strip_prefix(&format!("[{id}] ")).unwrap_or(&title)
+    } else {
+        &title
+    };
+    clean_title(title)
 }
 
 fn confluence_page_id(reference: &str) -> Option<&str> {
@@ -228,6 +237,12 @@ impl Request {
     }
 }
 
+pub(super) fn useful_title(title: &str) -> bool {
+    !title.trim_start().starts_with('|')
+        && !title.trim().is_empty()
+        && !title.chars().any(char::is_control)
+}
+
 fn html_title(html: &str) -> Option<String> {
     let lower = html.to_ascii_lowercase();
     let start = lower.find("<title")?;
@@ -247,7 +262,8 @@ fn html_title(html: &str) -> Option<String> {
     {
         return None;
     }
-    Some(title)
+    let title = clean_title(&title)?;
+    useful_title(&title).then_some(title)
 }
 
 #[cfg(test)]

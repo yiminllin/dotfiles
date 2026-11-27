@@ -128,11 +128,16 @@ fn artifacts(work: &WorkDetails) -> Vec<Artifact> {
         .collect()
 }
 
-pub(super) fn title_links(work: &WorkDetails) -> impl Iterator<Item = Reference> {
+pub(super) fn title_links(work: &WorkDetails) -> impl Iterator<Item = Reference> + '_ {
     pr_links(&work.prs)
         .into_iter()
         .chain(jira_links(&work.jira))
         .chain(hyperlinks::document_links(&work.design_docs))
+        .filter(|link| {
+            !work.link_labels.contains_key(&link.url)
+                && (hyperlinks::pdf_stem(&link.url).is_none()
+                    || hyperlinks::arxiv_paper_id(&link.url).is_some())
+        })
 }
 
 pub(super) fn display_links(work: &WorkDetails) -> Vec<(String, Kind, Option<Reference>)> {
@@ -143,7 +148,11 @@ pub(super) fn display_links(work: &WorkDetails) -> Vec<(String, Kind, Option<Ref
         for (index, mut reference) in entry.references().into_iter().enumerate() {
             if entry.kind == Kind::Document {
                 if let Some(document) = documents.iter().find(|doc| doc.url == reference.url) {
-                    reference.label.clone_from(&document.label);
+                    reference.label.clone_from(
+                        work.link_labels
+                            .get(&reference.url)
+                            .unwrap_or(&document.label),
+                    );
                 }
             }
             let icon = if index == 0 { entry.icon() } else { " ↳" };

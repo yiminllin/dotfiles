@@ -299,11 +299,17 @@ Column headers and **Useful links** use Octicons. Use a Nerd Font to see them.
 Link icons distinguish PRs, PR chains, tickets, documents, spreadsheets, slides,
 forms, videos, threads, wikis, repositories, folders, and other web links.
 Each PR in a chain has its own URL. The table wraps descriptions and link titles.
-If there is no cached title, it shows a short label such as `#123` or `Google Doc 1`.
+If there is no cached title, td uses readable text from supported URLs or a
+short label such as `#123` or `Google Doc 1`. It uses filenames for PDFs
+without downloading them. For arXiv links it fetches the abstract page title.
+
+To name an existing web link, run `td edit <id> --link-label '<url>' 'My label'`.
+This name takes priority over fetched titles. Pass `''` to clear it.
+
 ### Cached link titles
 
-Work refreshes missing titles and titles at least 10 minutes old in the background.
-It checks tasks in the current Work list, including its category and text filters.
+Work, Read, and Improve refresh missing titles and titles at least 10 minutes old in the background.
+They check tasks in the current project list after applying its filters.
 Requests run one at a time with a five-second timeout. `r` refreshes the selected
 task's links without waiting for the 10-minute interval. Failed requests keep
 existing titles. Jira summaries use the configured `jira` CLI for tickets on

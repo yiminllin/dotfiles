@@ -165,8 +165,7 @@ fn read_entries(path: &Path) -> BTreeMap<String, Entry> {
         .ok()
         .and_then(|data| serde_json::from_slice(&data).ok())
         .unwrap_or_default();
-    entries
-        .retain(|_, entry| !entry.title.is_empty() && !entry.title.chars().any(char::is_control));
+    entries.retain(|_, entry| title_lookup::useful_title(&entry.title));
     entries
 }
 

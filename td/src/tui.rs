@@ -628,18 +628,21 @@ impl App {
         tasks
     }
 
+    fn fetches_link_titles(&self) -> bool {
+        matches!(self.project, Some("work" | "read" | "improve"))
+    }
+
     fn update_pr_titles(&mut self) -> bool {
-        let urls: Vec<_> = if self.project == Some("work")
-            && matches!(self.mode, Mode::Normal | Mode::State)
-        {
-            self.visible_tasks()
-                .iter()
-                .flat_map(|view| references::title_links(&view.task.work))
-                .map(|reference| reference.url)
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let urls: Vec<_> =
+            if self.fetches_link_titles() && matches!(self.mode, Mode::Normal | Mode::State) {
+                self.visible_tasks()
+                    .iter()
+                    .flat_map(|view| references::title_links(&view.task.work))
+                    .map(|reference| reference.url)
+                    .collect()
+            } else {
+                Vec::new()
+            };
         self.pr_titles.update(urls)
     }
 
@@ -737,7 +740,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 .is_some_and(templates::QuickAdd::is_saving)
         {
             Some(std::time::Duration::from_millis(50))
-        } else if app.project == Some("work") || has_agents {
+        } else if app.fetches_link_titles() || has_agents {
             Some(std::time::Duration::from_secs(1))
         } else {
             None
@@ -861,7 +864,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         return Ok(opened && std::env::var("TD_POPUP").is_ok_and(|value| value == "1"));
     }
     if key == KeyCode::Char('r')
-        && app.project == Some("work")
+        && app.fetches_link_titles()
         && matches!(app.mode, Mode::Normal)
     {
         let urls: Vec<_> = app

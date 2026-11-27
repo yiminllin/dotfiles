@@ -131,6 +131,7 @@ pub(super) fn draw_task_table(frame: &mut Frame, app: &mut App, body: Rect) {
             );
             let title = reference
                 .as_ref()
+                .filter(|link| !work.link_labels.contains_key(&link.url))
                 .and_then(|link| app.pr_titles.title(&link.url));
             let width = links_column.width as usize;
             let lines = if kind == references::Kind::Document {

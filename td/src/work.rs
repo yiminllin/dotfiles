@@ -41,6 +41,8 @@ pub struct WorkDetails {
     pub jira: String,
     pub prs: String,
     pub design_docs: String,
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub link_labels: std::collections::BTreeMap<String, String>,
     pub notes: String,
     pub reviewed_at: Option<String>,
 }

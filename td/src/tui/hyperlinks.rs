@@ -96,12 +96,166 @@ pub(super) fn document_links(value: &str) -> Vec<Reference> {
     });
     let mut counts = BTreeMap::new();
     for link in &mut links {
+        if let Some(label) = medium_article_label(&link.url)
+            .or_else(|| pdf_label(&link.url))
+            .or_else(|| web_path_label(&link.url))
+        {
+            link.label = label;
+            continue;
+        }
         let (kind, _) = web_link_kind(&link.url);
         let number = counts.entry(kind).or_insert(0);
         *number += 1;
         link.label = format!("{kind} {number}");
     }
     links
+}
+
+fn medium_article_label(url: &str) -> Option<String> {
+    let (_, rest) = url.split_once("://")?;
+    let (host, path) = rest.split(['?', '#']).next()?.split_once('/')?;
+    let host = host.to_ascii_lowercase();
+    if host != "medium.com" && !host.ends_with(".medium.com") {
+        return None;
+    }
+    let segment = path.trim_end_matches('/').rsplit('/').next()?;
+    let (slug, id) = segment.rsplit_once('-')?;
+    if id.len() != 12
+        || !id.bytes().all(|ch| ch.is_ascii_hexdigit())
+        || !slug
+            .split('-')
+            .all(|word| !word.is_empty() && word.bytes().all(|ch| ch.is_ascii_alphanumeric()))
+    {
+        return None;
+    }
+    let mut label = slug.replace('-', " ");
+    label.get_mut(..1)?.make_ascii_uppercase();
+    Some(label)
+}
+
+fn web_path_label(url: &str) -> Option<String> {
+    if let Some(id) = arxiv_paper_id(url) {
+        return Some(format!("arXiv {id}"));
+    }
+    let (_, rest) = url.split_once("://")?;
+    let (host, path) = rest.split(['?', '#']).next()?.split_once('/')?;
+    let parts: Vec<_> = path.trim_end_matches('/').split('/').collect();
+    let host = host.to_ascii_lowercase();
+    let slug = match (host.as_str(), parts.as_slice()) {
+        ("github.com", [_, repo]) if !repo.is_empty() => return Some(repo.to_string()),
+        ("www.nvidia.com", ["en-us", "on-demand", "session", id]) => {
+            return Some(format!("NVIDIA session {}", id.to_ascii_uppercase()));
+        }
+        (host, [""]) if host.ends_with(".chatgpt.site") => host.split('.').next()?,
+        ("figma.com" | "www.figma.com", ["board" | "design" | "file", _, name, ..]) => name,
+        ("flyzipline.atlassian.net", ["wiki", "spaces", _, "pages", _, name]) => name,
+        ("buildkite.com", [_, pipeline, "builds", number, ..]) => {
+            let pipeline = readable_slug(pipeline)?;
+            return Some(format!("{pipeline} #{number}"));
+        }
+        (_, [.., filename]) => return readable_slug(filename.strip_suffix(".html")?),
+        _ => return None,
+    };
+    readable_slug(slug)
+}
+
+fn readable_slug(slug: &str) -> Option<String> {
+    let text = slug.replace("%20", " ");
+    let mut label = text
+        .split(['-', '_', '+', ' '])
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    label.get_mut(..1)?.make_ascii_uppercase();
+    Some(label)
+}
+
+pub(super) fn arxiv_paper_id(url: &str) -> Option<&str> {
+    let (_, rest) = url.split_once("://")?;
+    let (host, path) = rest.split(['?', '#']).next()?.split_once('/')?;
+    if host != "arxiv.org" && host != "www.arxiv.org" {
+        return None;
+    }
+    let id = path
+        .strip_prefix("pdf/")
+        .or_else(|| path.strip_prefix("abs/"))?;
+    let id = id.strip_suffix(".pdf").unwrap_or(id);
+    let (date, serial) = id.split_once('.')?;
+    let (number, version) = serial
+        .split_once('v')
+        .map_or((serial, None), |(n, v)| (n, Some(v)));
+    let digits = |text: &str| !text.is_empty() && text.bytes().all(|ch| ch.is_ascii_digit());
+    (date.len() == 4
+        && digits(date)
+        && (4..=5).contains(&number.len())
+        && digits(number)
+        && version.is_none_or(digits))
+    .then_some(id)
+}
+
+pub(super) fn pdf_stem(url: &str) -> Option<&str> {
+    let (_, rest) = url.split_once("://")?;
+    let (_, path) = rest.split(['?', '#']).next()?.split_once('/')?;
+    let (stem, ext) = path.rsplit('/').next()?.rsplit_once('.')?;
+    ext.eq_ignore_ascii_case("pdf").then_some(stem)
+}
+
+fn pdf_label(url: &str) -> Option<String> {
+    let mut stem = pdf_stem(url)?;
+    while let Some((prefix, tail)) = stem.split_once(['-', '_']) {
+        if prefix.is_empty() || !prefix.bytes().all(|ch| ch.is_ascii_digit()) {
+            break;
+        }
+        stem = tail;
+    }
+    let stem = stem.replace("%20", " ");
+    let mut label = String::new();
+    for part in stem
+        .split(['-', '_', ' ', '.'])
+        .filter(|part| !part.is_empty())
+    {
+        if !part.bytes().all(|ch| ch.is_ascii_alphanumeric()) {
+            return None;
+        }
+        let bytes = part.as_bytes();
+        let mut start = 0;
+        for i in 1..bytes.len() {
+            let (prev, ch) = (bytes[i - 1], bytes[i]);
+            let end = if ch.is_ascii_lowercase() && prev.is_ascii_uppercase() && i >= start + 2 {
+                match bytes[i - 2] {
+                    b'A'..=b'Z' => i - 1,
+                    b'0'..=b'9' => i,
+                    _ => continue,
+                }
+            } else if (prev.is_ascii_lowercase() && ch.is_ascii_uppercase())
+                || (prev.is_ascii_alphabetic() && ch.is_ascii_digit())
+                || (prev.is_ascii_digit() && ch.is_ascii_lowercase())
+            {
+                i
+            } else {
+                continue;
+            };
+            push_label_word(&mut label, &part[start..end]);
+            start = end;
+        }
+        push_label_word(&mut label, &part[start..]);
+    }
+    if !label.bytes().any(|ch| ch.is_ascii_alphabetic()) {
+        return None;
+    }
+    label.get_mut(..1)?.make_ascii_uppercase();
+    Some(label)
+}
+
+fn push_label_word(label: &mut String, word: &str) {
+    if !label.is_empty() {
+        label.push(' ');
+    }
+    if word.bytes().any(|ch| ch.is_ascii_lowercase()) {
+        label.extend(word.chars().map(|ch| ch.to_ascii_lowercase()));
+    } else {
+        label.push_str(word);
+    }
 }
 
 pub(super) fn file_url(path: &std::path::Path) -> String {
@@ -133,6 +287,7 @@ pub(super) fn web_link_kind(url: &str) -> (&'static str, &'static str) {
         | "www.loom.com" => ("Video", ""),
         "app.slack.com" | "teams.microsoft.com" => ("Thread", ""),
         host if host.ends_with(".slack.com") => ("Thread", ""),
+        "baraza.platform.flyzipline.com" | "baraza2.platform.flyzipline.com" => ("Baraza", ""),
         "notion.so" | "www.notion.so" => ("Notion", ""),
         host if host.ends_with(".notion.site") => ("Notion", ""),
         host if host.ends_with(".atlassian.net") && path.starts_with("wiki/") => {
@@ -268,6 +423,8 @@ mod tests {
             "https://flyzipline.atlassian.net/wiki/spaces/FSW/pages/123/Design",
             "https://docs.google.com/document/d/b/edit#section",
             "https://example.com/long-design-document-name",
+            "https://baraza2.platform.flyzipline.com/run/a?view=logs#start",
+            "https://baraza2.platform.flyzipline.com/run/b",
             "https://docs.google.com/document/d/a/edit?tab=notes",
         ];
         let links = document_links(&urls.join(" "));
@@ -276,19 +433,96 @@ mod tests {
                 .iter()
                 .map(|link| link.label.as_str())
                 .collect::<Vec<_>>(),
-            ["Google Doc 1", "Confluence 1", "Google Doc 2", "Doc 1"]
+            [
+                "Google Doc 1",
+                "Design",
+                "Google Doc 2",
+                "Doc 1",
+                "Baraza 1",
+                "Baraza 2",
+            ]
         );
         assert_eq!(
             links
                 .iter()
                 .map(|link| link.url.as_str())
                 .collect::<Vec<_>>(),
-            urls[..4]
+            urls[..6]
         );
         assert_eq!(
             document_links("https://docs.google.com.evil/document/a")[0].label,
             "Doc 1"
         );
+    }
+
+    #[test]
+    fn provider_paths_supply_readable_labels_without_changing_targets() {
+        for (url, label) in [
+            ("https://github.com/agavra/tuicr", "tuicr"),
+            (
+                "https://www.figma.com/board/id/battery-config?node-id=1",
+                "Battery config",
+            ),
+            (
+                "https://flyzipline.atlassian.net/wiki/spaces/FSW/pages/42/OTA+Strategy",
+                "OTA Strategy",
+            ),
+            (
+                "https://buildkite.com/org/phoenix-integration/builds/1252/list",
+                "Phoenix integration #1252",
+            ),
+            ("https://arxiv.org/pdf/2506.11719", "arXiv 2506.11719"),
+            (
+                "https://www.nvidia.com/en-us/on-demand/session/gtc25-s72709/",
+                "NVIDIA session GTC25-S72709",
+            ),
+            (
+                "https://example-project.team.chatgpt.site/",
+                "Example project",
+            ),
+        ] {
+            let link = &document_links(url)[0];
+            assert_eq!(link.label, label);
+            assert_eq!(link.url, url);
+        }
+        assert_eq!(
+            arxiv_paper_id("https://arxiv.org/pdf/2506.11719v2.pdf"),
+            Some("2506.11719v2")
+        );
+        assert_eq!(arxiv_paper_id("https://arxiv.org/pdf/2109.0523:7"), None);
+    }
+
+    #[test]
+    fn pdf_labels_clean_up_filenames_and_keep_the_full_link_target() {
+        for (url, label) in [
+            (
+                "https://vnav.mit.edu/material/02-03-basic3Dgeometry-notes.pdf?download=1#page=2",
+                "Basic 3D geometry notes",
+            ),
+            (
+                "https://vnav.mit.edu/material/04-05-LieGroups-notes.pdf",
+                "Lie groups notes",
+            ),
+            ("https://example.com/3D%20API_Guide.PDF", "3D API guide"),
+            ("https://example.com/123.pdf", "Doc 1"),
+        ] {
+            let link = &document_links(url)[0];
+            assert_eq!(link.label, label);
+            assert_eq!(link.url, url);
+        }
+    }
+
+    #[test]
+    fn medium_article_fallback_keeps_the_full_link_target() {
+        let url = "https://marksaroufim.medium.com/how-to-move-lie-group-robotics-67fc4f3959d1?source=feed#intro";
+        let links = document_links(&format!(
+            "{url} https://medium.com/p/67fc4f3959d1 https://docs.google.com/spreadsheets/d/id/edit https://medium.com.example.org/how-to-read-67fc4f3959d1"
+        ));
+        assert_eq!(links[0].label, "How to move lie group robotics");
+        assert_eq!(links[0].url, url);
+        assert_eq!(links[1].label, "Doc 1");
+        assert_eq!(links[2].label, "Google Sheet 1");
+        assert_eq!(links[3].label, "Doc 2");
     }
 
     #[test]

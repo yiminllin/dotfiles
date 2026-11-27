@@ -56,6 +56,9 @@ enum Command {
         id: String,
         #[arg(long)]
         description: Option<String>,
+        /// Name an existing document URL. Use an empty label to clear the name.
+        #[arg(long, num_args = 2, value_names = ["URL", "LABEL"])]
+        link_label: Option<Vec<String>>,
         #[command(flatten)]
         fields: Fields,
     },
@@ -208,13 +211,45 @@ pub fn run() -> Result<()> {
         Command::Edit {
             id,
             description,
+            link_label,
             fields,
         } => {
-            if description.is_none() && fields.project.is_none() && fields.state.is_none() {
+            if description.is_none()
+                && fields.project.is_none()
+                && fields.state.is_none()
+                && link_label.is_none()
+            {
                 bail!("edit needs at least one field flag");
             }
+            let id = lookup_task_id(&tasks, &id)?;
+            let work = if let Some(args) = link_label {
+                let url = &args[0];
+                let mut work = tasks[&id].work.clone();
+                if !url.starts_with("https://") && !url.starts_with("http://") {
+                    bail!("link label needs an HTTP or HTTPS URL");
+                }
+                if !work
+                    .design_docs
+                    .split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';' | '>'))
+                    .any(|link| link == url)
+                {
+                    bail!("URL is not in this task's document links");
+                }
+                let label = args[1].split_whitespace().collect::<Vec<_>>().join(" ");
+                if label.chars().any(char::is_control) {
+                    bail!("link label contains a control character");
+                }
+                if label.is_empty() {
+                    work.link_labels.remove(url);
+                } else {
+                    work.link_labels.insert(url.clone(), label);
+                }
+                Some(work)
+            } else {
+                None
+            };
             (
-                lookup_task_id(&tasks, &id)?,
+                id,
                 Event::TaskUpdated {
                     description: description.map(nonempty_description).transpose()?,
                     project: trim(fields.project),
@@ -222,7 +257,7 @@ pub fn run() -> Result<()> {
                     estimate: None,
                     state: fields.state,
                     blocked: None,
-                    work: None,
+                    work,
                     improve_category: None,
                 },
             )
