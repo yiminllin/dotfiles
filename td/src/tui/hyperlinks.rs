@@ -143,6 +143,10 @@ fn web_path_label(url: &str) -> Option<String> {
     let host = host.to_ascii_lowercase();
     let slug = match (host.as_str(), parts.as_slice()) {
         ("github.com", [_, repo]) if !repo.is_empty() => return Some(repo.to_string()),
+        (host, ["r", subreddit]) if is_reddit_host(host) && !subreddit.is_empty() => {
+            return Some(format!("r/{subreddit}"));
+        }
+        (host, ["r", _, "comments", _, title, ..]) if is_reddit_host(host) => title,
         ("www.nvidia.com", ["en-us", "on-demand", "session", id]) => {
             return Some(format!("NVIDIA session {}", id.to_ascii_uppercase()));
         }
@@ -271,6 +275,10 @@ pub(super) fn file_url(path: &std::path::Path) -> String {
     url
 }
 
+fn is_reddit_host(host: &str) -> bool {
+    host == "reddit.com" || host.ends_with(".reddit.com")
+}
+
 pub(super) fn web_link_kind(url: &str) -> (&'static str, &'static str) {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let rest = rest.split(['?', '#']).next().unwrap_or("");
@@ -285,6 +293,7 @@ pub(super) fn web_link_kind(url: &str) -> (&'static str, &'static str) {
         "drive.google.com" => ("Google Drive", ""),
         "youtube.com" | "www.youtube.com" | "m.youtube.com" | "youtu.be" | "loom.com"
         | "www.loom.com" => ("Video", ""),
+        host if is_reddit_host(host) || host == "redd.it" => ("Reddit", ""),
         "app.slack.com" | "teams.microsoft.com" => ("Thread", ""),
         host if host.ends_with(".slack.com") => ("Thread", ""),
         "baraza.platform.flyzipline.com" | "baraza2.platform.flyzipline.com" => ("Baraza", ""),
@@ -523,6 +532,29 @@ mod tests {
         assert_eq!(links[1].label, "Doc 1");
         assert_eq!(links[2].label, "Google Sheet 1");
         assert_eq!(links[3].label, "Doc 2");
+    }
+
+    #[test]
+    fn reddit_links_use_readable_labels_and_keep_the_full_target() {
+        for (url, label, kind) in [
+            (
+                "https://old.reddit.com/r/rust/comments/abc123/a_post_about_rust/def456/?context=3#comment",
+                "A post about rust",
+                ("Reddit", ""),
+            ),
+            ("https://www.reddit.com/r/rust/", "r/rust", ("Reddit", "")),
+            ("https://redd.it/abc123", "Reddit 1", ("Reddit", "")),
+            (
+                "https://reddit.com.example.org/r/rust/",
+                "Doc 1",
+                ("Doc", ""),
+            ),
+        ] {
+            let links = document_links(url);
+            assert_eq!(links[0].label, label);
+            assert_eq!(links[0].url, url);
+            assert_eq!(web_link_kind(url), kind);
+        }
     }
 
     #[test]
