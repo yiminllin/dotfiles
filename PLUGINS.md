@@ -192,7 +192,7 @@
 | Pi FFF | Fuzzy file/content search; initially tools-only | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi RPIV Ask User Question (`@juicesharp/rpiv-ask-user-question`) | Structured choices, custom answers, and decision dialogs for existing skills | [pi/.pi/agent/settings.json](pi/.pi/agent/settings.json) |
 | Pi Vim (`pi-vim`) | Vim prompt editing; a local binding makes Normal-mode `G` jump to the bottom of the fullscreen transcript | [Pi settings](pi/.pi/agent/settings.json), [binding](pi/.pi/agent/extensions/vim-transcript/binding.ts) |
-| Pi Transcript Prompts (local extension) | Alt+P opens a searchable fullscreen prompt picker and scrolls to the selected prompt | [extension](pi/.pi/agent/extensions/transcript-prompts/index.ts) |
+| Pi Transcript Prompts (local extension) | Alt+p finds prompts and replies in the fullscreen transcript. `m` toggles a bookmark (`Tab` while filtering). Alt+m shows only marked prompts and replies. | [extension](pi/.pi/agent/extensions/transcript-prompts/index.ts) |
 | Pi Progress (local extension) | Persistent session goals and nested tasks; colored pins in bordered, equal-sized, four-column Agent Board tiles with stable order and gap-free numbering (Python 3) | [pi/.pi/agent/extensions/progress](pi/.pi/agent/extensions/progress) |
 | Pi Compaction Inventory (local extension) | Externalize large file inventories during compaction and apply configured per-model compaction reserves | [pi/.pi/agent/extensions/compaction-inventory](pi/.pi/agent/extensions/compaction-inventory) |
 | keyd | Key remapping (Linux) | [install.sh](install.sh) (Fedora) |

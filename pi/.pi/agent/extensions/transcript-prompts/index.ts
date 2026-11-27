@@ -1,11 +1,16 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { AssistantMessageComponent, SkillInvocationMessageComponent, UserMessageComponent, parseSkillBlock, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Input, SelectList, Text, matchesKey, parseColor, replaceControlCharacters, stripTerminalSequences, styleText, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 // Pi 1.6 internals: the fullscreen scroll box owns the rendered document.
-// Use component identity, not text or session IDs: prompts can repeat, and live prompts have no ID.
+// Use component identity for scroll targets: text can repeat, and live components can lack an ID.
+const MARK_ENTRY = "transcript-reply-mark";
+const ZONE_START = "\x1b]133;A\x07";
+const BOOKMARK = "󰃀";
+
 type RenderedComponent = {
   text?: unknown;
   messageId?: string;
+  lastMessage?: { role: string; content: readonly { type: string; text?: string }[] };
   skillBlock?: { name: string; userMessage?: string };
   childLines?: {
     children: readonly RenderedComponent[];
@@ -22,7 +27,7 @@ type LayoutBox = {
   scrollContentLines?: readonly string[];
 };
 
-function readTranscript(tui: unknown) {
+function readTranscript(tui: unknown, messageIds: WeakMap<object, string>) {
   const screen = tui as {
     mode?: string;
     currentLayout?: { root: LayoutBox; primaryScrollView?: ScrollView };
@@ -33,13 +38,18 @@ function readTranscript(tui: unknown) {
   const document = box?.children[0]?.component;
   if (!scroll || !document?.childLines || !box?.scrollContentLines) return;
 
-  const prompts: { component: RenderedComponent; row: number; text: string }[] = [];
+  const messages: { component: RenderedComponent; row: number; text: string; isReply?: boolean; id?: string }[] = [];
   function visit(component: RenderedComponent, lines: readonly string[], row: number) {
     if (!lines.length) return;
-    if (typeof component.text === "string" && "messageId" in component && lines[0].startsWith("\x1b]133;A\x07")) {
-      prompts.push({ component, row, text: component.text });
+    if (component.lastMessage?.role === "assistant") {
+      const reply = component.lastMessage;
+      const id = component.messageId ?? messageIds.get(reply);
+      const text = reply.content.filter((block) => block.type === "text").map((block) => block.text).join("\n");
+      if (text.trim()) messages.push({ component, row, text, isReply: true, id });
+    } else if (typeof component.text === "string" && "messageId" in component && lines[0].startsWith(ZONE_START)) {
+      messages.push({ component, row, text: component.text, id: component.messageId ?? messageIds.get(component) });
     } else if (component.skillBlock && !component.skillBlock.userMessage) {
-      prompts.push({ component, row, text: `/skill:${component.skillBlock.name}` });
+      messages.push({ component, row, text: `/skill:${component.skillBlock.name}`, id: component.messageId ?? messageIds.get(component) });
     } else if (component.childLines?.lines === lines) {
       const { children, parts } = component.childLines;
       for (let i = 0; i < children.length; i++) {
@@ -49,105 +59,201 @@ function readTranscript(tui: unknown) {
     }
   }
   visit(document, box.scrollContentLines, 0);
-  return { scroll, prompts };
+  return { scroll, messages };
 }
 
 export default function (pi: ExtensionAPI) {
-  pi.registerShortcut("alt+p", {
-    description: "Find a prompt in the fullscreen transcript",
-    handler: async (ctx) => {
-      const status = await ctx.ui.custom<string | undefined>((tui, theme, keys, done) => {
-        const transcript = readTranscript(tui);
-        if (!transcript?.prompts.length) {
-          queueMicrotask(() => done(transcript ? "No prompts in this transcript" : "Prompt picker requires Pi's fullscreen transcript"));
-          return new Text("");
+  const messageIds = new WeakMap<object, string>();
+  const marked = new Set<string>();
+  function loadMarks(ctx: ExtensionContext) {
+    marked.clear();
+    for (const entry of ctx.sessionManager.getEntries()) {
+      if (entry.type === "message" && entry.message.role === "assistant") {
+        messageIds.set(entry.message, entry.id);
+      } else if (entry.type === "custom" && entry.customType === MARK_ENTRY && typeof entry.data?.id === "string") {
+        if (entry.data.marked) marked.add(entry.data.id);
+        else marked.delete(entry.data.id);
+      }
+    }
+  }
+
+  const cache = new WeakMap<readonly string[], readonly string[]>();
+  const restoreRender: (() => void)[] = [];
+  pi.on("session_start", (_event, ctx) => {
+    if (!ctx.hasUI) return;
+    loadMarks(ctx);
+    if (restoreRender.length) return;
+    for (const { prototype } of [AssistantMessageComponent, UserMessageComponent, SkillInvocationMessageComponent]) {
+      const render = prototype.render;
+      function renderBookmark(this: unknown, width: number) {
+        const lines = render.call(this, width);
+        const component = this as RenderedComponent;
+        const id = component.messageId ?? messageIds.get(component.lastMessage ?? component);
+        if (!id || !marked.has(id) || component.skillBlock?.userMessage || !lines.length || width < visibleWidth(BOOKMARK)) return lines;
+        let bookmarked = cache.get(lines);
+        if (!bookmarked) {
+          // Use the existing blank first row to preserve scroll and mouse positions.
+          if (stripTerminalSequences(lines[0]).trim()) return lines;
+          const zone = lines[0].startsWith(ZONE_START) ? ZONE_START : "";
+          const first = truncateToWidth(BOOKMARK + lines[0].slice(zone.length), width, "");
+          bookmarked = [zone + first, ...lines.slice(1)];
+          cache.set(lines, bookmarked);
         }
-
-        const { prompts } = transcript;
-        const items = prompts.map(({ text }, i) => ({
-          value: String(i),
-          label: replaceControlCharacters(stripTerminalSequences(text).replace(/\s+/g, " ").trim()),
-        })).reverse();
-        const light = theme.appearance === "light";
-        const mode = theme.getColorMode();
-        const panel = parseColor(light ? "#f2f2f2" : "#262626");
-        const text = parseColor(light ? "#262626" : "#e4e4e4");
-        const blue = parseColor(light ? "#275b97" : "#a1c9ef");
-        const blueBg = parseColor(light ? "#dce8f5" : "#30445b");
-        const mutedColor = parseColor(light ? "#595959" : "#ababab");
-        const muted = (line: string) => styleText(line, { fg: mutedColor }, mode);
-        const border = (line: string) => styleText(line, { fg: mutedColor, bg: panel }, mode);
-        const fit = (line: string, width: number) => truncateToWidth(line, width, "", true);
-        let bodyWidth = 0;
-        const selected = (line: string) => styleText(fit(line, bodyWidth), { fg: blue, bg: blueBg, bold: true }, mode);
-
-        let filtering = false;
-        const input = new Input({ prompt: "/ ", placeholder: "Filter prompts", placeholderStyle: muted });
-        input.focused = true;
-
-        const listTheme = {
-          selectedPrefix: selected,
-          selectedText: selected,
-          description: muted,
-          scrollInfo: muted,
-          noMatch: () => muted("  No matching prompts"),
-        };
-        function makeList() {
-          const query = input.getValue().trim().toLowerCase();
-          const visible = Math.max(1, Math.min(10, tui.terminal.rows - 7));
-          const list = new SelectList(items.filter(({ label }) => label.toLowerCase().includes(query)), visible, listTheme);
-          list.onSelect = ({ value }) => {
-            const target = prompts[Number(value)].component;
-            const current = readTranscript(tui);
-            const match = current?.prompts.find(({ component }) => component === target);
-            if (!current || !match) return done("This prompt is no longer in the transcript");
-            current.scroll.scrollTo(match.row, { disableFollow: true });
-            done(undefined);
-          };
-          return list;
-        }
-        let list = makeList();
-        return {
-          render(width: number) {
-            if (width < 4) return [];
-            bodyWidth = width - 2;
-            const title = truncateToWidth("─ Transcript prompts ", bodyWidth, "");
-            const rule = "─".repeat(bodyWidth);
-            const row = (line: string) => border("│") + styleText(fit(line, bodyWidth), { fg: text, bg: panel }, mode) + border("│");
-            const footer = filtering
-              ? " ↑/↓ Move   Enter Jump   Esc Close"
-              : " j/k or ↑/↓ Move   / Filter   Enter Jump   Esc Close";
-            return [
-              border("╭" + title + "─".repeat(bodyWidth - visibleWidth(title)) + "╮"),
-              ...(filtering ? input.render(bodyWidth - 1).map((line) => row(" " + line)) : []),
-              ...list.render(bodyWidth).map(row),
-              border("├" + rule + "┤"),
-              row(muted(truncateToWidth(footer, bodyWidth))),
-              border("╰" + rule + "╯"),
-            ];
-          },
-          invalidate() {
-            input.invalidate();
-            list.invalidate();
-          },
-          handleInput(data: string) {
-            if (keys.matches(data, "tui.select.cancel")) return done(undefined);
-            const selectionKeys = ["tui.select.up", "tui.select.down", "tui.select.pageUp", "tui.select.pageDown", "tui.select.confirm"] as const;
-            if (selectionKeys.some((key) => keys.matches(data, key))) {
-              list.handleInput(data);
-            } else if (!filtering) {
-              if (matchesKey(data, "/")) filtering = true;
-              else if (matchesKey(data, "j")) list.handleInput("\x1b[B");
-              else if (matchesKey(data, "k")) list.handleInput("\x1b[A");
-            } else {
-              const previous = input.getValue();
-              input.handleInput(data);
-              if (previous !== input.getValue()) list = makeList();
-            }
-          },
-        };
-      }, { overlay: true, overlayOptions: { anchor: "center", width: "80%", maxHeight: "100%" } });
-      if (status) ctx.ui.notify(status, "info");
-    },
+        return bookmarked;
+      }
+      const ownRender = Object.hasOwn(prototype, "render");
+      prototype.render = renderBookmark;
+      restoreRender.push(() => {
+        if (prototype.render !== renderBookmark) return;
+        if (ownRender) prototype.render = render;
+        else Reflect.deleteProperty(prototype, "render");
+      });
+    }
   });
+  pi.on("session_shutdown", () => {
+    for (const restore of restoreRender.splice(0)) restore();
+  });
+
+  for (const markedOnly of [false, true]) {
+    const title = markedOnly ? "Marked messages" : "Transcript messages";
+    pi.registerShortcut(markedOnly ? "alt+m" : "alt+p", {
+      description: `Find ${markedOnly ? "a marked message" : "a prompt or reply"} in the fullscreen transcript`,
+      handler: async (ctx) => {
+        loadMarks(ctx);
+        const status = await ctx.ui.custom<string | undefined>((tui, theme, keys, done) => {
+          const transcript = readTranscript(tui, messageIds);
+          if (!transcript) {
+            queueMicrotask(() => done("Message picker requires Pi's fullscreen transcript"));
+            return new Text("");
+          }
+
+          const { messages } = transcript;
+          // Live prompts lack IDs. Match the ordered suffix of the active branch so
+          // repeated text cannot select a different copy of a prompt.
+          if (ctx.isIdle()) {
+            const live = messages.filter(({ component, isReply }) => !isReply && !component.messageId);
+            if (live.length) {
+              const saved = ctx.sessionManager.getBranch().flatMap((entry) => {
+                if (entry.type !== "message" || entry.message.role !== "user") return [];
+                const content = entry.message.content;
+                const text = typeof content === "string" ? content : content.flatMap((part) => part.type === "text" ? [part.text] : []).join("");
+                if (!text) return [];
+                const skill = parseSkillBlock(text);
+                return [{ id: entry.id, text: skill ? skill.userMessage || "/skill:" + skill.name : text }];
+              }).slice(-live.length);
+              if (saved.length === live.length && live.every(({ text }, i) => text === saved[i].text)) {
+                live.forEach((message, i) => {
+                  message.id = saved[i].id;
+                  messageIds.set(message.component, saved[i].id);
+                });
+              }
+            }
+          }
+          const items = messages.map(({ text, isReply, id }, i) => ({
+            value: String(i),
+            id,
+            isReply,
+            text: replaceControlCharacters(stripTerminalSequences(text).replace(/\s+/g, " ").trim()),
+          })).reverse();
+          const light = theme.appearance === "light";
+          const mode = theme.getColorMode();
+          const panel = parseColor(light ? "#f2f2f2" : "#262626");
+          const text = parseColor(light ? "#262626" : "#e4e4e4");
+          const blue = parseColor(light ? "#275b97" : "#a1c9ef");
+          const blueBg = parseColor(light ? "#dce8f5" : "#30445b");
+          const mutedColor = parseColor(light ? "#595959" : "#ababab");
+          const muted = (line: string) => styleText(line, { fg: mutedColor }, mode);
+          const border = (line: string) => styleText(line, { fg: mutedColor, bg: panel }, mode);
+          const fit = (line: string, width: number) => truncateToWidth(line, width, "", true);
+          let bodyWidth = 0;
+          const selected = (line: string) => styleText(fit(line, bodyWidth), { fg: blue, bg: blueBg, bold: true }, mode);
+
+          let filtering = false;
+          const input = new Input({ prompt: "/ ", placeholder: "Filter messages", placeholderStyle: muted });
+          input.focused = true;
+
+          const listTheme = {
+            selectedPrefix: selected,
+            selectedText: selected,
+            description: muted,
+            scrollInfo: muted,
+            noMatch: () => muted(markedOnly && !input.getValue() ? "  No marked messages" : "  No matching messages"),
+          };
+          function makeList() {
+            const query = input.getValue().trim().toLowerCase();
+            const visible = Math.max(1, Math.min(10, tui.terminal.rows - 7));
+            const matches = items.filter(({ text, id }) =>
+              (!markedOnly || (id && marked.has(id))) && text.toLowerCase().includes(query),
+            ).map(({ value, text, isReply, id }) => ({
+              value,
+              label: `${id && marked.has(id) ? BOOKMARK : " "} ${isReply ? "  󰚩" : "󰀄"} ${text}`,
+            }));
+            const list = new SelectList(matches, visible, listTheme);
+            list.onSelect = ({ value }) => {
+              const target = messages[Number(value)].component;
+              const current = readTranscript(tui, messageIds);
+              const match = current?.messages.find(({ component }) => component === target);
+              if (!current || !match) return done("This message is no longer in the transcript");
+              current.scroll.scrollTo(match.row, { disableFollow: true });
+              done(undefined);
+            };
+            return { list, matches };
+          }
+          let { list, matches } = makeList();
+          return {
+            render(width: number) {
+              if (width < 4) return [];
+              bodyWidth = width - 2;
+              const heading = truncateToWidth(`─ ${title} `, bodyWidth, "");
+              const rule = "─".repeat(bodyWidth);
+              const row = (line: string) => border("│") + styleText(fit(line, bodyWidth), { fg: text, bg: panel }, mode) + border("│");
+              const footer = filtering
+                ? " ↑/↓ Move   Tab Mark/unmark   Enter Jump   Esc Close"
+                : " j/k Move   / Filter   m Mark/unmark   Enter Jump   Esc Close";
+              return [
+                border("╭" + heading + "─".repeat(bodyWidth - visibleWidth(heading)) + "╮"),
+                ...(filtering ? input.render(bodyWidth - 1).map((line) => row(" " + line)) : []),
+                ...list.render(bodyWidth).map(row),
+                border("├" + rule + "┤"),
+                row(muted(truncateToWidth(footer, bodyWidth))),
+                border("╰" + rule + "╯"),
+              ];
+            },
+            invalidate() {
+              input.invalidate();
+              list.invalidate();
+            },
+            handleInput(data: string) {
+              if (keys.matches(data, "tui.select.cancel")) return done(undefined);
+              const selectionKeys = ["tui.select.up", "tui.select.down", "tui.select.pageUp", "tui.select.pageDown", "tui.select.confirm"] as const;
+              if (matchesKey(data, "tab") || (!filtering && matchesKey(data, "m"))) {
+                const selected = list.getSelectedItem();
+                if (!selected) return;
+                const id = messages[Number(selected.value)].id;
+                if (!id) return;
+                const index = matches.findIndex(({ value }) => value === selected.value);
+                const mark = !marked.has(id);
+                pi.appendEntry(MARK_ENTRY, { id, marked: mark });
+                if (mark) marked.add(id);
+                else marked.delete(id);
+                ({ list, matches } = makeList());
+                if (matches.length) list.setSelectedIndex(Math.min(index, matches.length - 1));
+              } else if (selectionKeys.some((key) => keys.matches(data, key))) {
+                list.handleInput(data);
+              } else if (!filtering) {
+                if (matchesKey(data, "/")) filtering = true;
+                else if (matchesKey(data, "j")) list.handleInput("\x1b[B");
+                else if (matchesKey(data, "k")) list.handleInput("\x1b[A");
+              } else {
+                const previous = input.getValue();
+                input.handleInput(data);
+                if (previous !== input.getValue()) ({ list, matches } = makeList());
+              }
+            },
+          };
+        }, { overlay: true, overlayOptions: { anchor: "center", width: "80%", maxHeight: "100%" } });
+        if (status) ctx.ui.notify(status, "info");
+      },
+    });
+  }
 }
