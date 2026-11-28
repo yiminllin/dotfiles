@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """A stable, four-column tmux board for Pi sessions. MIT licensed."""
 
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -229,10 +230,10 @@ class Agent:
 
 
 def collect_agents():
-    # Serialize slot allocation across simultaneously opened boards.
-    lock = "pi_agent_board_slots"
-    tmux("wait-for", "-L", lock)
-    try:
+    # Serialize slot allocation per tmux server. The OS releases the lock on exit.
+    path = tmux("display-message", "-p", "#{socket_path}") + ".pi-agent-board.lock"
+    with os.fdopen(os.open(path, os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
         snapshot = tmux("list-panes", "-a", "-F", PANE_FORMAT)
         ancestors = pi_ancestors()
         panes = []
@@ -274,8 +275,6 @@ def collect_agents():
                 pane["@pi_session_id"], pane["@pi_session_cwd"], pane["@pi_session_owner"], stale,
             ))
         return sorted(agents, key=lambda agent: agent.slot)
-    finally:
-        tmux("wait-for", "-U", lock)
 
 
 def progress_color(line):
