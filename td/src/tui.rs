@@ -723,6 +723,7 @@ impl App {
             help_return: Mode::Normal,
         };
         app.reload()?;
+        app.focus_dashboard_start();
         Ok(app)
     }
 
@@ -853,16 +854,28 @@ impl App {
         self.pr_titles.update(urls)
     }
 
+    fn focus_dashboard_start(&mut self) {
+        self.reset_selection();
+        self.center_selected_task = false;
+        if self.status == TaskStatus::Pending {
+            let first_pending = self
+                .visible_tasks()
+                .iter()
+                .position(|view| view.task.status == TaskStatus::Pending);
+            if let Some(index) = first_pending {
+                self.selected = index;
+                self.center_selected_task = true;
+            }
+        }
+    }
+
     fn select_project(&mut self, project: Option<&'static str>) {
         self.project = project;
         self.work_category = None;
         self.improve_category = None;
-        self.selected = 0;
-        self.selected_line = 0;
-        self.row_heights.clear();
-        self.center_selected_task = false;
-        self.table_state = TableState::default();
         self.mode = Mode::Normal;
+        self.focus_dashboard_start();
+        self.row_heights.clear();
     }
 
     fn status_name(&self) -> &str {
@@ -1370,8 +1383,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             } else {
                 TaskStatus::Pending
             };
-            app.selected = 0;
-            app.table_state = TableState::default();
+            app.focus_dashboard_start();
         }
         KeyCode::Down | KeyCode::Char('j') => {
             if app.selected + 1 < app.visible_tasks().len() {
@@ -2831,6 +2843,47 @@ mod tests {
         handle_key(&mut app, KeyCode::Char('m')).unwrap();
         assert!(matches!(app.mode, Mode::Normal));
         assert_eq!(std::fs::read(&app.path).unwrap(), before);
+    }
+
+    #[test]
+    fn dashboards_start_on_the_first_pending_task() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        for (project, description, state) in [
+            ("work", "done work", None),
+            ("work", "next work", Some(TaskState::Next)),
+            ("work", "active work", Some(TaskState::InProgress)),
+            ("improve", "done improvement", None),
+            ("improve", "next improvement", Some(TaskState::Next)),
+        ] {
+            app.select_project(Some(project));
+            app.form.values = [description.into(), project.into()];
+            app.form.state = state.unwrap_or_default();
+            save_form(&mut app, None).unwrap();
+            if state.is_none() {
+                pick_task_state(&mut app, 'd');
+            }
+        }
+
+        let mut app = App::new(app.path).unwrap();
+        assert_eq!(app.selected_task().unwrap().task.description, "active work");
+        assert!(std::mem::take(&mut app.center_selected_task));
+        for (key, expected) in [('w', "active work"), ('i', "next improvement")] {
+            handle_key(&mut app, KeyCode::Char('p')).unwrap();
+            handle_key(&mut app, KeyCode::Char(key)).unwrap();
+            assert_eq!(app.visible_tasks()[0].task.status, TaskStatus::Completed);
+            assert_eq!(app.selected_task().unwrap().task.description, expected);
+            assert!(std::mem::take(&mut app.center_selected_task));
+            handle_key(&mut app, KeyCode::Tab).unwrap();
+            assert_eq!(
+                app.selected_task().unwrap().task.status,
+                TaskStatus::Completed
+            );
+            assert!(!app.center_selected_task);
+            handle_key(&mut app, KeyCode::BackTab).unwrap();
+            assert_eq!(app.selected_task().unwrap().task.description, expected);
+            assert!(std::mem::take(&mut app.center_selected_task));
+        }
     }
 
     #[test]

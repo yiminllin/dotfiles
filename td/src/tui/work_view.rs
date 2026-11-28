@@ -886,6 +886,8 @@ mod tests {
         let before = std::fs::read(&app.path).unwrap();
         handle_key(&mut app, KeyCode::Char('S')).unwrap();
         app.select_project(None);
+        handle_key(&mut app, KeyCode::Char('g')).unwrap();
+        handle_key(&mut app, KeyCode::Char('g')).unwrap();
         handle_key(&mut app, KeyCode::Char('S')).unwrap();
         assert_eq!(std::fs::read(&app.path).unwrap(), before);
     }

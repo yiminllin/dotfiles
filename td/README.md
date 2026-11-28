@@ -203,7 +203,9 @@ The dashboard header shows the current project view. Each project view matches t
 project field exactly, not words in the description. Pending/Done and `/` text
 filtering work within that view. Switching projects keeps the status and text
 filter. New tasks default to the current project; you can change it in the form.
-Project views are session-only; starting `td` opens All projects.
+Project views are session-only; starting `td` opens All projects. In Pending,
+opening a dashboard selects and centers the first In progress task, or the first
+other pending task if none are in progress. Recent Done tasks remain above it.
 
 ### Workflow state
 
