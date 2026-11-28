@@ -1931,14 +1931,26 @@ impl TaskBorder {
     }
 }
 
-fn task_description_style(style: Style, first: bool) -> Style {
-    let style = if first {
+fn task_description_style(style: Style, first: bool, no_state: bool, done: bool) -> Style {
+    let style = if first && !no_state {
         style.add_modifier(Modifier::BOLD)
     } else {
         style.remove_modifier(Modifier::BOLD)
     };
-    if style.bg.is_some() {
-        style.fg(Color::Rgb(15, 23, 32))
+    if let Some(Color::Rgb(r, g, b)) = style.bg {
+        let foreground = if done || no_state {
+            Color::Rgb(15u8.midpoint(r), 23u8.midpoint(g), 32u8.midpoint(b))
+        } else {
+            Color::Rgb(15, 23, 32)
+        };
+        let style = style.fg(foreground);
+        if done {
+            style.remove_modifier(Modifier::DIM)
+        } else {
+            style
+        }
+    } else if no_state {
+        style.add_modifier(Modifier::DIM)
     } else {
         style
     }
@@ -3500,10 +3512,6 @@ mod tests {
             .iter()
             .any(|cell| cell.symbol() == "✓"));
         for row in &rows {
-            assert!(row[4..79]
-                .iter()
-                .filter(|cell| Some(cell.bg) == background)
-                .all(|cell| cell.modifier.contains(Modifier::DIM)));
             assert!(row[..description_start]
                 .iter()
                 .all(|cell| !cell.modifier.contains(Modifier::CROSSED_OUT)));
@@ -3517,7 +3525,9 @@ mod tests {
             assert!(row[description_start..description_end]
                 .iter()
                 .filter(|cell| cell.symbol() != " ")
-                .all(|cell| cell.modifier.contains(Modifier::CROSSED_OUT)));
+                .all(|cell| cell.modifier.contains(Modifier::CROSSED_OUT)
+                    && cell.fg == Color::Rgb(120, 128, 136)
+                    && !cell.modifier.contains(Modifier::DIM)));
         }
         assert_eq!(
             buffer
@@ -3855,11 +3865,10 @@ mod tests {
                                 })
                                 .unwrap();
                             assert!(cells.iter().all(|cell| {
-                                cell.fg == Color::Rgb(15, 23, 32)
+                                matches!((cell.fg, cell.bg), (Color::Rgb(r, g, b), Color::Rgb(br, bg, bb))
+                                    if (r, g, b) == (15u8.midpoint(br), 23u8.midpoint(bg), 32u8.midpoint(bb)))
                                     && Some(cell.bg) == task_row_style(project, second_index).bg
-                                    && cell.modifier.contains(Modifier::BOLD)
-                                        == (label == "second task")
-                                    && !cell.modifier.contains(Modifier::DIM)
+                                    && !cell.modifier.intersects(Modifier::BOLD | Modifier::DIM)
                             }));
                         }
                     }

@@ -391,7 +391,12 @@ pub(super) fn draw_task_table(frame: &mut Frame, app: &mut App, body: Rect) {
                 } else {
                     Cell::default()
                 },
-                Cell::from(line).style(task_description_style(style, index == 0)),
+                Cell::from(line).style(task_description_style(
+                    style,
+                    index == 0,
+                    task.status == TaskStatus::Pending && task.state == TaskState::None,
+                    done,
+                )),
                 Cell::from(link_lines.get(index).cloned().unwrap_or_default()).style(
                     Style::default()
                         .fg(Color::Rgb(114, 125, 134))
