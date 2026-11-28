@@ -105,10 +105,10 @@ pub(super) fn draw_dashboard(frame: &mut Frame, app: &mut App) {
         .filter(|view| view.task.status == TaskStatus::Completed)
         .count();
     let digits = if frame.area().width >= 60 { 3 } else { 2 };
-    let count = |icon, n: usize| {
+    let count = |icon, n: usize, style: Style| {
         Span::styled(
             format!("{icon} {n:<digits$}"),
-            Style::default().add_modifier(Modifier::BOLD),
+            style.add_modifier(Modifier::BOLD),
         )
     };
     let mut project = Span::styled(format!(" {} ", project_heading(app.project)), selected_tab);
@@ -128,12 +128,12 @@ pub(super) fn draw_dashboard(frame: &mut Frame, app: &mut App) {
                 .filter(|view| view.task.status == TaskStatus::Pending && view.task.state == state)
                 .count();
             heading.extend([
-                count(state_icon(state), total),
-                Span::styled("│ ", Style::default().add_modifier(Modifier::DIM)),
+                count(state_icon(state), total, state_style(state)),
+                Span::raw(" "),
             ]);
         }
     }
-    heading.push(count("✓", done));
+    heading.push(count("✓", done, task_done_style()));
     if app.status == TaskStatus::Pending {
         heading.push(Span::styled(
             " (24h)",

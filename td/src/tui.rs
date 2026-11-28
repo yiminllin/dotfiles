@@ -3037,7 +3037,7 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert!(screen.contains("▶ 1  │ → 0  │ Ⅱ 0  │ ✓ 1   (24h)"));
+        assert!(screen.contains("▶ 1   → 0   Ⅱ 0   ✓ 1   (24h)"));
         assert!(header(&wide).contains("/ap"));
         assert!(!handle_key(&mut app, KeyCode::Esc).unwrap());
         assert!(app.filter.is_empty());
@@ -3046,7 +3046,7 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert!(header.contains("▶ 1  │ → 0  │ Ⅱ 1  │ ✓ 1   (24h)"));
+        assert!(header.contains("▶ 1   → 0   Ⅱ 1   ✓ 1   (24h)"));
     }
 
     #[test]
