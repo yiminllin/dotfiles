@@ -96,24 +96,53 @@ fn tmux(args: &[&str]) -> Result<String> {
 }
 
 pub fn default_name(task: &Task) -> String {
-    if task.work.category == crate::work::WorkCategory::Review {
-        if let Some(number) = task.work.prs.split("/pull/").nth(1) {
-            let number: String = number.chars().take_while(char::is_ascii_digit).collect();
-            if !number.is_empty() {
-                return format!("review-{number}");
-            }
+    use crate::work::{jira_key, pr_number, WorkCategory};
+
+    let split_reference = |ch: char| ch.is_whitespace() || matches!(ch, ';' | ',' | '>');
+    if task.work.category == WorkCategory::Review {
+        if let Some(number) = task.work.prs.split(split_reference).find_map(pr_number) {
+            return format!("review-{number}");
         }
     }
-    task.description
-        .split_whitespace()
-        .take(2)
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(24)
-        .collect::<String>()
-        .trim_end()
-        .to_owned()
+    for reference in task.work.jira.split(split_reference) {
+        if let Some(key) = jira_key(reference) {
+            return key.to_ascii_lowercase().replace('_', "-");
+        }
+        if !reference.is_empty() && reference.bytes().all(|byte| byte.is_ascii_digit()) {
+            return format!("fsw-{reference}");
+        }
+    }
+
+    const MAX_LENGTH: usize = 32;
+    let title = task
+        .description
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or_default();
+    let mut name = String::new();
+    let mut length = 0;
+    for word in title
+        .split(|ch: char| !ch.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+    {
+        let word = word.to_lowercase();
+        let word_length = word.chars().count();
+        if name.is_empty() {
+            name.extend(word.chars().take(MAX_LENGTH));
+            length = word_length.min(MAX_LENGTH);
+        } else if length + 1 + word_length <= MAX_LENGTH {
+            name.push('-');
+            name.push_str(&word);
+            length += 1 + word_length;
+        } else {
+            break;
+        }
+    }
+    if name.is_empty() {
+        "agent".into()
+    } else {
+        name
+    }
 }
 
 fn review_pr(task: &Task) -> Option<&str> {

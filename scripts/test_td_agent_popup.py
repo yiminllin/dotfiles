@@ -100,13 +100,18 @@ class AgentPopupTests(unittest.TestCase):
                         return
                 self.fail(f"Not rendered: {text!r}; terminal tail: {b''.join(chunks)[-400:]!r}")
 
-            def wait_for_agent(letter):
-                color = {"A": b"75;105;77", "I": b"150;105;40"}[letter]
-                wait_for(re.compile(rb"\x1b\[38;2;" + color + rb"m(?:\x1b\[[0-9;]*m)*" + letter.encode() + rb"(?= |\x1b)"))
+            def wait_for_agent(active):
+                color, icon = (b"75;105;77", "●") if active else (b"150;105;40", "○")
+                wait_for(re.compile(rb"\x1b\[38;2;" + color + rb"m(?:\x1b\[[0-9;]*m)*" + icon.encode() + rb"(?= |\x1b)"))
 
             def wait_for_settings():
                 tmux("refresh-client")  # Unchanged popup cells may not be sent again.
-                wait_for(re.compile(rb"dd(?:\x1b\[[0-9;?]*[A-Za-z]| )*unlink"))
+                wait_for(b"Save settings")
+
+            def wait_for_dashboard():
+                drain(.15)  # Let a standalone Esc resolve before reading the dashboard behind a popup.
+                tmux("refresh-client")
+                wait_for(b"Pending")
 
             def send(keys):
                 chunks.clear()
@@ -115,6 +120,7 @@ class AgentPopupTests(unittest.TestCase):
             try:
                 tmux("-f", "/dev/null", "new-session", "-d", "-s", "test")
                 tmux("set-option", "-g", "default-shell", "/bin/bash")
+                tmux("set-option", "-s", "escape-time", "0")
                 client, fd = pty.fork()
                 if client == 0:
                     os.environ.pop("TMUX", None)
@@ -129,9 +135,9 @@ class AgentPopupTests(unittest.TestCase):
                     return subprocess.Popen(base + ["display-popup", "-E", "-w", "75%", "-h", "65%", command], env=env)
 
                 popup = open_popup()
-                wait_for(b"c chat")
+                wait_for_dashboard()
                 send(b"pw")
-                wait_for(b"C settings")
+                wait_for_dashboard()
                 wait_for(b"Agent")
                 send(b"c")
                 wait_for(b"review-123")
@@ -145,17 +151,17 @@ class AgentPopupTests(unittest.TestCase):
                 send(b"\x10")  # Ctrl-P from the agent form, not the underlying shell.
                 wait_for(b"Session Finder")
                 send(b"\x1b")
-                wait_for(b"Ctrl-U clear")
+                wait_for_settings()
                 send(b"\x1b[Z\r")  # BackTab to Worktree, then Enter to browse.
                 wait_for(b"Session Finder")
                 send(b"\x1b")
-                wait_for(b"Ctrl-U clear")
+                wait_for_settings()
                 send(b"\t\r")  # Continue from Name to Save settings.
                 drain(.2)
                 self.assertFalse(launch.exists())
                 send(b"\r")
-                wait_for(b"c chat")
-                wait_for_agent("I")
+                wait_for_dashboard()
+                wait_for_agent(False)
                 self.assertIsNone(popup.poll(), "saving settings must keep td open")
                 self.assertFalse(launch.exists(), "saving settings must not launch Pi")
                 send(b"c")
@@ -174,21 +180,21 @@ class AgentPopupTests(unittest.TestCase):
                 self.assertEqual(tmux("show-option", "-qv", "@workspace_path"), str(worktree))
 
                 popup = open_popup()
-                wait_for(b"c chat")
+                wait_for_dashboard()
                 send(b"pw")
-                wait_for_agent("A")
+                wait_for_agent(True)
                 send(b"c")
                 self.assertEqual(popup.wait(timeout=5), 0)
                 self.assertEqual(tmux("display-message", "-p", "#{pane_id}"), agent_pane)
                 self.assertEqual(launch.read_text().splitlines(), arguments)
 
                 popup = open_popup()
-                wait_for(b"c chat")
+                wait_for_dashboard()
                 send(b"pw")
-                wait_for_agent("A")
+                wait_for_agent(True)
                 chunks.clear()
                 tmux("kill-pane", "-t", agent_pane)
-                wait_for_agent("I")
+                wait_for_agent(False)
                 send(b"c")
                 self.assertEqual(popup.wait(timeout=5), 0)
                 self.assertEqual(launch.read_text().splitlines(), arguments)
@@ -214,9 +220,9 @@ class AgentPopupTests(unittest.TestCase):
                 with patch.object(board, "tmux", tmux):
                     slot = next(agent.slot for agent in board.collect_agents() if agent.pi_id == "external-session")
                 popup = open_popup()
-                wait_for(b"c chat")
+                wait_for_dashboard()
                 send(b"pw")
-                wait_for(b"C settings")
+                wait_for_dashboard()
                 send(b"C")
                 wait_for_settings()
                 send(b"\t\t\r")  # Session ID opens the Board, not Pi.
@@ -249,10 +255,17 @@ class AgentPopupTests(unittest.TestCase):
                 wait_for(b"Enter link")
                 send(str(slot).encode())
                 wait_for_settings()
-                send(b"\x1b")
-                wait_for(b"c chat")
+                relinked = json.loads(subprocess.check_output(
+                    [str(BINARY), "--events", str(events), "show", task], env=env, text=True,
+                ))["agent"]
+                self.assertEqual(relinked, saved)
+                send(b"\t\r")  # Save settings and return to the dashboard.
+                wait_for_dashboard()
                 send(b"c")
-                self.assertEqual(popup.wait(timeout=5), 0)
+                end = time.monotonic() + 5
+                while popup.poll() is None and time.monotonic() < end:
+                    drain(.1)
+                self.assertEqual(popup.poll(), 0, b"".join(chunks)[-2000:])
                 self.assertEqual(tmux("display-message", "-p", "#{pane_id}"), target)
                 self.assertEqual(tmux("display-message", "-pt", target, "#{pane_pid}"), target_pid)
 
@@ -264,17 +277,19 @@ class AgentPopupTests(unittest.TestCase):
                 def finish_from_popup(expected_target):
                     nonlocal popup
                     popup = open_popup()
-                    wait_for(b"c chat")
+                    wait_for_dashboard()
                     send(b"pw")
-                    wait_for(b"C settings")
+                    wait_for_dashboard()
                     before = events.read_bytes()
-                    send(b"d")
+                    send(b"sd")
                     wait_for(b"Complete item and close agent?")
                     wait_for(expected_target)
-                    send(b"\x1b")
-                    wait_for_agent("A")
+                    send(b"n")
+                    wait_for_dashboard()
                     self.assertEqual(events.read_bytes(), before, "cancel must not complete the item")
-                    send(b"d")
+                    send(b"sd")
+                    drain(.2)
+                    tmux("refresh-client")
                     wait_for(b"y complete and close")
                     send(b"y")
                     end = time.monotonic() + 5
@@ -294,10 +309,10 @@ class AgentPopupTests(unittest.TestCase):
                 tmux("switch-client", "-t", owned_window)
                 editor = tmux("split-window", "-d", "-P", "-F", "#{pane_id}", "-t", owned_pane, "sleep 60")
                 popup = open_popup()
-                wait_for(b"c chat")
+                wait_for_dashboard()
                 send(b"pw")
-                wait_for(b"C settings")
-                send(b"u")
+                wait_for_dashboard()
+                send(b"ss")
                 drain(.2)
                 send(b"q")
                 popup.wait(timeout=5)

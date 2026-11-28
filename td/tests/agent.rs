@@ -42,7 +42,10 @@ fn links_replace_and_unlink_without_losing_task_fields() {
         ],
     ));
     let id = id.trim();
-    for session in ["first-session", "replacement-session"] {
+    for (session, name) in [
+        ("first-session", "review-pr"),
+        ("replacement-session", "review-pr-details"),
+    ] {
         ok(td(
             &events,
             &[
@@ -61,7 +64,7 @@ fn links_replace_and_unlink_without_losing_task_fields() {
         ));
         let task: Value = serde_json::from_str(&ok(td(&events, &["show", id]))).unwrap();
         assert_eq!(task["agent"]["session_id"], session);
-        assert_eq!(task["agent"]["name"], "Review PR");
+        assert_eq!(task["agent"]["name"], name);
         assert_eq!(
             task["agent"]["worktree"],
             dir.path().canonicalize().unwrap().to_str().unwrap()
@@ -216,11 +219,21 @@ fn opens_new_resumes_saved_and_focuses_only_live_matching_sessions() {
         .unwrap();
     task.work.prs = "https://github.com/example/repo/pull/12345".into();
     assert_eq!(td::agent::default_name(&task), "review-12345");
+    task.work.prs = "#678 > #789".into();
+    assert_eq!(td::agent::default_name(&task), "review-678");
     task.work.prs.clear();
-    task.description = "Fix startup timeout for slow machines".into();
-    assert_eq!(td::agent::default_name(&task), "Fix startup");
+    task.work.jira = "https://example.net/browse/FSW-456".into();
+    assert_eq!(td::agent::default_name(&task), "fsw-456");
+    task.work.jira.clear();
+    task.description = "Simulator Startup / Timeout for slow machines\nMore details".into();
+    assert_eq!(
+        td::agent::default_name(&task),
+        "simulator-startup-timeout-for"
+    );
     task.description = "界".repeat(40);
-    assert_eq!(td::agent::default_name(&task).chars().count(), 24);
+    assert_eq!(td::agent::default_name(&task).chars().count(), 32);
+    task.description = "…".into();
+    assert_eq!(td::agent::default_name(&task), "agent");
 }
 
 #[test]

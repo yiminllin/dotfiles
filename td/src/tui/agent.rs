@@ -56,9 +56,7 @@ pub(super) fn begin(app: &mut App, configure: bool) -> Result<bool> {
     if let Some(agent) = &task.agent {
         app.agent_form.values = [
             agent.worktree.display().to_string(),
-            if agent.name.is_empty()
-                || agent.name == task.description.replace(['\n', '\r', '\t'], " ")
-            {
+            if agent.name.is_empty() {
                 app.agent_form.values[1].clone()
             } else {
                 agent.name.clone()
@@ -240,86 +238,90 @@ pub(super) fn handle_key(app: &mut App, key: KeyCode) -> Result<()> {
     Ok(())
 }
 
+pub(super) const SHORTCUTS: &[(&str, &str)] = &[
+    ("Tab / Shift-Tab / ↑ / ↓", "Move between fields"),
+    (
+        "Enter / F2",
+        "Browse worktrees (Enter on Worktree; F2 anywhere)",
+    ),
+    (
+        "Enter",
+        "Open Agent Board on Session ID; advance from Agent name",
+    ),
+    ("Enter on Save settings", "Save without launching Pi"),
+    ("Ctrl-U", "Clear the focused field"),
+    ("dd on Session ID", "Unlink the saved session"),
+    ("Esc", "Close settings without saving draft edits"),
+];
+
 pub(super) fn draw(frame: &mut Frame, app: &App) {
     let form = &app.agent_form;
-    let block = Block::default().borders(Borders::ALL).title("Pi agent");
-    let inner = block.inner(frame.area());
-    frame.render_widget(block, frame.area());
-    let [worktree, name, session, save, error, help] = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Length(3),
+    let title = format!(" {} Pi agent ", UiField::Agent.icon());
+    let inner = sized_popup_panel(frame, &title, 72, 12);
+    let [fields, divider, save, error] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Length(1),
+        Constraint::Length(1),
         Constraint::Min(0),
-        Constraint::Length(2),
     ])
     .areas(inner);
-    for (index, (label, area, placeholder)) in [
-        (
-            "Worktree · Enter to browse",
-            worktree,
-            "Choose an existing worktree",
-        ),
-        ("Agent name · 1–2 words", name, ""),
-        (
-            "Session ID · Enter Agent Board",
-            session,
-            "New session (leave blank)",
-        ),
+    for (index, (label, placeholder)) in [
+        ("Worktree", "Choose an existing worktree"),
+        ("Agent name", "-"),
+        ("Session ID", "New session (leave blank)"),
     ]
     .into_iter()
     .enumerate()
+    .take(fields.height as usize)
     {
         let value = &form.values[index];
         let focused = index == form.active;
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(label)
-            .border_style(if focused {
-                Style::default().fg(ACCENT)
-            } else {
-                Style::default().add_modifier(Modifier::DIM)
-            });
-        let text_area = block.inner(area);
-        let width = Line::from(value.as_str()).width();
-        let scroll = if focused {
-            width.saturating_sub(text_area.width.saturating_sub(1) as usize) as u16
+        let style = if focused {
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
         } else {
-            0
+            Style::default()
         };
-        frame.render_widget(
-            Paragraph::new(if value.is_empty() { placeholder } else { value })
-                .scroll((0, scroll))
-                .block(block),
-            area,
-        );
-        if focused && text_area.width > 0 && text_area.height > 0 {
-            frame.set_cursor_position((
-                text_area.x + (width - scroll as usize).min(text_area.width as usize - 1) as u16,
-                text_area.y,
-            ));
+        let mut spans = vec![
+            focus_marker(focused),
+            Span::styled(format!("{label:<12}"), style),
+        ];
+        if fields.width >= 28 {
+            spans.push(Span::styled("│ ", FORM_DIVIDER_COLOR));
+        }
+        let label = Line::from(spans);
+        let row = Rect::new(fields.x, fields.y + index as u16, fields.width, 1);
+        let offset = (label.width() as u16).min(row.width);
+        let input = Rect::new(row.x + offset, row.y, row.width - offset, 1);
+        frame.render_widget(Paragraph::new(label), row);
+        if focused && !value.is_empty() {
+            draw_input(frame, "", value, value.len(), input);
+        } else {
+            let text = if value.is_empty() { placeholder } else { value };
+            let style = if value.is_empty() {
+                Style::default().add_modifier(Modifier::DIM)
+            } else {
+                Style::default()
+            };
+            frame.render_widget(Paragraph::new(text).style(style), input);
+            if focused && input.width > 0 {
+                frame.set_cursor_position((input.x, input.y));
+            }
         }
     }
+    frame.render_widget(Paragraph::new(form_divider(inner.width as usize)), divider);
     frame.render_widget(
-        Paragraph::new("[ Save settings ]").style(if form.active == 3 {
-            Style::default()
-                .fg(ACCENT)
-                .add_modifier(Modifier::BOLD | Modifier::REVERSED)
-        } else {
-            Style::default().add_modifier(Modifier::DIM)
-        }),
+        Paragraph::new(Line::from(vec![
+            focus_marker(form.active == 3),
+            Span::raw("Save settings"),
+        ])),
         save,
     );
+
     frame.render_widget(
-        Paragraph::new(form.error.as_str()).style(Style::default().fg(Color::Red)),
+        Paragraph::new(form.error.as_str())
+            .style(Style::default().fg(Color::Red))
+            .wrap(ratatui::widgets::Wrap { trim: true }),
         error,
-    );
-    frame.render_widget(
-        Paragraph::new(
-            "Tab next  Enter choose/save  F2 worktree\nCtrl-U clear  dd unlink ID  Esc cancel",
-        )
-        .style(Style::default().add_modifier(Modifier::DIM)),
-        help,
     );
 }
 
@@ -444,9 +446,8 @@ mod tests {
                         .unwrap();
                     let state = header.find("State").unwrap();
                     let agent = header.find("Agent").unwrap();
-                    let project_column = header.find("Proj").unwrap();
-                    assert_eq!(project_column, state + 6);
-                    assert_eq!(agent, project_column + 6);
+                    assert_eq!(header.find("Proj"), project.is_none().then_some(state + 6));
+                    assert_eq!(agent, state + if project.is_none() { 12 } else { 6 });
                     let agent_x = header[..agent].chars().count() as u16;
                     let cells: Vec<_> = (header_y + 1..24)
                         .map(|y| &buffer[(agent_x, y)])
@@ -532,9 +533,23 @@ mod tests {
                 .iter()
                 .map(|cell| cell.symbol())
                 .collect();
-            assert!(screen.contains("c chat"));
-            assert!(screen.contains("C settings"));
-            assert!(!screen.contains("E settings"));
+            assert!(!screen.contains("[P]roject"));
+            assert!(!screen.contains("[?] More"));
+            super::super::handle_key(&mut app, KeyCode::Char('?')).unwrap();
+            terminal
+                .draw(|frame| super::super::draw(frame, &mut app))
+                .unwrap();
+            let screen: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(screen.contains("Dashboard shortcuts"));
+            assert!(screen.contains("[c / C] Open Pi chat / Agent settings"));
+            super::super::handle_key(&mut app, KeyCode::Esc).unwrap();
+            assert!(matches!(app.mode, Mode::Normal));
         }
         super::super::handle_key(&mut app, KeyCode::Char('C')).unwrap();
         assert!(!app.agent_form.link_requested);
@@ -556,7 +571,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 terminal.get_cursor_position().unwrap(),
-                ratatui::layout::Position::new(2 + Line::from(name).width().min(31) as u16, 5)
+                ratatui::layout::Position::new(18 + Line::from(name).width().min(15) as u16, 4)
             );
         }
         app.agent_form.values[1] = "Saved name".into();
@@ -582,9 +597,24 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect();
         assert!(screen.contains("Pi agent"));
-        assert!(screen.contains("replacement-session"));
+        assert!(screen.contains("Session ID  │ replacement-session"));
         assert!(screen.contains("Save settings"));
-        assert!(screen.contains("dd unlink ID"));
+        assert!(!screen.contains("Ctrl-U"));
+        super::super::handle_key(&mut app, KeyCode::Char('?')).unwrap();
+        terminal
+            .draw(|frame| super::super::draw(frame, &mut app))
+            .unwrap();
+        let help: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(help.contains("[dd on Session ID]"));
+        super::super::handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::Agent));
+        assert_eq!(app.agent_form.values[2], "replacement-session");
         assert!(app.hyperlinks.is_empty());
         handle_key(&mut app, KeyCode::Enter).unwrap();
         assert!(app.agent_form.link_requested);
@@ -621,7 +651,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Esc).unwrap();
         super::super::handle_key(&mut app, KeyCode::Char('c')).unwrap();
         assert!(!app.agent_form.pick_requested);
-        assert_eq!(app.agent_form.values[1], "Review");
+        assert_eq!(app.agent_form.values[1], "review");
         assert!(app.agent_form.values[2].is_empty());
         assert_eq!(std::fs::read(path).unwrap(), unlinked);
         handle_key(&mut app, KeyCode::Enter).unwrap();

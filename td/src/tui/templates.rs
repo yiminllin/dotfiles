@@ -27,6 +27,24 @@ impl Template {
         }
     }
 
+    fn icon(self) -> &'static str {
+        match self {
+            Self::PrReview => "",
+            Self::Improvement => project_entry("improve"),
+            Self::Feature => "",
+            Self::DocumentReview => "",
+        }
+    }
+
+    fn input_hint(self) -> &'static str {
+        match self {
+            Self::PrReview => "PR link",
+            Self::Improvement => "Description",
+            Self::Feature => "Jira key",
+            Self::DocumentReview => "Description + doc link",
+        }
+    }
+
     fn shortcut(self) -> char {
         match self {
             Self::PrReview => 'p',
@@ -46,10 +64,9 @@ impl Template {
 
     fn input_label(self) -> &'static str {
         match self {
-            Self::PrReview => "PR link or number",
-            Self::Improvement => "Description",
-            Self::Feature => "Jira ticket link or key",
-            Self::DocumentReview => "Description",
+            Self::PrReview => "PR",
+            Self::Feature => "Jira",
+            Self::Improvement | Self::DocumentReview => UiField::Description.label(),
         }
     }
 }
@@ -97,17 +114,19 @@ impl QuickAdd {
         }
     }
 
+    pub(super) fn help_form(&self) -> Option<&Form> {
+        (!self.is_saving() && !self.confirm_discard && self.command.is_none()).then_some(&self.form)
+    }
+
     pub(super) fn is_saving(&self) -> bool {
         self.pending_save.is_some()
     }
 
     fn fields(&self) -> &[usize] {
-        if self.template == Template::Improvement {
-            &[0, STATE_FIELD, CATEGORY_FIELD]
-        } else if self.template == Template::DocumentReview {
-            &[0, LINKS_FIELD, STATE_FIELD]
+        if self.template == Template::DocumentReview {
+            &[0, LINKS_FIELD, STATE_FIELD, CATEGORY_FIELD]
         } else {
-            &[0, STATE_FIELD]
+            &[0, STATE_FIELD, CATEGORY_FIELD]
         }
     }
 
@@ -316,6 +335,18 @@ pub(super) fn handle_key(app: &mut App, key: KeyCode) -> Result<()> {
             app.mode = Mode::Normal;
         }
         KeyCode::Esc => quick.confirm_discard = true,
+        KeyCode::Enter
+            if quick.form.is_text()
+                && quick.form.insert
+                && quick.template.lookup_source().is_none() =>
+        {
+            quick.form.edit_description(key);
+            quick.error.clear();
+        }
+        KeyCode::Char('o' | 'O')
+            if quick.form.is_text()
+                && !quick.form.insert
+                && quick.template.lookup_source().is_some() => {}
         KeyCode::Tab | KeyCode::Enter | KeyCode::BackTab => {
             let count = quick.fields().len();
             let step = if key == KeyCode::BackTab {
@@ -417,51 +448,59 @@ fn finish(app: &mut App, template: Template, mut form: Form, title: Option<Strin
     Ok(())
 }
 
-pub(super) fn draw(frame: &mut Frame, app: &App) {
-    let [header, body, footer] = Layout::vertical([
-        Constraint::Length(2),
-        Constraint::Min(1),
-        Constraint::Length(2),
-    ])
-    .areas(frame.area());
-    if matches!(app.mode, Mode::Templates) {
-        frame.render_widget(
-            Paragraph::new("ADD FROM TEMPLATE").style(Style::default().fg(ACCENT)),
-            header,
-        );
-        let lines: Vec<_> = Template::ALL
-            .iter()
-            .enumerate()
-            .map(|(index, template)| {
-                Line::from(format!(
-                    "{} {} [{}]{}",
-                    if index == app.template_selected {
-                        "›"
-                    } else {
-                        " "
-                    },
-                    index + 1,
-                    &template.label()[..1],
-                    &template.label()[1..]
-                ))
-            })
-            .collect();
-        let scroll = app
-            .template_selected
-            .saturating_sub(body.height.saturating_sub(1) as usize);
-        frame.render_widget(Paragraph::new(lines).scroll((scroll as u16, 0)), body);
-        let shortcuts = Template::ALL
-            .iter()
-            .map(|template| template.shortcut().to_string())
-            .collect::<Vec<_>>()
-            .join("/");
-        frame.render_widget(
-            Paragraph::new(format!(
-                "{shortcuts} or 1-{} select  j/k move  Enter choose  Esc cancel",
-                Template::ALL.len()
+fn draw_picker(frame: &mut Frame, selected: usize) {
+    const WIDTH: u16 = 56;
+    let grid = frame.area().width >= WIDTH;
+    let body = sized_popup_panel(frame, " Quick add ", WIDTH, if grid { 7 } else { 10 });
+    let columns = if grid { 2 } else { 1 };
+    let cell_width = body.width / columns as u16;
+    let focus = selected / columns * if grid { 3 } else { 2 };
+    let scroll = focus.saturating_sub(body.height.saturating_sub(2) as usize);
+    for (index, template) in Template::ALL.into_iter().enumerate() {
+        let row = index / columns * if grid { 3 } else { 2 };
+        let x = body.x + (index % columns) as u16 * cell_width;
+        let style = if index == selected {
+            Style::default()
+                .fg(Color::Rgb(15, 23, 32))
+                .bg(ACCENT)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        let mut label = vec![Span::styled(format!("{} ", template.icon()), style)];
+        let mut shortcut = choice_label(template.label(), template.shortcut(), style);
+        if index == selected {
+            for span in &mut shortcut {
+                span.style = style;
+            }
+        }
+        label.extend(shortcut);
+        for (line, text) in [
+            Line::from(label),
+            Line::from(Span::styled(
+                format!("  {}", template.input_hint()),
+                Style::default().add_modifier(Modifier::DIM),
             )),
-            footer,
-        );
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if let Some(y) = (row + line)
+                .checked_sub(scroll)
+                .filter(|&y| y < body.height as usize)
+            {
+                frame.render_widget(
+                    Paragraph::new(text),
+                    Rect::new(x, body.y + y as u16, cell_width, 1),
+                );
+            }
+        }
+    }
+}
+
+pub(super) fn draw(frame: &mut Frame, app: &App) {
+    if matches!(app.mode, Mode::Templates) {
+        draw_picker(frame, app.template_selected);
         return;
     }
     let Some(quick) = app.quick_add.as_ref() else {
@@ -477,99 +516,83 @@ pub(super) fn draw(frame: &mut Frame, app: &App) {
     } else {
         format!("ADD {} | {editing}", quick.template.label().to_uppercase())
     };
-    frame.render_widget(
-        Paragraph::new(title).style(Style::default().fg(ACCENT)),
-        header,
-    );
+    let title = format!(" {title} ");
     if let Some(command) = &quick.command {
-        draw_input(frame, "Command", command, command.len(), body);
-        frame.render_widget(
-            Paragraph::new("Enter runs :wq save or :q! discard  Esc returns to the form"),
-            footer,
-        );
+        draw_form_command(frame, &title, command);
         return;
     }
     if let Some(editor) = &quick.form.references {
-        editor.draw(
-            frame,
-            Rect::new(body.x, body.y, body.width, body.height + footer.height),
-        );
+        editor.draw(frame);
         return;
     }
-    let mut form = quick.form.clone();
-    form.active = quick.form.active;
-    let (mut lines, cursor) =
-        wrapped_form_text(&form, body.width as usize, quick.template.input_label());
-    let links_row = lines.len();
-    if quick.template == Template::DocumentReview {
-        lines.push(Line::from(format!(
-            "{} Useful links: Enter to manage",
-            if quick.form.active == LINKS_FIELD {
-                ">"
-            } else {
-                " "
-            }
-        )));
-    }
-    let state_row = lines.len();
+    let inner = popup_panel(frame, &title);
+    let width = inner.width as usize;
+    let (mut lines, cursor) = form_text_lines(
+        &quick.form,
+        width,
+        quick.template.input_label(),
+        FORM_TEXT_ROWS,
+    );
+    let field_start = lines.len();
+    lines.push(form_divider(width));
     let state = quick.form.state;
-    if quick.form.active == STATE_FIELD {
-        let label = state.label();
-        lines.push(form_choice_line("State", STATE_FIELD, label, &[label]));
-        lines.extend((0..TaskState::ALL.len()).map(|choice| form_state_choice(choice, state)));
+    for &field in &quick.fields()[1..] {
+        let (label, value) = match field {
+            LINKS_FIELD => (UiField::Links, "Enter to manage"),
+            STATE_FIELD => (UiField::State, state.label()),
+            CATEGORY_FIELD => (UiField::Category, quick.form.category().label()),
+            _ => unreachable!(),
+        };
+        lines.push(form_field_line(
+            label,
+            value,
+            field,
+            quick.form.active == field,
+            width,
+        ));
+    }
+    let options_start = lines.len();
+    let selected = match quick.form.active {
+        STATE_FIELD => {
+            lines.extend((0..TaskState::ALL.len()).map(|choice| form_state_choice(choice, state)));
+            TaskState::ALL.iter().position(|value| *value == state)
+        }
+        CATEGORY_FIELD => {
+            let selected = quick.form.category();
+            let categories = quick.form.categories();
+            lines.extend(
+                categories
+                    .iter()
+                    .enumerate()
+                    .map(|(index, &category)| form_category_choice(index, category, selected)),
+            );
+            categories.iter().position(|&category| category == selected)
+        }
+        _ => None,
+    };
+    let message = if quick.is_saving() {
+        "Looking up title… · Esc back"
+    } else if quick.confirm_discard {
+        "Discard changes? y discard · Esc keep editing"
     } else {
-        lines.push(Line::from(format!("  State: {}", state.label())));
-    }
-    let category_row = lines.len();
-    if quick.template == Template::Improvement {
-        let category = quick.form.improve_category.label();
-        lines.push(if quick.active == 2 {
-            form_choice_line("Category", CATEGORY_FIELD, category, &[category])
+        ""
+    };
+    let footer_height = u16::from(!quick.error.is_empty()) + u16::from(!message.is_empty()) * 2;
+    let [body, footer] = Layout::vertical([
+        Constraint::Min(1),
+        Constraint::Length(footer_height.min(inner.height.saturating_sub(1))),
+    ])
+    .areas(inner);
+    let focus = if quick.active == 0 {
+        cursor.1
+    } else if let Some(choice) = selected {
+        if lines.len() <= body.height as usize {
+            lines.len() - 1
         } else {
-            Line::from(format!("  Category: {category}"))
-        });
-        lines.extend(
-            ImproveCategory::ALL
-                .iter()
-                .enumerate()
-                .map(|(index, category)| {
-                    form_category_choice(
-                        (b'1' + index as u8) as char,
-                        category.label(),
-                        "",
-                        *category == quick.form.improve_category,
-                    )
-                }),
-        );
-    }
-    if !quick.error.is_empty() {
-        lines.push(Line::styled(&quick.error, Style::default().fg(Color::Red)));
-    }
-    let focus = match quick.active {
-        0 => cursor.1,
-        _ if quick.form.active == LINKS_FIELD => links_row,
-        _ if quick.form.active == STATE_FIELD => {
-            let choice = if body.height as usize > TaskState::ALL.len() {
-                TaskState::ALL.len() - 1
-            } else {
-                TaskState::ALL
-                    .iter()
-                    .position(|value| *value == state)
-                    .unwrap()
-            };
-            state_row + 1 + choice
+            options_start + choice
         }
-        _ => {
-            let choice = if body.height as usize > ImproveCategory::ALL.len() {
-                ImproveCategory::ALL.len() - 1
-            } else {
-                ImproveCategory::ALL
-                    .iter()
-                    .position(|category| *category == quick.form.improve_category)
-                    .unwrap()
-            };
-            category_row + 1 + choice
-        }
+    } else {
+        field_start + quick.active
     };
     let scroll = focus.saturating_sub(body.height.saturating_sub(1) as usize);
     frame.render_widget(Paragraph::new(lines).scroll((scroll as u16, 0)), body);
@@ -584,14 +607,16 @@ pub(super) fn draw(frame: &mut Frame, app: &App) {
             body.y + (cursor.1 - scroll) as u16,
         ));
     }
-    let help = if quick.is_saving() {
-        "Looking up title… saves automatically; fallback after 5s. Esc back"
-    } else if quick.confirm_discard {
-        "Discard unsaved changes? y discard  n / Esc / Enter keep editing"
-    } else {
-        quick.form.help()
-    };
-    frame.render_widget(Paragraph::new(help), footer);
+    let [error, help_area] = Layout::vertical([
+        Constraint::Length(u16::from(!quick.error.is_empty()).min(footer.height)),
+        Constraint::Min(0),
+    ])
+    .areas(footer);
+    frame.render_widget(
+        Paragraph::new(quick.error.as_str()).style(Style::default().fg(Color::Red)),
+        error,
+    );
+    draw_popup_help(frame, message, help_area);
 }
 
 #[cfg(test)]
@@ -641,7 +666,9 @@ mod tests {
                 Template::Feature => "[F]eature work",
                 Template::DocumentReview => "[D]esign doc review",
             };
-            assert!(text.contains(label));
+            assert!(text.contains(&format!("{} {label}", template.icon())));
+            assert!(text.contains(template.input_hint()));
+            assert!(!text.contains("Enter choose"));
             super::super::handle_key(&mut app, KeyCode::Char(template.shortcut())).unwrap();
             assert_eq!(app.quick_add.as_ref().unwrap().template, template);
             assert!(matches!(app.mode, Mode::QuickAdd));
@@ -708,7 +735,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Tab).unwrap();
         assert_eq!(app.quick_add.as_ref().unwrap().form.active, STATE_FIELD);
         assert!(app.quick_add.as_ref().unwrap().form.references.is_none());
-        handle_key(&mut app, KeyCode::Char('2')).unwrap();
+        handle_key(&mut app, KeyCode::Char('n')).unwrap();
         handle_key(&mut app, KeyCode::BackTab).unwrap();
         handle_key(&mut app, KeyCode::Enter).unwrap();
         paste(&mut app, "file:///invalid");
@@ -735,9 +762,11 @@ mod tests {
     fn improvement_minimal_form_saves_multiline_text_state_and_category() {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
-        enter(&mut app, '2', "Make input easier\nKeep Unicode: 改善");
+        enter(&mut app, '2', "Make input easier");
         super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
-        super::super::handle_key(&mut app, KeyCode::Char('2')).unwrap();
+        paste(&mut app, "Keep Unicode: 改善");
+        super::super::handle_key(&mut app, KeyCode::Tab).unwrap();
+        super::super::handle_key(&mut app, KeyCode::Char('n')).unwrap();
         super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
         super::super::handle_key(&mut app, KeyCode::Char('1')).unwrap();
         super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
@@ -767,7 +796,16 @@ mod tests {
                     KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL),
                 )
                 .unwrap();
-                super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
+                let quick = app.quick_add.as_ref().unwrap();
+                let key = if quick.form.is_text()
+                    && quick.form.insert
+                    && quick.template.lookup_source().is_none()
+                {
+                    KeyCode::Tab
+                } else {
+                    KeyCode::Enter
+                };
+                super::super::handle_key(&mut app, key).unwrap();
                 if app.quick_add.as_ref().unwrap().form.references.is_some() {
                     super::super::handle_key(&mut app, KeyCode::Tab).unwrap();
                 }
@@ -832,8 +870,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         enter(&mut app, 'i', "");
-        super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
-        super::super::handle_key(&mut app, KeyCode::Char('2')).unwrap();
+        super::super::handle_key(&mut app, KeyCode::Tab).unwrap();
+        super::super::handle_key(&mut app, KeyCode::Char('n')).unwrap();
         super::super::handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(app.quick_add.as_ref().unwrap().confirm_discard);
         super::super::handle_key(&mut app, KeyCode::Char('n')).unwrap();
@@ -957,11 +995,18 @@ mod tests {
                         .map(|cell| cell.symbol())
                         .collect();
                     match app.quick_add.as_ref().unwrap().form.active {
-                        STATE_FIELD => assert!(text.contains("● – [1] No state")),
+                        STATE_FIELD => assert!(text.contains("● – No [s]tate")),
                         LINKS_FIELD => assert!(text.contains("Useful links:")),
                         CATEGORY_FIELD => {
-                            assert!(text.contains("●"));
-                            assert!(text.contains("Uncategorized"));
+                            let form = &app.quick_add.as_ref().unwrap().form;
+                            let category = form.category();
+                            let choice = form
+                                .categories()
+                                .iter()
+                                .position(|&value| value == category)
+                                .unwrap()
+                                + 1;
+                            assert!(text.contains(&format!("● [{choice}] {}", category.label())));
                         }
                         _ => {}
                     }
@@ -986,18 +1031,18 @@ mod tests {
                 .map(|cell| cell.symbol())
                 .collect()
         };
-        super::super::handle_key(&mut app, KeyCode::Enter).unwrap();
+        super::super::handle_key(&mut app, KeyCode::Tab).unwrap();
         terminal
             .draw(|frame| super::super::draw(frame, &mut app))
             .unwrap();
-        assert!(text(&terminal).contains("> State:"));
+        assert!(text(&terminal).contains(">  State:"));
         let mut ordinary = app.quick_add.as_ref().unwrap().form.clone();
         ordinary.active = STATE_FIELD;
         for key in [
             KeyCode::Left,
             KeyCode::Right,
-            KeyCode::Char('3'),
-            KeyCode::Char('2'),
+            KeyCode::Char('i'),
+            KeyCode::Char('n'),
         ] {
             ordinary.handle_choice_key(key);
             super::super::handle_key(&mut app, key).unwrap();
@@ -1007,13 +1052,14 @@ mod tests {
             .draw(|frame| super::super::draw(frame, &mut app))
             .unwrap();
         let rendered = text(&terminal);
-        assert!(rendered.contains("> State: [Next]"));
-        assert!(rendered.contains("● → [2] Next"));
-        for state in TaskState::ALL {
-            assert!(rendered.contains(state.label()));
+        assert!(rendered.contains("────"));
+        assert!(rendered.contains(">  State:        │ Next"));
+        assert!(rendered.contains("● → [N]ext"));
+        for label in ["No [s]tate", "[N]ext", "[I]n progress", "[W]aiting"] {
+            assert!(rendered.contains(label));
         }
         let mut small = Terminal::new(TestBackend::new(30, 5)).unwrap();
-        for (key, marker) in [('1', "● – [1] No state"), ('4', "● Ⅱ [4] Waiting")] {
+        for (key, marker) in [('s', "● – No [s]tate"), ('w', "● Ⅱ [W]aiting")] {
             super::super::handle_key(&mut app, KeyCode::Char(key)).unwrap();
             small
                 .draw(|frame| super::super::draw(frame, &mut app))
@@ -1034,8 +1080,8 @@ mod tests {
             .draw(|frame| super::super::draw(frame, &mut app))
             .unwrap();
         let rendered = text(&terminal);
-        assert!(rendered.contains("> Category: [td]"));
-        assert!(rendered.contains("● 1 td"));
+        assert!(rendered.contains(">   Category:     │ td"));
+        assert!(rendered.contains("● [1] td"));
         for category in ImproveCategory::ALL {
             assert!(rendered.contains(category.label()));
         }

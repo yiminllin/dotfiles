@@ -1,5 +1,36 @@
 use serde::{Deserialize, Serialize};
 
+pub(crate) fn pr_number(reference: &str) -> Option<&str> {
+    let number = if let Some(number) = reference.strip_prefix('#') {
+        number
+    } else if reference.bytes().all(|byte| byte.is_ascii_digit()) {
+        reference
+    } else {
+        reference
+            .split_once("/pull/")?
+            .1
+            .split(['?', '#', '/'])
+            .next()?
+    };
+    (!number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())).then_some(number)
+}
+
+pub(crate) fn jira_key(reference: &str) -> Option<&str> {
+    let id = reference
+        .split_once("/browse/")
+        .map_or(reference, |(_, id)| id)
+        .split(['?', '#', '/'])
+        .next()?;
+    let (project, number) = id.rsplit_once('-')?;
+    (!project.is_empty()
+        && project
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+        && !number.is_empty()
+        && number.bytes().all(|byte| byte.is_ascii_digit()))
+    .then_some(id)
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkCategory {

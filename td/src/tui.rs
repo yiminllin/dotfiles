@@ -11,7 +11,7 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Flex, Layout, Rect},
+    layout::{Constraint, Flex, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
@@ -38,7 +38,7 @@ mod templates;
 mod title_lookup;
 mod work_view;
 use hyperlinks::{jira_links, pr_links, Hyperlink, Reference};
-use work_view::draw_work_dashboard;
+use work_view::draw_dashboard;
 
 pub fn run(path: PathBuf, pi_session: Option<&str>) -> Result<()> {
     let mut app = App::new(path)?;
@@ -88,6 +88,7 @@ struct App {
     work_category: Option<WorkCategory>,
     improve_category: Option<ImproveCategory>,
     state_selected: usize,
+    project_selected: usize,
     input: String,
     form: Form,
     initial_form: Form,
@@ -100,6 +101,7 @@ struct App {
     hyperlinks: Vec<Hyperlink>,
     clipboard: Option<String>,
     mode: Mode,
+    help_return: Mode,
 }
 
 const ACCENT: Color = Color::Indexed(109);
@@ -108,6 +110,75 @@ const PROJECT_FIELD: usize = 1;
 const STATE_FIELD: usize = 2;
 const LINKS_FIELD: usize = 3;
 const CATEGORY_FIELD: usize = 4;
+const TASK_FIELDS: [UiField; 5] = [
+    UiField::Description,
+    UiField::Project,
+    UiField::State,
+    UiField::Links,
+    UiField::Category,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Category {
+    Work(WorkCategory),
+    Improve(ImproveCategory),
+    Uncategorized,
+}
+
+impl Category {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Work(category) => category.label(),
+            Self::Improve(category) => category.label(),
+            Self::Uncategorized => "Uncategorized",
+        }
+    }
+
+    fn description(self) -> &'static str {
+        match self {
+            Self::Work(WorkCategory::Feature) => "Build, fix or investigate",
+            Self::Work(WorkCategory::Review) => "Review PRs or design docs; track replies",
+            Self::Work(WorkCategory::Design) => "Explore ideas or learn",
+            Self::Work(WorkCategory::Administrative) => "Tickets, messages, housekeeping",
+            Self::Work(WorkCategory::Uncategorized) => "Decide later",
+            _ => "",
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum UiField {
+    Description,
+    Project,
+    State,
+    Links,
+    Agent,
+    Category,
+}
+
+impl UiField {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Description => "Description",
+            Self::Project => "Project",
+            Self::State => "State",
+            Self::Links => "Useful links",
+            Self::Agent => "Agent",
+            Self::Category => "Category",
+        }
+    }
+
+    fn icon(self) -> &'static str {
+        match self {
+            Self::Description => "",
+            Self::Project => "",
+            Self::State => "",
+            Self::Links => "",
+            Self::Agent => "",
+            Self::Category => " ",
+        }
+    }
+}
 
 fn enum_style(field: usize, value: &str) -> Style {
     match (field, value) {
@@ -136,6 +207,30 @@ fn project_entry(project: &str) -> &str {
         "opensource" => "󰘬",
         "" => "–",
         name => name,
+    }
+}
+
+fn project_name(project: &str) -> &str {
+    match project {
+        "improve" => "Improve",
+        "work" => "Work",
+        "code" => "Code",
+        "note" => "Note",
+        "read" => "Read",
+        "opensource" => "Open source",
+        "" => "No project",
+        name => name,
+    }
+}
+
+fn project_heading(project: Option<&str>) -> String {
+    let Some(project) = project else {
+        return format!("{} All projects", UiField::Project.icon());
+    };
+    if PROJECTS.contains(&project) {
+        format!("{} {}", project_entry(project), project_name(project))
+    } else {
+        project.to_owned()
     }
 }
 
@@ -192,14 +287,32 @@ impl Form {
         }
     }
 
-    fn field_count(&self) -> usize {
-        if matches!(self.values[1].as_str(), "work" | "improve") {
-            5
-        } else {
-            4
+    fn categories(&self) -> Vec<Category> {
+        match self.values[PROJECT_FIELD].as_str() {
+            "work" => WorkCategory::ALL.into_iter().map(Category::Work).collect(),
+            "improve" => ImproveCategory::ALL
+                .into_iter()
+                .map(Category::Improve)
+                .collect(),
+            _ => vec![Category::Uncategorized],
         }
     }
 
+    fn category(&self) -> Category {
+        match self.values[PROJECT_FIELD].as_str() {
+            "work" => Category::Work(self.work.category),
+            "improve" => Category::Improve(self.improve_category),
+            _ => Category::Uncategorized,
+        }
+    }
+
+    fn set_category(&mut self, category: Category) {
+        match category {
+            Category::Work(value) => self.work.category = value,
+            Category::Improve(value) => self.improve_category = value,
+            Category::Uncategorized => {}
+        }
+    }
     fn focus(&mut self, active: usize) {
         self.active = active;
         self.insert = false;
@@ -221,43 +334,19 @@ impl Form {
         }
     }
 
-    fn help(&self) -> &'static str {
-        if self.references.is_some() {
-            "Enter add/edit  Tab back to form  Esc cancel input/back"
-        } else if self.active == LINKS_FIELD {
-            "Enter manage references  Tab next  :wq save  Esc cancel"
-        } else if !self.is_text() {
-            "Arrows/Space cycle  Letter select  Enter/Tab next  :wq save  Esc cancel"
-        } else if self.insert {
-            "Arrows move  Enter/Tab next  Esc normal  :wq in normal mode saves"
-        } else {
-            "h/l 0/$ w/b move  i/a I/A insert  x/dw/dd delete  Enter/Tab next  :wq save  Esc cancel"
-        }
-    }
-
     fn text(&self) -> &str {
         &self.values[0]
     }
 
     fn choose(&mut self, forward: bool) {
-        if self.active == CATEGORY_FIELD && self.values[1] == "improve" {
-            let options = ImproveCategory::ALL;
-            let index = options
-                .iter()
-                .position(|value| *value == self.improve_category)
-                .unwrap();
-            self.improve_category =
-                options[(index + if forward { 1 } else { options.len() - 1 }) % options.len()];
-            return;
-        }
         if self.active == CATEGORY_FIELD {
-            let options = WorkCategory::ALL;
+            let options = self.categories();
             let index = options
                 .iter()
-                .position(|value| *value == self.work.category)
+                .position(|value| *value == self.category())
                 .unwrap();
-            self.work.category =
-                options[(index + if forward { 1 } else { options.len() - 1 }) % options.len()];
+            let step = if forward { 1 } else { options.len() - 1 };
+            self.set_category(options[(index + step) % options.len()]);
             return;
         }
         if self.active == STATE_FIELD {
@@ -281,25 +370,10 @@ impl Form {
 
     fn handle_choice_key(&mut self, key: KeyCode) {
         match key {
-            KeyCode::Char(ch @ '1'..='6')
-                if self.active == CATEGORY_FIELD && self.values[1] == "improve" =>
-            {
-                self.improve_category = ImproveCategory::ALL[(ch as u8 - b'1') as usize];
-            }
-            KeyCode::Char('f' | 'r' | 'd' | 'a' | 'u')
-                if self.active == CATEGORY_FIELD && self.values[1] == "work" =>
-            {
-                let category = match key {
-                    KeyCode::Char('r') => WorkCategory::Review,
-                    KeyCode::Char('d') => WorkCategory::Design,
-                    KeyCode::Char('a') => WorkCategory::Administrative,
-                    KeyCode::Char('u') => WorkCategory::Uncategorized,
-                    _ => WorkCategory::Feature,
-                };
-                self.work.category = category;
-            }
-            KeyCode::Char(ch @ '1'..='4') if self.active == STATE_FIELD => {
-                self.state = TaskState::ALL[(ch as u8 - b'1') as usize];
+            KeyCode::Char(ch @ '1'..='9') if self.active == CATEGORY_FIELD => {
+                if let Some(category) = self.categories().get((ch as u8 - b'1') as usize).copied() {
+                    self.set_category(category);
+                }
             }
             KeyCode::Down if self.active == PROJECT_FIELD => self.choose(true),
             KeyCode::Up if self.active == PROJECT_FIELD => self.choose(false),
@@ -314,6 +388,14 @@ impl Form {
                 self.choose(false);
             }
             KeyCode::Right | KeyCode::Char(' ') => self.choose(true),
+            KeyCode::Char(ch) if self.active == STATE_FIELD => {
+                if let Some(state) = TaskState::ALL
+                    .into_iter()
+                    .find(|state| state_shortcut(*state).eq_ignore_ascii_case(&ch))
+                {
+                    self.state = state;
+                }
+            }
             KeyCode::Left => self.choose(false),
             KeyCode::Backspace | KeyCode::Delete | KeyCode::Char('-')
                 if self.active == PROJECT_FIELD =>
@@ -344,8 +426,15 @@ impl Form {
                     text.insert(self.cursor, ch);
                     self.cursor += ch.len_utf8();
                 }
+                KeyCode::Enter => {
+                    text.insert(self.cursor, '\n');
+                    self.cursor += 1;
+                }
                 KeyCode::Left => self.cursor = previous(text, self.cursor),
                 KeyCode::Right => self.cursor = next(text, self.cursor),
+                KeyCode::Up | KeyCode::Down => {
+                    self.cursor = adjacent_line(text, self.cursor, key == KeyCode::Down);
+                }
                 KeyCode::Home => self.cursor = 0,
                 KeyCode::End => self.cursor = text.len(),
                 KeyCode::Backspace => {
@@ -391,6 +480,19 @@ impl Form {
         }
         match key {
             KeyCode::Char('d') => self.delete_pending = true,
+            KeyCode::Char('o') => {
+                let end = text[self.cursor..]
+                    .find('\n')
+                    .map_or(text.len(), |offset| self.cursor + offset);
+                text.insert(end, '\n');
+                self.cursor = end + 1;
+                self.insert = true;
+            }
+            KeyCode::Char('O') => {
+                self.cursor = line_start(text, self.cursor);
+                text.insert(self.cursor, '\n');
+                self.insert = true;
+            }
             KeyCode::Char('i') => self.insert = true,
             KeyCode::Char('a') => {
                 self.cursor = next(text, self.cursor);
@@ -403,6 +505,14 @@ impl Form {
             KeyCode::Char('A') => {
                 self.cursor = text.len();
                 self.insert = true;
+            }
+            KeyCode::Up | KeyCode::Down | KeyCode::Char('j' | 'k') => {
+                self.cursor = adjacent_line(
+                    text,
+                    self.cursor,
+                    matches!(key, KeyCode::Down | KeyCode::Char('j')),
+                );
+                return;
             }
             KeyCode::Left | KeyCode::Char('h') => self.cursor = previous(text, self.cursor),
             KeyCode::Right | KeyCode::Char('l') => self.cursor = next(text, self.cursor),
@@ -447,7 +557,7 @@ fn handle_reference_key(form: &mut Form, key: KeyCode) {
         form.references.take().unwrap().apply(&mut form.work);
         if matches!(key, KeyCode::Tab | KeyCode::BackTab) {
             form.active = if key == KeyCode::Tab {
-                (form.active + 1) % form.field_count()
+                (form.active + 1) % TASK_FIELDS.len()
             } else {
                 form.active - 1
             };
@@ -470,6 +580,30 @@ fn next(text: &str, cursor: usize) -> usize {
 
 fn line_start(text: &str, cursor: usize) -> usize {
     text[..cursor].rfind('\n').map_or(0, |index| index + 1)
+}
+
+fn adjacent_line(text: &str, cursor: usize, down: bool) -> usize {
+    let start = line_start(text, cursor);
+    let column = text[start..cursor].chars().count();
+    let (target, end) = if down {
+        let Some(newline) = text[cursor..].find('\n') else {
+            return cursor;
+        };
+        let target = cursor + newline + 1;
+        let end = text[target..]
+            .find('\n')
+            .map_or(text.len(), |offset| target + offset);
+        (target, end)
+    } else {
+        let Some(end) = start.checked_sub(1) else {
+            return cursor;
+        };
+        (line_start(text, end), end)
+    };
+    text[target..end]
+        .char_indices()
+        .nth(column)
+        .map_or(end, |(offset, _)| target + offset)
 }
 
 fn next_word(text: &str, mut cursor: usize) -> usize {
@@ -507,9 +641,54 @@ enum Mode {
     Search,
     Project,
     State,
+    Help(u16),
 }
 
+type ShortcutHelp = (&'static str, &'static [(&'static str, &'static str)], bool);
+
 impl App {
+    fn shortcut_help(&self, mode: Mode) -> Option<ShortcutHelp> {
+        let form = match mode {
+            Mode::Form(_) => &self.form,
+            Mode::QuickAdd => self.quick_add.as_ref()?.help_form()?,
+            Mode::Normal => {
+                return Some((
+                    " Dashboard shortcuts ",
+                    work_view::DASHBOARD_SHORTCUTS,
+                    false,
+                ))
+            }
+            Mode::Agent => return Some((" Agent settings shortcuts ", agent::SHORTCUTS, false)),
+            _ => return None,
+        };
+        if let Some(editor) = &form.references {
+            return Some((
+                " Useful links shortcuts ",
+                references::SHORTCUTS,
+                editor.is_editing(),
+            ));
+        }
+        Some((
+            " Task form shortcuts ",
+            &[
+                ("Tab / Shift-Tab", "Move between fields"),
+                ("i / Esc", "Insert text / return to Normal mode"),
+                (
+                    "j / k / o / O",
+                    "Move between lines / open a line below or above",
+                ),
+                (
+                    "Enter",
+                    "Add a description line, open links, or advance a choice",
+                ),
+                ("↑ / ↓", "Move between lines or choices"),
+                (":wq / :q!", "Save / discard in Normal mode"),
+                ("Esc", "Cancel from Normal mode"),
+            ],
+            form.is_text() && form.insert,
+        ))
+    }
+
     fn new(path: PathBuf) -> Result<Self> {
         let mut app = Self {
             path,
@@ -528,6 +707,7 @@ impl App {
             work_category: None,
             improve_category: None,
             state_selected: 0,
+            project_selected: 0,
             input: String::new(),
             form: Form::default(),
             initial_form: Form::default(),
@@ -540,6 +720,7 @@ impl App {
             hyperlinks: Vec::new(),
             clipboard: None,
             mode: Mode::Normal,
+            help_return: Mode::Normal,
         };
         app.reload()?;
         Ok(app)
@@ -571,8 +752,34 @@ impl App {
         Ok(())
     }
 
+    fn reload_and_follow(&mut self, id: Uuid) -> Result<()> {
+        self.reload()?;
+        if let Some(index) = self
+            .visible_tasks()
+            .iter()
+            .position(|view| view.task.id == id)
+        {
+            self.selected = index;
+        }
+        Ok(())
+    }
+
+    fn active_filter(&self) -> &str {
+        if matches!(self.mode, Mode::Search) {
+            self.input.trim()
+        } else {
+            &self.filter
+        }
+    }
+
+    fn reset_selection(&mut self) {
+        self.selected = 0;
+        self.selected_line = 0;
+        self.table_state = TableState::default();
+    }
+
     fn visible_tasks(&self) -> Vec<&TaskView> {
-        let filter = self.filter.to_ascii_lowercase();
+        let filter = self.active_filter().to_ascii_lowercase();
         let now = OffsetDateTime::now_utc();
         let cutoff = now - time::Duration::days(1);
         let mut tasks: Vec<_> =
@@ -759,6 +966,9 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, mut app: App) 
                 templates::paste(&mut app, value);
             } else if matches!(app.mode, Mode::Search | Mode::Command(_)) {
                 app.input.push_str(value);
+                if matches!(app.mode, Mode::Search) {
+                    app.reset_selection();
+                }
             } else if matches!(app.mode, Mode::Form(_)) {
                 if app.form.active == LINKS_FIELD {
                     open_reference_editor(&mut app.form);
@@ -832,6 +1042,17 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Result<bool> {
 
 fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
     let list_prefix = app.list_prefix.take();
+    if app
+        .shortcut_help(app.mode)
+        .is_some_and(|(_, _, text_input)| {
+            key == KeyCode::F(1) || (!text_input && key == KeyCode::Char('?'))
+        })
+    {
+        app.help_return = app.mode;
+        app.agent_form.unlink_pending = false;
+        app.mode = Mode::Help(0);
+        return Ok(false);
+    }
     if let Mode::ConfirmDone(id) = app.mode {
         match key {
             KeyCode::Char('y' | 'Y') => {
@@ -844,7 +1065,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     )?;
                 }
                 app.close_target = None;
-                app.reload()?;
+                app.reload_and_follow(id)?;
                 app.mode = Mode::Normal;
             }
             KeyCode::Esc | KeyCode::Enter | KeyCode::Char('n' | 'N') => {
@@ -863,10 +1084,7 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         let opened = agent::begin(app, key == KeyCode::Char('C'))?;
         return Ok(opened && std::env::var("TD_POPUP").is_ok_and(|value| value == "1"));
     }
-    if key == KeyCode::Char('r')
-        && app.fetches_link_titles()
-        && matches!(app.mode, Mode::Normal)
-    {
+    if key == KeyCode::Char('r') && app.fetches_link_titles() && matches!(app.mode, Mode::Normal) {
         let urls: Vec<_> = app
             .selected_task()
             .into_iter()
@@ -923,8 +1141,11 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                             Mode::Normal
                         };
                 }
+                KeyCode::Enter if app.form.is_text() && app.form.insert => {
+                    app.form.edit_description(key);
+                }
                 KeyCode::Tab | KeyCode::Enter | KeyCode::BackTab => {
-                    let count = app.form.field_count();
+                    let count = TASK_FIELDS.len();
                     let active = (app.form.active
                         + if key == KeyCode::BackTab {
                             count - 1
@@ -969,16 +1190,21 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         }
         Mode::Search => {
             match key {
-                KeyCode::Esc => app.mode = Mode::Normal,
+                KeyCode::Esc => {
+                    app.mode = Mode::Normal;
+                    app.reset_selection();
+                }
                 KeyCode::Enter => {
                     app.filter = app.input.trim().to_string();
-                    app.selected = 0;
-                    app.selected_line = 0;
                     app.mode = Mode::Normal;
                 }
-                KeyCode::Char(ch) => app.input.push(ch),
+                KeyCode::Char(ch) => {
+                    app.input.push(ch);
+                    app.reset_selection();
+                }
                 KeyCode::Backspace => {
                     app.input.pop();
+                    app.reset_selection();
                 }
                 _ => {}
             }
@@ -987,13 +1213,30 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
         Mode::Project => {
             match key {
                 KeyCode::Esc => app.mode = Mode::Normal,
-                KeyCode::Char('a') => app.select_project(None),
+                KeyCode::Enter => {
+                    let project = app
+                        .project_selected
+                        .checked_sub(1)
+                        .map(|index| PROJECTS[index]);
+                    if project == app.project {
+                        app.mode = Mode::Normal;
+                    } else {
+                        app.select_project(project);
+                    }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    app.project_selected = (app.project_selected + 1) % (PROJECTS.len() + 1);
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    app.project_selected =
+                        (app.project_selected + PROJECTS.len()) % (PROJECTS.len() + 1);
+                }
+                KeyCode::Char('a' | 'A') => app.select_project(None),
                 KeyCode::Char('-') => app.select_project(Some("")),
                 KeyCode::Char(ch) => {
-                    if let Some(project) = PROJECTS
-                        .iter()
-                        .find(|project| !project.is_empty() && project.starts_with(ch))
-                    {
+                    if let Some(project) = PROJECTS.iter().find(|project| {
+                        !project.is_empty() && project.starts_with(ch.to_ascii_lowercase())
+                    }) {
                         app.select_project(Some(project));
                     }
                 }
@@ -1002,10 +1245,10 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             return Ok(false);
         }
         Mode::State => {
+            let count = DONE_CHOICE + 1;
             match key {
                 KeyCode::Esc => app.mode = Mode::Normal,
                 KeyCode::Down | KeyCode::Char('j') | KeyCode::Up | KeyCode::Char('k') => {
-                    let count = TaskState::ALL.len();
                     let step = if matches!(key, KeyCode::Down | KeyCode::Char('j')) {
                         1
                     } else {
@@ -1013,14 +1256,23 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                     };
                     app.state_selected = (app.state_selected + step) % count;
                 }
-                KeyCode::Enter | KeyCode::Char('1'..='4') => {
+                KeyCode::Enter | KeyCode::Char(_) => {
                     let index = match key {
-                        KeyCode::Char(ch) => (ch as u8 - b'1') as usize,
-                        _ => app.state_selected,
+                        KeyCode::Char(ch) if DONE_SHORTCUT.eq_ignore_ascii_case(&ch) => {
+                            Some(DONE_CHOICE)
+                        }
+                        KeyCode::Char(ch) => TaskState::ALL
+                            .iter()
+                            .position(|state| state_shortcut(*state).eq_ignore_ascii_case(&ch)),
+                        _ => Some(app.state_selected),
                     };
-                    if let Some(state) = TaskState::ALL.get(index) {
-                        set_selected_state(app, *state)?;
+                    if let Some(index) = index {
                         app.mode = Mode::Normal;
+                        if let Some(state) = TaskState::ALL.get(index) {
+                            set_selected_state(app, *state)?;
+                        } else {
+                            append_selected(app, Event::TaskCompleted)?;
+                        }
                     }
                 }
                 _ => {}
@@ -1047,6 +1299,18 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             _ => return Ok(false),
         },
         Mode::Agent | Mode::ConfirmDone(_) => unreachable!(),
+        Mode::Help(scroll) => {
+            let len = app
+                .shortcut_help(app.help_return)
+                .map_or(1, |(_, keys, _)| keys.len());
+            app.mode = match key {
+                KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('?' | 'q') => app.help_return,
+                KeyCode::Down | KeyCode::Char('j') => Mode::Help((scroll + 1).min(len as u16 - 1)),
+                KeyCode::Up | KeyCode::Char('k') => Mode::Help(scroll.saturating_sub(1)),
+                _ => app.mode,
+            };
+            return Ok(false);
+        }
         Mode::Normal => {}
     }
     let repeated = list_prefix.is_some_and(|prefix| key == KeyCode::Char(prefix));
@@ -1073,14 +1337,9 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             app.table_state = TableState::default();
         }
         KeyCode::Char(ch @ '0'..='5') if app.project == Some("work") => {
-            app.work_category = match ch {
-                '1' => Some(WorkCategory::Feature),
-                '2' => Some(WorkCategory::Review),
-                '3' => Some(WorkCategory::Design),
-                '4' => Some(WorkCategory::Administrative),
-                '5' => Some(WorkCategory::Uncategorized),
-                _ => None,
-            };
+            app.work_category = (ch as usize - '0' as usize)
+                .checked_sub(1)
+                .map(|index| WorkCategory::ALL[index]);
             app.selected = 0;
             app.selected_line = 0;
             app.table_state = TableState::default();
@@ -1098,6 +1357,10 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
                 .copied()
                 .unwrap_or(1)
                 .saturating_sub(1);
+        }
+        KeyCode::Esc if !app.filter.is_empty() => {
+            app.filter.clear();
+            app.reset_selection();
         }
         KeyCode::Esc if app.project.is_some() => app.select_project(None),
         KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
@@ -1135,13 +1398,17 @@ fn handle_key(app: &mut App, key: KeyCode) -> Result<bool> {
             app.mode = Mode::Merge;
         }
         KeyCode::Char('e') => open_edit_form(app),
-        KeyCode::Char('p') => app.mode = Mode::Project,
+        KeyCode::Char('p') => {
+            app.project_selected = app
+                .project
+                .and_then(|project| PROJECTS.iter().position(|p| *p == project))
+                .map_or(0, |i| i + 1);
+            app.mode = Mode::Project;
+        }
         KeyCode::Char('/') => {
             app.input = app.filter.clone();
             app.mode = Mode::Search;
         }
-        KeyCode::Char('d') => append_selected(app, Event::TaskCompleted)?,
-        KeyCode::Char('u') => append_selected(app, Event::TaskRestored)?,
         KeyCode::Char('x') => append_selected(app, Event::TaskDeleted)?,
         _ => {}
     }
@@ -1170,7 +1437,7 @@ fn open_merge_form(app: &mut App) {
         .filter_map(|id| app.tasks.iter().find(|view| view.task.id == *id))
         .map(|view| view.task.description.as_str())
         .collect::<Vec<_>>()
-        .join("\n\n");
+        .join("\n");
     open_task_form(app, id);
     app.form.values[0] = description;
 }
@@ -1321,7 +1588,6 @@ fn save_form(app: &mut App, id: Option<Uuid>) -> Result<()> {
 fn append_selected(app: &mut App, event: Event) -> Result<()> {
     if let Some(task) = app.selected_task() {
         if matches!(event, Event::TaskCompleted) && task.task.status != TaskStatus::Pending
-            || matches!(event, Event::TaskRestored) && task.task.status != TaskStatus::Completed
             || matches!(event, Event::TaskDeleted) && task.task.status == TaskStatus::Deleted
         {
             return Ok(());
@@ -1337,14 +1603,7 @@ fn append_selected(app: &mut App, event: Event) -> Result<()> {
         } else {
             append_event(&app.path, &new_envelope(id, "tui", event)?)?;
         }
-        app.reload()?;
-        if let Some(index) = app
-            .visible_tasks()
-            .iter()
-            .position(|view| view.task.id == id)
-        {
-            app.selected = index;
-        }
+        app.reload_and_follow(id)?;
     }
     Ok(())
 }
@@ -1352,7 +1611,7 @@ fn append_selected(app: &mut App, event: Event) -> Result<()> {
 fn set_selected_state(app: &mut App, state: TaskState) -> Result<()> {
     if let Some(view) = app
         .selected_task()
-        .filter(|view| view.task.status == TaskStatus::Pending)
+        .filter(|view| view.task.status != TaskStatus::Deleted)
     {
         let id = view.task.id;
         let event = Event::TaskUpdated {
@@ -1365,13 +1624,15 @@ fn set_selected_state(app: &mut App, state: TaskState) -> Result<()> {
             work: None,
             improve_category: None,
         };
-        append_event(&app.path, &new_envelope(id, "tui", event)?)?;
-        app.reload()?;
-        app.selected = app
-            .visible_tasks()
-            .iter()
-            .position(|view| view.task.id == id)
-            .unwrap_or(0);
+        let mut events = Vec::new();
+        if view.task.state != state {
+            events.push(new_envelope(id, "tui", event)?);
+        }
+        if view.task.status == TaskStatus::Completed {
+            events.push(new_envelope(id, "tui", Event::TaskRestored)?);
+        }
+        append_events(&app.path, &events)?;
+        app.reload_and_follow(id)?;
     }
     Ok(())
 }
@@ -1379,35 +1640,158 @@ fn set_selected_state(app: &mut App, state: TaskState) -> Result<()> {
 fn cycle_state(app: &mut App) -> Result<()> {
     if let Some(view) = app.selected_task() {
         if view.task.status == TaskStatus::Pending {
-            let index = TaskState::ALL
-                .iter()
-                .position(|state| *state == view.task.state)
-                .unwrap_or(0);
-            set_selected_state(app, TaskState::ALL[(index + 1) % TaskState::ALL.len()])?;
+            if let Some(&state) = TaskState::ALL.get(state_picker_index(&view.task) + 1) {
+                set_selected_state(app, state)?;
+            } else {
+                append_selected(app, Event::TaskCompleted)?;
+            }
         }
     }
     Ok(())
 }
 
-fn open_state_picker(app: &mut App) {
-    if let Some(view) = app
-        .selected_task()
-        .filter(|view| view.task.status == TaskStatus::Pending)
-    {
-        app.state_selected = TaskState::ALL
+const DONE_CHOICE: usize = TaskState::ALL.len();
+const DONE_SHORTCUT: char = 'd';
+
+fn state_shortcut(state: TaskState) -> char {
+    match state {
+        TaskState::None => 's',
+        TaskState::Next => 'n',
+        TaskState::InProgress => 'i',
+        TaskState::Waiting => 'w',
+    }
+}
+
+fn state_picker_index(task: &crate::data::Task) -> usize {
+    if task.status == TaskStatus::Completed {
+        DONE_CHOICE
+    } else {
+        TaskState::ALL
             .iter()
-            .position(|state| *state == view.task.state)
-            .unwrap_or(0);
+            .position(|state| *state == task.state)
+            .unwrap_or(0)
+    }
+}
+
+fn open_state_picker(app: &mut App) {
+    if let Some(view) = app.selected_task() {
+        app.state_selected = state_picker_index(&view.task);
         app.mode = Mode::State;
     }
 }
 
+#[cfg(test)]
+fn pick_task_state(app: &mut App, choice: char) {
+    handle_key(app, KeyCode::Char('s')).unwrap();
+    handle_key(app, KeyCode::Char(choice)).unwrap();
+}
+
+fn popup_panel(frame: &mut Frame, title: &str) -> Rect {
+    sized_popup_panel(frame, title, 96, 24)
+}
+
+fn sized_popup_panel(frame: &mut Frame, title: &str, width: u16, height: u16) -> Rect {
+    let area = frame.area();
+    let width = area.width.min(width);
+    let height = area.height.min(height);
+    let popup = Rect::new(
+        area.x + (area.width - width) / 2,
+        area.y + (area.height - height) / 2,
+        width,
+        height,
+    );
+    frame.render_widget(ratatui::widgets::Clear, popup);
+    let border = Block::bordered()
+        .title(title)
+        .style(
+            Style::default()
+                .fg(Color::Rgb(65, 70, 65))
+                .bg(Color::Rgb(253, 246, 227)),
+        )
+        .border_style(Style::default().fg(ACCENT))
+        .padding(ratatui::widgets::Padding::horizontal(1));
+    let inner = border.inner(popup);
+    frame.render_widget(border, popup);
+    inner
+}
+
+fn focus_marker(focused: bool) -> Span<'static> {
+    if focused {
+        Span::styled(
+            "> ",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        )
+    } else {
+        Span::raw("  ")
+    }
+}
+
+fn draw_popup_help(frame: &mut Frame, help: &str, area: Rect) {
+    frame.render_widget(
+        Paragraph::new(help)
+            .style(Style::default().add_modifier(Modifier::DIM))
+            .wrap(ratatui::widgets::Wrap { trim: true }),
+        area,
+    );
+}
+
+fn draw_project_picker(frame: &mut Frame, app: &App) {
+    let help = "↑/↓ or j/k move · Enter apply · Esc cancel";
+    let lines: Vec<_> = std::iter::once(None)
+        .chain(PROJECTS.iter().copied().map(Some))
+        .enumerate()
+        .map(|(index, project)| {
+            let focused = app.project_selected == index;
+            let shortcut = project.map_or('a', |name| name.chars().next().unwrap_or('-'));
+            let style = if focused {
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            let icon = project.map_or(UiField::Project.icon(), project_entry);
+            let mut spans = vec![
+                Span::styled(if focused { "› " } else { "  " }, style),
+                Span::styled(format!("{icon} "), style),
+            ];
+            spans.extend(choice_label(
+                project.map_or("All projects", project_choice_name),
+                shortcut,
+                style,
+            ));
+            if project == app.project {
+                spans.push(Span::raw("  ✓"));
+            }
+            Line::from(spans)
+        })
+        .collect();
+    let help_width = Line::from(help).width() as u16;
+    let content_width = lines.iter().map(Line::width).max().unwrap_or(0) as u16;
+    let width = help_width.max(content_width) + 4; // Borders and horizontal padding.
+    let footer_rows = if frame.area().width < help_width + 4 {
+        2
+    } else {
+        1
+    };
+    let panel = sized_popup_panel(
+        frame,
+        " Switch project ",
+        width,
+        lines.len() as u16 + footer_rows + 2,
+    );
+    let [body, footer] = Layout::vertical([
+        Constraint::Min(1),
+        Constraint::Length(footer_rows.min(panel.height.saturating_sub(1))),
+    ])
+    .areas(panel);
+    let scroll = app
+        .project_selected
+        .saturating_sub(body.height.saturating_sub(1) as usize);
+    frame.render_widget(Paragraph::new(lines).scroll((scroll as u16, 0)), body);
+    draw_popup_help(frame, help, footer);
+}
+
 fn draw(frame: &mut Frame, app: &mut App) {
     app.hyperlinks.clear();
-    if matches!(app.mode, Mode::Agent) {
-        agent::draw(frame, app);
-        return;
-    }
     if let Mode::ConfirmDone(id) = app.mode {
         app.mode = Mode::Normal;
         draw(frame, app);
@@ -1415,139 +1799,65 @@ fn draw(frame: &mut Frame, app: &mut App) {
         agent::draw_done_confirmation(frame, app);
         return;
     }
-    if matches!(app.mode, Mode::Templates | Mode::QuickAdd) {
-        templates::draw(frame, app);
+    if let Mode::Help(scroll) = app.mode {
+        app.mode = app.help_return;
+        draw(frame, app);
+        app.mode = Mode::Help(scroll);
+        app.hyperlinks.clear();
+        if let Some((title, shortcuts, _)) = app.shortcut_help(app.help_return) {
+            work_view::draw_shortcuts(frame, scroll, title, shortcuts);
+        }
         return;
     }
-    if matches!(app.mode, Mode::State) {
+    if matches!(
+        app.mode,
+        Mode::Project
+            | Mode::Agent
+            | Mode::Templates
+            | Mode::QuickAdd
+            | Mode::State
+            | Mode::Form(_)
+            | Mode::Command(_)
+            | Mode::ConfirmDiscard(_)
+    ) {
+        let mode = app.mode;
         app.mode = Mode::Normal;
         draw(frame, app);
-        app.mode = Mode::State;
+        app.mode = mode;
         app.hyperlinks.clear();
-        work_view::draw_state_picker(frame, app);
-        return;
-    }
-    if app.project == Some("work") && matches!(app.mode, Mode::Normal) {
-        draw_work_dashboard(frame, app);
-        return;
-    }
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(u16::from(
-                !matches!(app.mode, Mode::Normal) || app.project == Some("improve"),
-            )),
-            Constraint::Min(1),
-            Constraint::Length(if matches!(app.mode, Mode::Normal) {
-                2
-            } else {
-                1
-            }),
-        ])
-        .split(frame.area());
-    let (mode, help) = match app.mode {
-        Mode::Normal => (
-            "",
-            "c chat  C settings  a add  A template  e edit  s state  d done  / filter\nj/k move  Tab view  p project  y copy  m merge  S cycle  u reopen  x delete  q quit",
-        ),
-        Mode::Form(id) => (
-            if app.merge_ids.len() >= 2 {
-                "MERGE TASKS"
-            } else if id.is_some() {
-                "EDIT TASK"
-            } else {
-                "ADD TASK"
-            },
-            app.form.help(),
-        ),
-        Mode::Merge => (
-            "SELECT TASKS TO MERGE",
-            "m mark/unmark  j/k gg/G ^u/^d move  Enter edit merge (2+ tasks)  Esc cancel",
-        ),
-        Mode::ConfirmDiscard(_) => (
-            "DISCARD CHANGES?",
-            "Discard unsaved changes? y discard  n / Esc / Enter keep editing",
-        ),
-        Mode::Command(id) => (
-            if app.merge_ids.len() >= 2 {
-                "MERGE TASKS"
-            } else if id.is_some() {
-                "EDIT TASK"
-            } else {
-                "ADD TASK"
-            },
-            "Enter runs :wq save or :q! discard  Esc returns to the form",
-        ),
-        Mode::State | Mode::Templates | Mode::QuickAdd | Mode::Agent | Mode::ConfirmDone(_) => unreachable!(),
-        Mode::Search => ("FILTER", "Enter apply  Esc cancel"),
-        Mode::Project => (
-            "PROJECT VIEWS: [i]mprove [w]ork [c]ode [n]ote [r]ead [o]pensource [-] no project [a]ll",
-            "Letter selects project view  Esc cancel",
-        ),
-    };
-    let title = if matches!(app.mode, Mode::Form(_)) {
-        let editing = app.form.editing_mode();
-        format!("td | {mode} | {editing}")
-    } else if matches!(app.mode, Mode::Merge) {
-        format!("td | {mode} | {} marked", app.merge_ids.len())
-    } else if matches!(app.mode, Mode::Command(_)) {
-        format!("td | {mode} | COMMAND")
-    } else if matches!(app.mode, Mode::Normal) && app.project == Some("improve") {
-        std::iter::once(
-            if app.improve_category.is_none() {
-                "[0 All]"
-            } else {
-                "0 All"
-            }
-            .to_string(),
-        )
-        .chain(
-            ImproveCategory::ALL
-                .iter()
-                .enumerate()
-                .map(|(index, category)| {
-                    let label = format!("{} {}", index + 1, category.label());
-                    if app.improve_category == Some(*category) {
-                        format!("[{label}]")
-                    } else {
-                        label
+        match mode {
+            Mode::Agent => agent::draw(frame, app),
+            Mode::Templates | Mode::QuickAdd => templates::draw(frame, app),
+            Mode::State => work_view::draw_state_picker(frame, app),
+            Mode::Project => draw_project_picker(frame, app),
+            Mode::Form(id) | Mode::Command(id) | Mode::ConfirmDiscard(id) => {
+                let action = if app.merge_ids.len() >= 2 {
+                    "MERGE TASKS"
+                } else if id.is_some() {
+                    "EDIT TASK"
+                } else {
+                    "ADD TASK"
+                };
+                match mode {
+                    Mode::Command(_) => {
+                        draw_form_command(frame, &format!(" {action} · COMMAND "), &app.input)
                     }
-                }),
-        )
-        .collect::<Vec<_>>()
-        .join("  ")
-    } else if matches!(app.mode, Mode::Normal) {
-        String::new()
-    } else {
-        format!("td | {mode}")
-    };
-    frame.render_widget(
-        Paragraph::new(title).style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-        chunks[0],
-    );
-    frame.render_widget(
-        Paragraph::new(help).style(if matches!(app.mode, Mode::ConfirmDiscard(_)) {
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().add_modifier(Modifier::DIM)
-        }),
-        chunks[2],
-    );
-    match app.mode {
-        Mode::State
-        | Mode::Templates
-        | Mode::QuickAdd
-        | Mode::Agent
-        | Mode::ConfirmDone(_) => {
-            unreachable!()
+                    Mode::ConfirmDiscard(_) => {
+                        draw_form(frame, &app.form, " DISCARD CHANGES? ", true)
+                    }
+                    _ => draw_form(
+                        frame,
+                        &app.form,
+                        &format!(" {action} · {} ", app.form.editing_mode()),
+                        false,
+                    ),
+                }
+            }
+            _ => unreachable!(),
         }
-        Mode::Form(_) | Mode::ConfirmDiscard(_) => draw_form(frame, &app.form, chunks[1]),
-        Mode::Search => draw_input(frame, "Filter", &app.input, app.input.len(), chunks[1]),
-        Mode::Command(_) => draw_input(frame, "Command", &app.input, app.input.len(), chunks[1]),
-        Mode::Normal | Mode::Project | Mode::Merge => {
-            work_view::draw_task_table(frame, app, chunks[1]);
-        }
+        return;
     }
+    draw_dashboard(frame, app);
 }
 
 struct TaskBorder {
@@ -1621,8 +1931,12 @@ impl TaskBorder {
     }
 }
 
-fn task_description_style(style: Style) -> Style {
-    let style = style.add_modifier(Modifier::BOLD);
+fn task_description_style(style: Style, first: bool) -> Style {
+    let style = if first {
+        style.add_modifier(Modifier::BOLD)
+    } else {
+        style.remove_modifier(Modifier::BOLD)
+    };
     if style.bg.is_some() {
         style.fg(Color::Rgb(15, 23, 32))
     } else {
@@ -1661,50 +1975,53 @@ fn wrap_description(description: &str, width: usize) -> Text<'static> {
     Text::from(lines)
 }
 
-fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
+fn draw_form_command(frame: &mut Frame, title: &str, command: &str) {
+    let inner = popup_panel(frame, title);
+    let [input, help, _] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(2),
+        Constraint::Min(0),
+    ])
+    .areas(inner);
+    draw_input(frame, "> Command: ", command, command.len(), input);
+    draw_popup_help(frame, ":wq save · :q! discard · Esc back", help);
+}
+
+const FORM_TEXT_ROWS: usize = 5;
+
+fn draw_form(frame: &mut Frame, form: &Form, title: &str, discard: bool) {
     if let Some(editor) = &form.references {
-        editor.draw(frame, area);
+        editor.draw(frame);
         return;
     }
-    let hint = match form.active {
-        CATEGORY_FIELD if form.values[1] == "improve" => "Category: 1-6 or arrows; Enter continues",
-        CATEGORY_FIELD => "Category: f/r/d/a/u or arrows; Enter continues",
-        PROJECT_FIELD => "Project: shortcut or arrows; Enter continues",
-        STATE_FIELD => "State: 1-4 or arrows; Enter continues",
-        LINKS_FIELD => "Useful links: Enter to manage; Tab continues",
-        _ => "Description required | - means unset",
-    };
-    let block = Block::default()
-        .title(hint)
-        .borders(Borders::ALL)
-        .border_style(Style::default().add_modifier(Modifier::DIM));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    let labels = [
-        "Description",
-        "Project",
-        "State",
-        "Useful links",
-        "Category",
-    ];
+    let panel = popup_panel(frame, title);
+    let width = panel.width as usize;
+    let labels = TASK_FIELDS;
     let (description_lines, description_cursor) =
-        wrapped_form_description(form, inner.width as usize);
-    let mut fields = Vec::new();
-    for index in 0..form.field_count() {
-        if index == 0 {
-            fields.extend((0..description_lines.len()).map(|line| (0, Some(line))));
-            continue;
-        }
-        fields.push((index, None));
-        let count = match index {
-            CATEGORY_FIELD if form.values[1] == "improve" => ImproveCategory::ALL.len(),
-            CATEGORY_FIELD => WorkCategory::ALL.len(),
-            PROJECT_FIELD if form.active == PROJECT_FIELD => PROJECTS.len(),
-            STATE_FIELD if form.active == STATE_FIELD => TaskState::ALL.len(),
-            _ => 0,
-        };
-        fields.extend((0..count).map(|choice| (index, Some(choice))));
+        form_text_lines(form, width, UiField::Description.label(), FORM_TEXT_ROWS);
+    let mut fields: Vec<_> = (0..description_lines.len())
+        .map(|line| (0, Some(line)))
+        .collect();
+    fields.push((0, None));
+    fields.extend((1..labels.len()).map(|index| (index, None)));
+    let [inner, footer] = Layout::vertical([
+        Constraint::Min(1),
+        Constraint::Length(if discard {
+            2.min(panel.height.saturating_sub(2))
+        } else {
+            0
+        }),
+    ])
+    .areas(panel);
+    if discard {
+        draw_popup_help(
+            frame,
+            "Discard unsaved changes? y discard · n / Esc / Enter keep editing",
+            footer,
+        );
     }
+
+    let categories = form.categories();
     let (selected_choice, choice_count) = match form.active {
         PROJECT_FIELD => (
             PROJECTS
@@ -1712,17 +2029,11 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                 .position(|project| *project == form.values[1]),
             PROJECTS.len(),
         ),
-        CATEGORY_FIELD if form.values[1] == "improve" => (
-            ImproveCategory::ALL
-                .iter()
-                .position(|value| *value == form.improve_category),
-            ImproveCategory::ALL.len(),
-        ),
         CATEGORY_FIELD => (
-            WorkCategory::ALL
+            categories
                 .iter()
-                .position(|value| *value == form.work.category),
-            WorkCategory::ALL.len(),
+                .position(|value| *value == form.category()),
+            categories.len(),
         ),
         STATE_FIELD => (
             TaskState::ALL.iter().position(|value| *value == form.state),
@@ -1730,6 +2041,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         ),
         _ => (None, 0),
     };
+    fields.extend((0..choice_count).map(|choice| (form.active, Some(choice))));
     let focus = fields
         .iter()
         .rposition(|(index, choice)| {
@@ -1743,21 +2055,31 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                 }
         })
         .unwrap_or(0);
-    let start = focus.saturating_sub(inner.height.saturating_sub(1) as usize);
-    for (line, (index, choice)) in fields
-        .into_iter()
-        .enumerate()
-        .skip(start)
-        .take(inner.height as usize)
-    {
-        let row = Rect::new(inner.x, inner.y + (line - start) as u16, inner.width, 1);
+    let height = inner.height as usize;
+    let mut start = focus.saturating_sub(height.saturating_sub(1));
+    let header = fields
+        .iter()
+        .position(|(index, choice)| *index == form.active && (choice.is_none() || form.is_text()));
+    let pinned = header.filter(|header| *header < start && height > 1);
+    start += usize::from(pinned.is_some());
+    let visible = pinned.into_iter().chain(start..fields.len()).take(height);
+    for (line, field) in visible.enumerate() {
+        let (index, choice) = fields[field];
+        let row = Rect::new(inner.x, inner.y + line as u16, inner.width, 1);
         if index == 0 {
-            let description_line = choice.unwrap_or(0);
+            let Some(description_line) = choice else {
+                frame.render_widget(Paragraph::new(form_divider(width)), row);
+                continue;
+            };
             frame.render_widget(
                 Paragraph::new(description_lines[description_line].clone()),
                 row,
             );
-            if form.active == 0 && description_line == description_cursor.1 && row.width > 0 {
+            if !discard
+                && form.is_text()
+                && description_line == description_cursor.1
+                && row.width > 0
+            {
                 frame.set_cursor_position((
                     row.x + description_cursor.0.min(row.width as usize - 1) as u16,
                     row.y,
@@ -1778,33 +2100,12 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
                 frame.render_widget(Paragraph::new(form_state_choice(choice, form.state)), row);
                 continue;
             }
-            let (shortcut, label, description, selected) =
-                if index == CATEGORY_FIELD && form.values[1] == "improve" {
-                    let category = ImproveCategory::ALL[choice];
-                    (
-                        (b'1' + choice as u8) as char,
-                        category.label(),
-                        "",
-                        category == form.improve_category,
-                    )
-                } else {
-                    let category = WorkCategory::ALL[choice];
-                    let (shortcut, description) = match category {
-                        WorkCategory::Feature => ('f', "Build, fix or investigate"),
-                        WorkCategory::Review => ('r', "Review PRs or design docs; track replies"),
-                        WorkCategory::Design => ('d', "Explore ideas or learn"),
-                        WorkCategory::Administrative => ('a', "Tickets, messages, housekeeping"),
-                        WorkCategory::Uncategorized => ('u', "Decide later"),
-                    };
-                    (
-                        shortcut,
-                        category.label(),
-                        description,
-                        category == form.work.category,
-                    )
-                };
             frame.render_widget(
-                Paragraph::new(form_category_choice(shortcut, label, description, selected)),
+                Paragraph::new(form_category_choice(
+                    choice,
+                    categories[choice],
+                    form.category(),
+                )),
                 row,
             );
             continue;
@@ -1813,8 +2114,7 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
         let reference_labels;
         let value = match index {
             STATE_FIELD => form.state.label(),
-            CATEGORY_FIELD if form.values[1] == "improve" => form.improve_category.label(),
-            CATEGORY_FIELD => form.work.category.label(),
+            CATEGORY_FIELD => form.category().label(),
             LINKS_FIELD => {
                 reference_labels = references::display_links(&form.work)
                     .into_iter()
@@ -1832,51 +2132,27 @@ fn draw_form(frame: &mut Frame, form: &Form, area: Rect) {
             }
             _ => &form.values[index],
         };
-        if index == form.active {
-            let options: Vec<&str> = match index {
-                PROJECT_FIELD => vec![value],
-                STATE_FIELD => vec![form.state.label()],
-                CATEGORY_FIELD if form.values[1] == "improve" => {
-                    vec![form.improve_category.label()]
-                }
-                CATEGORY_FIELD => vec![form.work.category.label()],
-                _ => form.options().to_vec(),
-            };
-            frame.render_widget(
-                Paragraph::new(form_choice_line(label, index, value, &options)),
-                row,
-            );
-        } else {
-            frame.render_widget(
-                Paragraph::new(Line::from(vec![
-                    Span::raw(format!("  {label}: ")),
-                    Span::styled(value, enum_style(index, value)),
-                ])),
-                row,
-            );
-        }
+        let line = form_field_line(label, value, index, index == form.active, width);
+        frame.render_widget(Paragraph::new(line), row);
+    }
+}
+
+fn project_choice_name(project: &str) -> &str {
+    if project.is_empty() {
+        "- No project"
+    } else {
+        project_name(project)
     }
 }
 
 fn form_project_choice(project: &str, selected: bool) -> Line<'static> {
     let icon = project_entry(project);
-    let label = match project {
-        "improve" => "Improve",
-        "work" => "Work",
-        "code" => "Code",
-        "note" => "Note",
-        "read" => "Read",
-        "opensource" => "Open source",
-        _ => "- No project",
-    };
-    let (shortcut, rest) = label.split_at(1);
     let marker = if selected { "●" } else { " " };
     let style = enum_style(PROJECT_FIELD, project);
-    Line::from(vec![
-        Span::styled(format!("    {marker} {icon} "), style),
-        shortcut_hint(shortcut),
-        Span::styled(rest, style),
-    ])
+    let shortcut = project.chars().next().unwrap_or('-');
+    let mut spans = vec![Span::styled(format!("    {marker} {icon} "), style)];
+    spans.extend(choice_label(project_choice_name(project), shortcut, style));
+    Line::from(spans)
 }
 
 fn form_state_choice(choice: usize, selected: TaskState) -> Line<'static> {
@@ -1891,68 +2167,101 @@ fn form_state_choice(choice: usize, selected: TaskState) -> Line<'static> {
     let icon = state_icon(state);
     let label = state.label();
     let style = form_option_style(state == selected);
-    Line::from(vec![
-        Span::styled(format!("    {marker} {icon} "), style),
-        shortcut_hint(choice + 1),
-        Span::styled(format!(" {label:<17} "), style),
-        Span::styled(description, Style::default().fg(Color::Rgb(140, 145, 145))),
-    ])
-}
-
-fn shortcut_hint(key: impl std::fmt::Display) -> Span<'static> {
-    Span::styled(
-        format!("[{key}]"),
-        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-    )
-}
-
-fn form_choice_line(label: &str, index: usize, value: &str, options: &[&str]) -> Line<'static> {
-    let mut spans = vec![Span::styled(
-        format!("> {label}:"),
-        Style::default().fg(ACCENT),
-    )];
-    if !options.contains(&value) {
-        spans.push(Span::styled(
-            format!(" [{value}]"),
-            enum_style(index, value).add_modifier(Modifier::BOLD),
-        ));
-    }
-    for option in options {
-        let display = if option.is_empty() { "-" } else { option };
-        let selected = *option == value;
-        let text = if selected {
-            format!(" [{display}]")
-        } else {
-            format!(" {display}")
-        };
-        let style = enum_style(index, option);
-        spans.push(Span::styled(
-            text,
-            if selected {
-                style.add_modifier(Modifier::BOLD)
-            } else {
-                style
-            },
-        ));
-    }
+    let mut spans = vec![Span::styled(format!("    {marker} {icon} "), style)];
+    spans.extend(choice_label(
+        &format!("{label:<12} "),
+        state_shortcut(state),
+        style,
+    ));
+    spans.push(Span::styled(
+        description,
+        Style::default().fg(Color::Rgb(140, 145, 145)),
+    ));
     Line::from(spans)
 }
 
-fn form_category_choice(
-    shortcut: char,
-    label: &str,
-    description: &str,
-    selected: bool,
+fn choice_label(label: &str, key: char, style: Style) -> Vec<Span<'static>> {
+    let hint_style = style
+        .fg(ACCENT)
+        .add_modifier(Modifier::BOLD)
+        .remove_modifier(Modifier::DIM);
+    if let Some((offset, letter)) = label
+        .char_indices()
+        .find(|(_, letter)| letter.eq_ignore_ascii_case(&key))
+    {
+        vec![
+            Span::styled(label[..offset].to_owned(), style),
+            Span::styled(format!("[{letter}]"), hint_style),
+            Span::styled(label[offset + letter.len_utf8()..].to_owned(), style),
+        ]
+    } else {
+        vec![
+            Span::styled(format!("[{key}] "), hint_style),
+            Span::styled(label.to_owned(), style),
+        ]
+    }
+}
+
+const FORM_DIVIDER_COLOR: Color = Color::Rgb(160, 172, 178);
+
+fn form_divider(width: usize) -> Line<'static> {
+    Line::from(Span::styled("─".repeat(width), FORM_DIVIDER_COLOR))
+}
+
+fn form_field_line(
+    field: UiField,
+    value: &str,
+    index: usize,
+    focused: bool,
+    width: usize,
 ) -> Line<'static> {
-    let marker = if selected { "●" } else { " " };
-    let style = form_option_style(selected);
-    Line::from(vec![
-        Span::styled(format!("    {marker} {shortcut} {label:<17} "), style),
+    let label = format!("{} {}:", field.icon(), field.label());
+    let value = if value.is_empty() { "-" } else { value };
+    let style = enum_style(index, value);
+    let mut spans = vec![
+        focus_marker(focused),
         Span::styled(
-            description.to_string(),
-            Style::default().fg(Color::Rgb(140, 145, 145)),
+            if width >= 28 {
+                format!("{label:<16}")
+            } else {
+                format!("{label} ")
+            },
+            if focused {
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            },
         ),
-    ])
+    ];
+    if width >= 28 {
+        spans.push(Span::styled("│ ", FORM_DIVIDER_COLOR));
+    }
+    spans.push(Span::styled(
+        value.to_owned(),
+        if focused {
+            style.add_modifier(Modifier::BOLD)
+        } else {
+            style
+        },
+    ));
+    Line::from(spans)
+}
+
+fn form_category_choice(index: usize, category: Category, selected: Category) -> Line<'static> {
+    let marker = if category == selected { "●" } else { " " };
+    let style = form_option_style(category == selected);
+    let label = category.label();
+    let mut spans = vec![Span::styled(format!("    {marker} "), style)];
+    spans.extend(choice_label(
+        &format!("{label:<17} "),
+        (b'1' + index as u8) as char,
+        style,
+    ));
+    spans.push(Span::styled(
+        category.description(),
+        Style::default().fg(Color::Rgb(140, 145, 145)),
+    ));
+    Line::from(spans)
 }
 
 fn form_option_style(selected: bool) -> Style {
@@ -1963,20 +2272,78 @@ fn form_option_style(selected: bool) -> Style {
     })
 }
 
-fn wrapped_form_description(form: &Form, width: usize) -> (Vec<Line<'static>>, (usize, usize)) {
-    wrapped_form_text(form, width, "Description")
-}
-
-fn wrapped_form_text(
+fn form_text_lines(
     form: &Form,
     width: usize,
     label: &str,
+    rows: usize,
 ) -> (Vec<Line<'static>>, (usize, usize)) {
+    let active = form.is_text();
+    let (lines, (x, y)) = wrapped_form_text(form.text(), form.cursor, width.saturating_sub(2));
+    let scroll = if active {
+        y.saturating_sub(rows - 1)
+    } else {
+        0
+    };
+    // A trailing empty row can be reserved just for the cursor after an exact-width line.
+    let cursor_row = form.cursor == form.text().len()
+        && !form.text().is_empty()
+        && !form.text().ends_with('\n')
+        && lines.last().is_some_and(String::is_empty);
+    let below = (lines.len() - usize::from(cursor_row)).saturating_sub(scroll + rows);
+    let (badge, compact) = match (scroll, below) {
+        (0, 0) => (String::new(), String::new()),
+        (0, n) => (format!("[↓ {n} more]"), format!("[↓{n}]")),
+        (n, 0) => (format!("[↑ {n} above]"), format!("[↑{n}]")),
+        (a, b) => (
+            format!("[↑ {a} above · ↓ {b} below]"),
+            format!("[↑{a} ↓{b}]"),
+        ),
+    };
+    let mut lines: Vec<_> = lines.into_iter().skip(scroll).take(rows).collect();
+    lines.resize(rows, String::new());
+    let mut heading = Line::from(vec![
+        focus_marker(active),
+        Span::styled(
+            format!("{} {label}:", UiField::Description.icon()),
+            if active {
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            },
+        ),
+    ]);
+    let available = width.saturating_sub(heading.width() + 2);
+    if !badge.is_empty() {
+        let badge = if Line::from(badge.as_str()).width() <= available {
+            badge
+        } else {
+            compact
+        };
+        if Line::from(badge.as_str()).width() <= available {
+            heading.spans.extend([
+                Span::raw("  "),
+                Span::styled(
+                    badge,
+                    Style::default()
+                        .fg(Color::Rgb(15, 23, 32))
+                        .bg(ACCENT)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]);
+        }
+    }
+    let mut result = vec![heading];
+    result.extend(
+        lines
+            .into_iter()
+            .map(|line| Line::from(format!("  {line}"))),
+    );
+    (result, (x + 2, y - scroll + 1))
+}
+
+fn wrapped_form_text(text: &str, cursor: usize, width: usize) -> (Vec<String>, (usize, usize)) {
     let width = width.max(1);
-    let active = form.active == 0;
-    let prefix = format!("{} {label}: ", if active { ">" } else { " " });
-    let text = format!("{prefix}{}", form.values[0]);
-    let cursor = prefix.len() + if active { form.cursor } else { 0 };
     let mut lines = vec![String::new()];
     let mut column = 0;
     let mut offset = 0;
@@ -2009,26 +2376,10 @@ fn wrapped_form_text(
             position = (column, lines.len() - 1);
         }
     }
-    let style = if active {
-        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default()
-    };
-    (
-        lines
-            .into_iter()
-            .map(|line| Line::styled(line, style))
-            .collect(),
-        position,
-    )
+    (lines, position)
 }
 
-fn draw_input(frame: &mut Frame, label: &str, value: &str, cursor: usize, area: Rect) {
-    let prefix = if label.is_empty() {
-        "> ".to_string()
-    } else {
-        format!("> {label}: ")
-    };
+fn draw_input(frame: &mut Frame, prefix: &str, value: &str, cursor: usize, area: Rect) {
     let line = Line::from(format!("{prefix}{value}"));
     let width = Line::from(format!("{prefix}{}", &value[..cursor])).width();
     let scroll = width.saturating_sub(area.width.saturating_sub(1) as usize) as u16;
@@ -2070,7 +2421,6 @@ mod tests {
         app.select_project(Some("improve"));
         for (index, category) in ImproveCategory::ALL.into_iter().enumerate() {
             handle_key(&mut app, KeyCode::Char('a')).unwrap();
-            assert_eq!(app.form.field_count(), 5);
             assert_eq!(app.form.improve_category, ImproveCategory::Uncategorized);
             app.form.values[0] = format!("Improve {}", category.label());
             app.form.active = CATEGORY_FIELD;
@@ -2098,11 +2448,11 @@ mod tests {
             load_tasks(&app.path).unwrap()[&id].improve_category,
             ImproveCategory::Td
         );
-        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        pick_task_state(&mut app, 'd');
         handle_key(&mut app, KeyCode::Tab).unwrap();
         assert_eq!(app.visible_tasks().len(), 1);
         assert_eq!(app.selected_task().unwrap().task.id, id);
-        handle_key(&mut app, KeyCode::Char('u')).unwrap();
+        pick_task_state(&mut app, 's');
         handle_key(&mut app, KeyCode::Tab).unwrap();
         let mut terminal = Terminal::new(TestBackend::new(120, 30)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
@@ -2113,13 +2463,30 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert!(screen.contains("[1 td]"));
-        assert!(screen.contains("Proj"));
+        assert!(screen.contains("1 td"));
+        assert!(terminal.backend().buffer().content.windows(4).any(|cells| {
+            cells.iter().map(|cell| cell.symbol()).collect::<String>() == "1 td"
+                && cells.iter().all(|cell| cell.bg == ACCENT)
+        }));
+        assert!(!screen.contains("Proj"));
         app.select_project(Some("work"));
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
-        assert_eq!(app.form.field_count(), 5);
+        assert_eq!(app.form.categories().len(), WorkCategory::ALL.len());
         app.form.values[1] = "code".into();
-        assert_eq!(app.form.field_count(), 4);
+        app.form.focus(CATEGORY_FIELD);
+        for key in [KeyCode::Char('2'), KeyCode::Down, KeyCode::Char('1')] {
+            handle_key(&mut app, key).unwrap();
+            assert_eq!(app.form.category().label(), "Uncategorized");
+        }
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains("[1] Uncategorized"));
     }
 
     #[test]
@@ -2171,8 +2538,8 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert!(screen.contains("Category: 1-6"));
-        assert!(screen.contains("6 Uncategorized"));
+        assert!(!screen.contains("Category: number"));
+        assert!(screen.contains("[6] Uncategorized"));
         handle_key(&mut app, KeyCode::Right).unwrap();
         assert_eq!(app.form.improve_category, ImproveCategory::Td);
         assert!(app.form.has_changes(&app.initial_form));
@@ -2229,9 +2596,27 @@ mod tests {
             for key in ['m', 'm', 'm', 'k', 'm'] {
                 handle_key(&mut app, KeyCode::Char(key)).unwrap();
             }
+            let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
+            terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+            let rows: Vec<String> = terminal
+                .backend()
+                .buffer()
+                .content
+                .chunks(100)
+                .map(|row| row.iter().map(|cell| cell.symbol()).collect())
+                .collect();
+            assert!(rows
+                .iter()
+                .any(|row| row.contains("[1]") && row.contains("Second")));
+            assert!(rows
+                .iter()
+                .any(|row| row.contains("+2") && row.contains("First")));
+            assert!(rows
+                .iter()
+                .any(|row| row.contains("Merge · 2 marked · [1] keeps metadata")));
             handle_key(&mut app, KeyCode::Enter).unwrap();
             assert!(matches!(app.mode, Mode::Form(Some(id)) if id == survivor.id));
-            assert_eq!(app.form.values[0], "Second\nline\n\nFirst 工作");
+            assert_eq!(app.form.values[0], "Second\nline\nFirst 工作");
             assert_eq!(app.form.values[1..], ["work"]);
             assert_eq!(app.form.work, survivor.work);
             assert_eq!(std::fs::read(&app.path).unwrap(), before);
@@ -2243,14 +2628,26 @@ mod tests {
                 assert_eq!(std::fs::read(&app.path).unwrap(), before);
                 continue;
             }
-            app.form.values[0].clear();
+            let draft = std::mem::take(&mut app.form.values[0]);
             save_form(&mut app, Some(survivor.id)).unwrap();
             assert_eq!(std::fs::read(&app.path).unwrap(), before);
-            app.form.values[0] = "Edited merged task".into();
+            app.form.values[0] = draft;
+            for key in [
+                KeyCode::Esc,
+                KeyCode::Char('j'),
+                KeyCode::Char('o'),
+                KeyCode::Char('1'),
+                KeyCode::Esc,
+                KeyCode::Down,
+                KeyCode::Char('o'),
+                KeyCode::Char('2'),
+            ] {
+                handle_key(&mut app, key).unwrap();
+            }
             write_and_quit(&mut app);
             let tasks = load_tasks(&app.path).unwrap();
             let merged = &tasks[&survivor.id];
-            assert_eq!(merged.description, "Edited merged task");
+            assert_eq!(merged.description, "Second\nline\n1\nFirst 工作\n2");
             assert!(merged.priority.is_none());
             assert_eq!(merged.work, survivor.work);
             assert_eq!(merged.created_at, survivor.created_at);
@@ -2305,16 +2702,33 @@ mod tests {
         let mut form = Form::default();
         form.values[0] = "abc工作👩‍💻\ntail".into();
         form.cursor = form.values[0].len();
-        let (lines, cursor) = wrapped_form_description(&form, 18);
+        let (lines, cursor) = form_text_lines(&form, 6, "Description", 3);
         assert_eq!(
             lines.iter().map(ToString::to_string).collect::<Vec<_>>(),
-            ["> Description: abc", "工作👩‍💻", "tail"]
+            [">  Description:", "  👩‍💻", "  tail", "  "]
         );
-        assert_eq!(cursor, (4, 2));
+        assert_eq!(cursor, (2, 3));
         form.cursor = 3;
-        assert_eq!(wrapped_form_description(&form, 18).1, (0, 1));
+        assert_eq!(form_text_lines(&form, 6, "Description", 3).1, (2, 2));
         form.cursor = 0;
-        assert_eq!(wrapped_form_description(&form, 18).1, (15, 0));
+        assert_eq!(form_text_lines(&form, 6, "Description", 3).1, (2, 1));
+    }
+
+    #[test]
+    fn form_description_marks_hidden_lines() {
+        let mut form = Form::default();
+        form.values[0] = "one\ntwo\nthree\nfour\nfive\nsix\nseven".into();
+        for (cursor, marker) in [
+            (0, "[↓ 2 more]"),
+            (24, "[↑ 1 above · ↓ 1 below]"),
+            (form.text().len(), "[↑ 2 above]"),
+        ] {
+            form.cursor = cursor;
+            let (lines, _) = form_text_lines(&form, 80, "Description", FORM_TEXT_ROWS);
+            assert_eq!(lines.len(), 6); // Heading plus five description rows.
+            assert_eq!(lines[0].to_string(), format!(">  Description:  {marker}"));
+            assert_eq!(lines[0].spans.last().unwrap().style.bg, Some(ACCENT));
+        }
     }
 
     #[test]
@@ -2353,7 +2767,31 @@ mod tests {
                 .iter()
                 .map(|cell| cell.symbol())
                 .collect();
-            assert!(screen.contains("> Project:"));
+            assert!(screen.contains(">  Project:"));
+            if height >= 24 {
+                let rows: Vec<String> = terminal
+                    .backend()
+                    .buffer()
+                    .content
+                    .chunks(width as usize)
+                    .map(|row| row.iter().map(|cell| cell.symbol()).collect())
+                    .collect();
+                let project = rows
+                    .iter()
+                    .position(|row| row.contains(">  Project:"))
+                    .unwrap();
+                assert!(rows[project - 2].contains("long description"));
+                assert!(rows[project - 1].contains("────"));
+                let separator = rows[project]
+                    .chars()
+                    .enumerate()
+                    .find(|&(column, ch)| column > 2 && ch == '│')
+                    .unwrap()
+                    .0;
+                for row in &rows[project + 1..=project + 3] {
+                    assert_eq!(row.chars().nth(separator), Some('│'));
+                }
+            }
         }
         assert_eq!(app.form.values[0], before);
         assert!(!app.path.exists());
@@ -2371,7 +2809,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Esc).unwrap();
         app.form.values[0] = "Completed task".into();
         save_form(&mut app, None).unwrap();
-        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        pick_task_state(&mut app, 'd');
         let before = std::fs::read(&app.path).unwrap();
         handle_key(&mut app, KeyCode::Char('m')).unwrap();
         handle_key(&mut app, KeyCode::Char('m')).unwrap();
@@ -2413,7 +2851,7 @@ mod tests {
         assert!(app.visible_tasks().is_empty());
         handle_key(&mut app, KeyCode::BackTab).unwrap();
         assert_eq!(app.visible_tasks().len(), 1);
-        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        pick_task_state(&mut app, 'd');
         handle_key(&mut app, KeyCode::Tab).unwrap();
         assert_eq!(app.visible_tasks().len(), 1);
         assert_eq!(
@@ -2482,7 +2920,121 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect::<String>();
-        assert!(screen.contains("[w]ork"));
+        assert!(screen.contains("󰃖 [W]ork"));
+        assert!(screen.contains(" [A]ll projects"));
+        assert!(screen.contains("› 󰘬 [O]pen source  ✓"));
+        let buffer = terminal.backend().buffer();
+        let (x, y) = (0..12)
+            .find_map(|y| {
+                (0..120)
+                    .find(|&x| buffer[(x, y)].symbol() == "┌")
+                    .map(|x| (x, y))
+            })
+            .unwrap();
+        let height = PROJECTS.len() as u16 + 4;
+        assert!(x > 20);
+        assert_eq!(y, (12 - height) / 2);
+        assert_eq!(buffer[(x, y + height - 1)].symbol(), "└");
+        let mut small = Terminal::new(TestBackend::new(30, 6)).unwrap();
+        small.draw(|frame| draw(frame, &mut app)).unwrap();
+        let screen: String = small
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains("› 󰘬 [O]pen source  ✓"));
+        handle_key(&mut app, KeyCode::Up).unwrap();
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains("› 󰂺 [R]ead"));
+        assert!(screen.contains("  󰘬 [O]pen source  ✓"));
+        assert_eq!(app.project, Some("opensource"));
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        assert_eq!(app.project, Some("read"));
+    }
+
+    #[test]
+    fn search_keeps_the_table_visible_and_only_commits_on_enter() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        for (description, state) in [
+            ("apple task", TaskState::Next),
+            ("apricot task", TaskState::InProgress),
+            ("banana task", TaskState::Waiting),
+        ] {
+            app.form.values[0] = description.into();
+            app.form.state = state;
+            save_form(&mut app, None).unwrap();
+        }
+        let before = fs::read(&app.path).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(46, 15)).unwrap();
+        app.filter = "a".into();
+        for key in [KeyCode::Char('/'), KeyCode::Char('p'), KeyCode::Char('p')] {
+            handle_key(&mut app, key).unwrap();
+        }
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        let header = |terminal: &Terminal<TestBackend>| -> String {
+            let buffer = terminal.backend().buffer();
+            buffer.content[..buffer.area.width as usize]
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect()
+        };
+        let filter_column = header(&terminal).find("/app").unwrap();
+        assert_eq!(terminal.get_cursor_position().unwrap().y, 0);
+        assert!(screen.contains("apple task"));
+        assert!(!screen.contains("apricot task"));
+        assert_eq!(app.filter, "a");
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert_eq!(app.visible_tasks().len(), 3);
+        for key in [KeyCode::Char('/'), KeyCode::Char('p'), KeyCode::Enter] {
+            handle_key(&mut app, key).unwrap();
+        }
+        assert_eq!(app.visible_tasks().len(), 2);
+        assert_eq!(app.filter, "ap");
+        terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        assert_eq!(header(&terminal).find("/ap"), Some(filter_column));
+        assert_eq!(fs::read(&app.path).unwrap(), before);
+        app.selected = app
+            .visible_tasks()
+            .iter()
+            .position(|view| view.task.state == TaskState::Next)
+            .unwrap();
+        pick_task_state(&mut app, 'd');
+        let mut wide = Terminal::new(TestBackend::new(80, 15)).unwrap();
+        wide.draw(|frame| draw(frame, &mut app)).unwrap();
+        let screen: String = wide
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains("▶ 1  │ → 0  │ Ⅱ 0  │ ✓ 1   (24h)"));
+        assert!(header(&wide).contains("/ap"));
+        assert!(!handle_key(&mut app, KeyCode::Esc).unwrap());
+        assert!(app.filter.is_empty());
+        wide.draw(|frame| draw(frame, &mut app)).unwrap();
+        let header: String = wide.backend().buffer().content[..80]
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(header.contains("▶ 1  │ → 0  │ Ⅱ 1  │ ✓ 1   (24h)"));
     }
 
     #[test]
@@ -2509,7 +3061,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Tab).unwrap();
         handle_key(&mut app, KeyCode::Backspace).unwrap();
         handle_key(&mut app, KeyCode::Tab).unwrap();
-        handle_key(&mut app, KeyCode::Char('1')).unwrap();
+        handle_key(&mut app, KeyCode::Char('s')).unwrap();
         write_and_quit(&mut app);
         let task = &app.tasks[0].task;
         assert_eq!(task.id, id);
@@ -2525,7 +3077,7 @@ mod tests {
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         handle_key(&mut app, KeyCode::BackTab).unwrap();
-        assert_eq!(app.form.active, LINKS_FIELD);
+        assert_eq!(app.form.active, CATEGORY_FIELD);
         write_and_quit(&mut app);
         assert!(matches!(app.mode, Mode::Form(None)));
         assert_eq!(app.form.active, 0);
@@ -2625,12 +3177,12 @@ mod tests {
         assert!(matches!(app.mode, Mode::Normal));
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         app.form.focus(CATEGORY_FIELD);
-        handle_key(&mut app, KeyCode::Char('r')).unwrap();
+        handle_key(&mut app, KeyCode::Char('2')).unwrap();
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(matches!(app.mode, Mode::ConfirmDiscard(None)));
         handle_key(&mut app, KeyCode::Char('n')).unwrap();
         assert_eq!(app.form.work.category, WorkCategory::Review);
-        handle_key(&mut app, KeyCode::Char('u')).unwrap();
+        handle_key(&mut app, KeyCode::Char('5')).unwrap();
         handle_key(&mut app, KeyCode::Esc).unwrap();
         assert!(matches!(app.mode, Mode::Normal));
         assert!(!app.path.exists());
@@ -2691,17 +3243,32 @@ mod tests {
     }
 
     #[test]
-    fn enter_moves_fields_and_only_wq_saves() {
+    fn description_newlines_and_field_navigation_only_save_on_wq() {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         handle_key(&mut app, KeyCode::Char('a')).unwrap();
         for ch in "test".chars() {
             handle_key(&mut app, KeyCode::Char(ch)).unwrap();
         }
+        for key in [
+            KeyCode::Enter,
+            KeyCode::Char('a'),
+            KeyCode::Esc,
+            KeyCode::Char('o'),
+            KeyCode::Char('b'),
+            KeyCode::Esc,
+            KeyCode::Char('O'),
+            KeyCode::Char('-'),
+        ] {
+            handle_key(&mut app, key).unwrap();
+            assert_eq!(app.form.active, 0);
+        }
+        assert_eq!(app.form.text(), "test\na\n-\nb");
         for (key, active) in [
-            (KeyCode::Enter, 1),
+            (KeyCode::Tab, PROJECT_FIELD),
             (KeyCode::Enter, STATE_FIELD),
             (KeyCode::Enter, LINKS_FIELD),
+            (KeyCode::Tab, CATEGORY_FIELD),
             (KeyCode::Tab, 0),
         ] {
             handle_key(&mut app, key).unwrap();
@@ -2717,7 +3284,7 @@ mod tests {
         handle_key(&mut app, KeyCode::Esc).unwrap();
         write_and_quit(&mut app);
         assert!(matches!(app.mode, Mode::Normal));
-        assert_eq!(app.tasks[0].task.description, "test");
+        assert_eq!(app.tasks[0].task.description, "test\na\n-\nb");
     }
 
     #[test]
@@ -2799,16 +3366,18 @@ mod tests {
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         app.form.values[0] = "done task".to_string();
         save_form(&mut app, None).unwrap();
-        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        pick_task_state(&mut app, 'd');
         assert_eq!(app.visible_tasks()[0].task.status, TaskStatus::Completed);
         let before = std::fs::read_to_string(&app.path).unwrap();
-        handle_key(&mut app, KeyCode::Char('d')).unwrap();
-        assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
+        pick_task_state(&mut app, 'd');
+        assert!(matches!(app.mode, Mode::Normal));
         handle_key(&mut app, KeyCode::Tab).unwrap();
         assert_eq!(app.status_name(), "Done");
         assert_eq!(app.visible_tasks()[0].task.status, TaskStatus::Completed);
-        let before = std::fs::read_to_string(&app.path).unwrap();
-        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        handle_key(&mut app, KeyCode::Char('s')).unwrap();
+        assert_eq!(app.state_selected, DONE_CHOICE);
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        assert!(matches!(app.mode, Mode::Normal));
         assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
         handle_key(&mut app, KeyCode::Tab).unwrap();
         assert_eq!(app.status_name(), "Pending");
@@ -2833,14 +3402,14 @@ mod tests {
         }
         app.selected = 1;
         let id = app.selected_task().unwrap().task.id;
-        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        pick_task_state(&mut app, 'd');
         assert_eq!(app.selected, 0);
         assert_eq!(app.selected_task().unwrap().task.id, id);
         assert_eq!(
             app.selected_task().unwrap().task.status,
             TaskStatus::Completed
         );
-        handle_key(&mut app, KeyCode::Char('u')).unwrap();
+        pick_task_state(&mut app, 's');
         assert_eq!(app.selected, 1);
         assert_eq!(app.selected_task().unwrap().task.id, id);
         assert_eq!(
@@ -2886,13 +3455,33 @@ mod tests {
     }
 
     #[test]
+    fn selection_follows_task_after_confirming_done() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        for description in ["first task", "second task"] {
+            app.form.values[0] = description.into();
+            save_form(&mut app, None).unwrap();
+        }
+        app.selected = 1;
+        let id = app.selected_task().unwrap().task.id;
+        app.mode = Mode::ConfirmDone(id);
+        handle_key(&mut app, KeyCode::Char('y')).unwrap();
+        assert_eq!(app.selected, 0);
+        assert_eq!(app.selected_task().unwrap().task.id, id);
+        assert_eq!(
+            app.selected_task().unwrap().task.status,
+            TaskStatus::Completed
+        );
+    }
+
+    #[test]
     fn completed_rows_are_crossed_out_and_can_be_reopened() {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         app.form.values = ["wrapped description ".repeat(6), "work".to_string()];
         save_form(&mut app, None).unwrap();
         let id = app.selected_task().unwrap().task.id;
-        handle_key(&mut app, KeyCode::Char('d')).unwrap();
+        pick_task_state(&mut app, 'd');
         let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         let background = project_row_style("work").bg;
@@ -2934,13 +3523,14 @@ mod tests {
             buffer
                 .content
                 .iter()
+                .skip(80)
                 .filter(|cell| cell.symbol() == "✓")
                 .count(),
             1
         );
         for view in [TaskStatus::Pending, TaskStatus::Completed] {
             app.status = view;
-            handle_key(&mut app, KeyCode::Char('u')).unwrap();
+            pick_task_state(&mut app, 's');
             let task = &app.tasks[0].task;
             assert_eq!(task.id, id);
             assert_eq!(task.status, TaskStatus::Pending);
@@ -2956,10 +3546,7 @@ mod tests {
                 .all(|row| row[1..79].iter().all(|cell| !cell
                     .modifier
                     .intersects(Modifier::DIM | Modifier::CROSSED_OUT))));
-            let before = std::fs::read_to_string(&app.path).unwrap();
-            handle_key(&mut app, KeyCode::Char('u')).unwrap();
-            assert_eq!(std::fs::read_to_string(&app.path).unwrap(), before);
-            handle_key(&mut app, KeyCode::Char('d')).unwrap();
+            pick_task_state(&mut app, 'd');
         }
     }
 
@@ -3092,19 +3679,25 @@ mod tests {
             handle_key(&mut app, KeyCode::Esc).unwrap();
             assert_eq!(fs::read(&app.path).unwrap(), before);
             handle_key(&mut app, KeyCode::Char('s')).unwrap();
-            handle_key(&mut app, KeyCode::Char('4')).unwrap();
+            handle_key(&mut app, KeyCode::Char('w')).unwrap();
             assert_eq!(app.selected_task().unwrap().task.id, id);
             assert_eq!(app.selected_task().unwrap().task.state, TaskState::Waiting);
             handle_key(&mut app, KeyCode::Char('S')).unwrap();
+            assert_eq!(app.selected_task().unwrap().task.id, id);
+            assert_eq!(
+                app.selected_task().unwrap().task.status,
+                TaskStatus::Completed
+            );
+            pick_task_state(&mut app, 's');
             assert_eq!(app.selected_task().unwrap().task.id, id);
             assert_eq!(app.selected_task().unwrap().task.state, TaskState::None);
             assert_eq!(app.selected_task().unwrap().task.work, work);
             handle_key(&mut app, KeyCode::Char('e')).unwrap();
             app.form.focus(STATE_FIELD);
-            handle_key(&mut app, KeyCode::Char('2')).unwrap();
+            handle_key(&mut app, KeyCode::Char('n')).unwrap();
             write_and_quit(&mut app);
             assert_eq!(app.selected_task().unwrap().task.state, TaskState::Next);
-            handle_key(&mut app, KeyCode::Char('d')).unwrap();
+            pick_task_state(&mut app, 'd');
             app.selected = app
                 .visible_tasks()
                 .iter()
@@ -3113,10 +3706,10 @@ mod tests {
             let before = fs::read(&app.path).unwrap();
             handle_key(&mut app, KeyCode::Char('S')).unwrap();
             assert_eq!(fs::read(&app.path).unwrap(), before);
-            handle_key(&mut app, KeyCode::Char('u')).unwrap();
+            pick_task_state(&mut app, 'w');
             let restored = app.tasks.iter().find(|view| view.task.id == id).unwrap();
             assert_eq!(restored.task.status, TaskStatus::Pending);
-            assert_eq!(restored.task.state, TaskState::Next);
+            assert_eq!(restored.task.state, TaskState::Waiting);
             assert_eq!(restored.task.work, work);
         }
     }
@@ -3127,8 +3720,13 @@ mod tests {
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
         app.mode = Mode::Form(None);
         app.form.active = STATE_FIELD;
-        for (index, expected) in TaskState::ALL.into_iter().enumerate() {
-            handle_key(&mut app, KeyCode::Char((b'1' + index as u8) as char)).unwrap();
+        for (key, expected) in [
+            ('n', TaskState::Next),
+            ('I', TaskState::InProgress),
+            ('w', TaskState::Waiting),
+            ('s', TaskState::None),
+        ] {
+            handle_key(&mut app, KeyCode::Char(key)).unwrap();
             assert_eq!(app.form.state, expected);
         }
     }
@@ -3161,7 +3759,7 @@ mod tests {
         }
         assert_eq!(project_row_style(""), Style::default());
         assert_eq!(project_row_style("custom"), Style::default());
-        let mut terminal = Terminal::new(TestBackend::new(80, 40)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(80, 90)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
         let buffer = terminal.backend().buffer();
         let state_background = work_view::task_state_style(&app.tasks[0].task).bg;
@@ -3247,7 +3845,7 @@ mod tests {
                     let marker_y = (0..30).find(|&y| buffer[(2, y)].symbol() == "▶").unwrap();
                     assert!(top[0] < marker_y && marker_y < bottom[0]);
                     if width >= 80 {
-                        for label in ["second task", "with wrapped text"] {
+                        for label in ["second task", "  with wrapped"] {
                             let cells = buffer
                                 .content
                                 .windows(label.len())
@@ -3260,6 +3858,7 @@ mod tests {
                                 cell.fg == Color::Rgb(15, 23, 32)
                                     && Some(cell.bg) == task_row_style(project, second_index).bg
                                     && cell.modifier.contains(Modifier::BOLD)
+                                        == (label == "second task")
                                     && !cell.modifier.contains(Modifier::DIM)
                             }));
                         }
@@ -3361,6 +3960,7 @@ mod tests {
         let marker = buffer
             .content
             .iter()
+            .skip(buffer.area.width as usize)
             .find(|cell| cell.symbol() == "▶")
             .unwrap();
         assert_eq!(marker.fg, Color::Rgb(0, 51, 153));
@@ -3417,7 +4017,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(app.selected, 0);
-        assert_eq!(app.selected_line, 3);
+        assert_eq!(app.selected_line, app.half_page);
         for _ in 0..app.row_heights[0] {
             handle_key_event(
                 &mut app,
@@ -3443,6 +4043,36 @@ mod tests {
     }
 
     #[test]
+    fn form_and_link_help_return_without_losing_the_draft() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        handle_key(&mut app, KeyCode::Char('a')).unwrap();
+        handle_key(&mut app, KeyCode::Char('?')).unwrap();
+        assert_eq!(app.form.text(), "?");
+        handle_key(&mut app, KeyCode::F(1)).unwrap();
+        assert!(matches!(app.mode, Mode::Help(0)));
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        assert!(matches!(app.mode, Mode::Form(None)));
+        app.form.focus(LINKS_FIELD);
+        open_reference_editor(&mut app.form);
+        handle_key(&mut app, KeyCode::Char('?')).unwrap();
+        assert!(matches!(app.mode, Mode::Help(0)));
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        handle_key(&mut app, KeyCode::Enter).unwrap();
+        app.form
+            .references
+            .as_mut()
+            .unwrap()
+            .paste("https://example.com/path");
+        handle_key(&mut app, KeyCode::Char('?')).unwrap();
+        handle_key(&mut app, KeyCode::F(1)).unwrap();
+        assert!(matches!(app.mode, Mode::Help(0)));
+        handle_key(&mut app, KeyCode::Esc).unwrap();
+        handle_key(&mut app, KeyCode::Tab).unwrap();
+        assert_eq!(app.form.work.design_docs, "https://example.com/path?");
+    }
+
+    #[test]
     fn form_shows_mode_focus_and_cursor_even_in_a_short_terminal() {
         let dir = tempdir().unwrap();
         let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
@@ -3451,23 +4081,20 @@ mod tests {
         app.form.cursor = app.form.values[0].len();
         let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
+        let cursor = terminal.get_cursor_position().unwrap();
         let buffer = terminal.backend().buffer();
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("ADD TASK"));
-        assert!(text.contains("> Description: "));
-        assert_eq!(buffer.cell((16, 2)).unwrap().symbol(), "你");
-        assert_eq!(buffer.cell((18, 2)).unwrap().symbol(), "好");
-        assert!(buffer
-            .cell((1, 2))
-            .unwrap()
-            .modifier
-            .contains(Modifier::BOLD));
-        assert_eq!(buffer.cell((1, 2)).unwrap().fg, ACCENT);
-        assert!(buffer
-            .content
-            .iter()
-            .all(|cell| cell.bg == Color::Reset && !cell.modifier.contains(Modifier::REVERSED)));
-        assert_eq!(terminal.get_cursor_position().unwrap().x, 20);
+        assert!(text.contains(">  Description:"));
+        assert!(text.contains("INSERT"));
+        let label = &buffer[(cursor.x - 6, cursor.y - 1)];
+        assert_eq!(label.symbol(), ">");
+        assert_eq!(label.fg, ACCENT);
+        assert!(label.modifier.contains(Modifier::BOLD));
+        let description = &buffer[(cursor.x - 4, cursor.y)];
+        assert_eq!(description.symbol(), "你");
+        assert_eq!(description.bg, label.bg);
+        assert_eq!(buffer[(cursor.x - 2, cursor.y)].symbol(), "好");
         app.form.focus(STATE_FIELD);
         let mut terminal = Terminal::new(TestBackend::new(80, 5)).unwrap();
         terminal.draw(|frame| draw(frame, &mut app)).unwrap();
@@ -3478,7 +4105,7 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert!(text.contains("State: 1-4"));
+        assert!(!text.contains("State: letter"));
         assert!(text.contains("No state"));
     }
 }

@@ -35,21 +35,7 @@ pub(super) fn jira_links(value: &str) -> Vec<Reference> {
         } else {
             token
         };
-        let id = token
-            .split_once("/browse/")
-            .map_or(token, |(_, id)| id)
-            .split(['?', '#', '/'])
-            .next()?;
-        let (project, number) = id.rsplit_once('-')?;
-        if project.is_empty()
-            || !project
-                .chars()
-                .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_')
-            || number.is_empty()
-            || !number.chars().all(|ch| ch.is_ascii_digit())
-        {
-            return None;
-        }
+        let id = crate::work::jira_key(token)?;
         let url = if token.contains("://") {
             token.to_string()
         } else {
@@ -61,20 +47,7 @@ pub(super) fn jira_links(value: &str) -> Vec<Reference> {
 
 pub(super) fn pr_links(value: &str) -> Vec<Reference> {
     references(value, |token| {
-        let number = if let Some(number) = token.strip_prefix('#') {
-            number
-        } else if token.chars().all(|ch| ch.is_ascii_digit()) {
-            token
-        } else {
-            token
-                .split_once("/pull/")?
-                .1
-                .split(['?', '#', '/'])
-                .next()?
-        };
-        if number.is_empty() || !number.chars().all(|ch| ch.is_ascii_digit()) {
-            return None;
-        }
+        let number = crate::work::pr_number(token)?;
         let url = if token.contains("://") {
             token.to_string()
         } else {

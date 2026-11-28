@@ -185,7 +185,12 @@ fn parse_link(token: &str) -> Option<Artifact> {
     } else if !jira_links(token).is_empty() {
         (Kind::Jira, hyperlinks::normalize_jira(token))
     } else {
-        (Kind::Document, hyperlinks::document_links(token).pop()?.url)
+        let url = if token.starts_with("www.") {
+            format!("https://{token}")
+        } else {
+            token.to_owned()
+        };
+        (Kind::Document, hyperlinks::document_links(&url).pop()?.url)
     };
     Some(Artifact {
         kind,
@@ -195,33 +200,22 @@ fn parse_link(token: &str) -> Option<Artifact> {
 
 fn parse_draft(draft: &str) -> Option<Vec<Artifact>> {
     let mut entries: Vec<Artifact> = Vec::new();
-    let mut chain = false;
-    for token in draft
-        .replace('>', " > ")
-        .split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';'))
-    {
+    let mut pr_index: Option<usize> = None;
+    for token in draft.split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';')) {
         if token.is_empty() {
             continue;
         }
-        if token == ">" {
-            if chain || entries.last().is_none_or(|entry| entry.kind != Kind::Pr) {
-                return None;
-            }
-            chain = true;
-            continue;
-        }
         let entry = parse_link(token)?;
-        if chain {
-            if entry.kind != Kind::Pr {
-                return None;
+        if entry.kind == Kind::Pr {
+            if let Some(index) = pr_index {
+                entries[index].urls.extend(entry.urls);
+                continue;
             }
-            entries.last_mut()?.urls.extend(entry.urls);
-            chain = false;
-        } else {
-            entries.push(entry);
+            pr_index = Some(entries.len());
         }
+        entries.push(entry);
     }
-    (!chain).then_some(entries)
+    Some(entries)
 }
 
 #[derive(Clone)]
@@ -234,7 +228,26 @@ pub(super) struct ReferenceEditor {
     error: bool,
 }
 
+pub(super) const SHORTCUTS: &[(&str, &str)] = &[
+    (
+        "Enter",
+        "Add a link, edit the selected link, or accept pasted links",
+    ),
+    ("↑ / ↓ / j / k", "Select a link"),
+    (
+        "x / J / K",
+        "Remove / move down or up within the same link type",
+    ),
+    ("Tab", "Accept links and return to the form"),
+    ("Esc", "Cancel the current input or return to the form"),
+    ("F1", "Show shortcuts while typing"),
+];
+
 impl ReferenceEditor {
+    pub(super) fn is_editing(&self) -> bool {
+        self.editing
+    }
+
     pub(super) fn new(work: &WorkDetails) -> Self {
         let entries = artifacts(work);
         Self {
@@ -362,7 +375,7 @@ impl ReferenceEditor {
             }
             KeyCode::Enter | KeyCode::Char('e') => {
                 if let Some(entry) = self.entries.get(index) {
-                    self.draft = entry.urls.join(" > ");
+                    self.draft = entry.urls.join(" ");
                 }
                 self.cursor = self.draft.len();
                 self.editing = true;
@@ -381,21 +394,36 @@ impl ReferenceEditor {
         if !self.editing {
             self.editing = true;
         }
-        self.draft.insert_str(self.cursor, value);
-        self.cursor += value.len();
-        self.accept();
+        let value = value.trim();
+        if !value.is_empty() {
+            if self.cursor == self.draft.len()
+                && self
+                    .draft
+                    .chars()
+                    .next_back()
+                    .is_some_and(|ch| !ch.is_whitespace())
+            {
+                self.draft.push(' ');
+                self.cursor += 1;
+            }
+            self.draft.insert_str(self.cursor, value);
+            self.cursor += value.len();
+            self.error = false;
+        }
     }
 
-    pub(super) fn draw(&self, frame: &mut Frame, area: Rect) {
-        let [body, input, help] = Layout::vertical([
-            Constraint::Min(0),
-            Constraint::Length(3),
-            Constraint::Length(2),
+    pub(super) fn draw(&self, frame: &mut Frame) {
+        let area = popup_panel(
+            frame,
+            &format!(" {} {} ", UiField::Links.icon(), UiField::Links.label()),
+        );
+        let [inner, divider, label, input] = Layout::vertical([
+            Constraint::Min(1),
+            Constraint::Length(u16::from(area.height >= 4)),
+            Constraint::Length(u16::from(area.height >= 3)),
+            Constraint::Length(1),
         ])
         .areas(area);
-        let block = Block::bordered().title("Useful links");
-        let inner = block.inner(body);
-        frame.render_widget(block, body);
         let start = self
             .selected
             .saturating_sub(inner.height.saturating_sub(1) as usize);
@@ -428,23 +456,29 @@ impl ReferenceEditor {
                 Rect::new(inner.x, inner.y + (index - start) as u16, inner.width, 1),
             );
         }
-        let block = Block::bordered().title(if self.error {
-            "Use a URL, Jira key, #PR, or notes:path"
-        } else {
-            "Paste links or notes:path (use > for a PR chain)"
-        });
-        let inner = block.inner(input);
-        frame.render_widget(block, input);
+        frame.render_widget(Paragraph::new(form_divider(area.width as usize)), divider);
         if self.editing {
+            let message = if self.error {
+                "Use a URL, Jira key, #PR, or notes:path"
+            } else {
+                "Paste links"
+            };
+            frame.render_widget(
+                Paragraph::new(message).style(Style::default().fg(if self.error {
+                    Color::Red
+                } else {
+                    ACCENT
+                })),
+                label,
+            );
             draw_input(
                 frame,
-                "",
+                "> ",
                 &self.draft.replace(['\n', '\r'], " "),
                 self.cursor,
-                inner,
+                input,
             );
         }
-        frame.render_widget(Paragraph::new("Enter add/edit · j/k select · x delete · J/K reorder within type\nTab back to form · Esc cancel input/back"), help);
     }
 }
 
@@ -456,20 +490,24 @@ mod tests {
     fn mixed_paste_preserves_chains_and_document_targets() {
         let mut work = WorkDetails::default();
         let mut editor = ReferenceEditor::new(&work);
-        editor.paste("FSW-42\n#123 > #124\n#125\nhttps://example.com/design?q=1#intro\n#123");
-        assert_eq!(editor.entries.len(), 4);
+        editor.paste("FSW-42\n#123");
+        editor.paste("#124\n#125\nwww.google.com\n#123");
+        assert!(editor.editing);
+        assert!(editor.entries.is_empty());
+        editor.key(KeyCode::Enter);
+        assert_eq!(editor.entries.len(), 3);
         editor.apply(&mut work);
         assert_eq!(work.jira, "https://flyzipline.atlassian.net/browse/FSW-42");
         assert_eq!(
             work.prs,
-            "https://github.com/ZiplineTeam/FlightSystems/pull/123 > https://github.com/ZiplineTeam/FlightSystems/pull/124; https://github.com/ZiplineTeam/FlightSystems/pull/125"
+            "https://github.com/ZiplineTeam/FlightSystems/pull/123 > https://github.com/ZiplineTeam/FlightSystems/pull/124 > https://github.com/ZiplineTeam/FlightSystems/pull/125"
         );
-        assert_eq!(work.design_docs, "https://example.com/design?q=1#intro");
+        assert_eq!(work.design_docs, "https://www.google.com");
         let icons: Vec<_> = display_links(&work)
             .into_iter()
             .map(|(icon, _, _)| icon)
             .collect();
-        assert_eq!(icons, ["", "", " ↳", "", ""]);
+        assert_eq!(icons, ["", "", " ↳", " ↳", ""]);
     }
 
     #[test]
@@ -496,6 +534,7 @@ mod tests {
         let mut work = WorkDetails::default();
         let mut editor = ReferenceEditor::new(&work);
         editor.paste("projects/repo/docs/plan.md https://example.com ~/notes/projects/repo/pr-reviews/42/guide.md notes:docs/data#1.csv notes:projects/repo/docs/plan.md");
+        assert!(editor.key(KeyCode::Tab));
         editor.apply(&mut work);
         assert_eq!(
             work.design_docs,
@@ -525,16 +564,25 @@ mod tests {
     }
 
     #[test]
-    fn invalid_chain_does_not_change_saved_links() {
+    fn invalid_draft_does_not_change_saved_links() {
         let mut work = WorkDetails {
             prs: "#42 > #43".into(),
             ..Default::default()
         };
         let mut editor = ReferenceEditor::new(&work);
-        editor.paste("#1 > FSW-42");
+        editor.paste("#1 not-a-link");
         assert!(!editor.key(KeyCode::Tab));
         editor.key(KeyCode::Esc);
         editor.apply(&mut work);
         assert_eq!(work.prs, "#42 > #43");
+
+        let mut editor = ReferenceEditor::new(&work);
+        editor.paste("#44");
+        editor.key(KeyCode::Enter);
+        editor.apply(&mut work);
+        let links = display_links(&work);
+        assert_eq!(links[0].0, "");
+        assert_eq!(links[1].0, " ↳");
+        assert_eq!(links[2].0, "");
     }
 }

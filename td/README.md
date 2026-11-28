@@ -56,8 +56,9 @@ It does not use sudo or install a crates.io package named `td`.
 
 Save a task, then press `c` (chat) to open its Pi agent. On first use, this opens
 settings without a picker. `C` opens the same settings later; there is no separate
-`E` action. Names default to `review-123` for PR reviews or the first two task-title
-words (up to 24 characters).
+`E` action. Suggested names use lowercase and hyphens: `review-123` for a PR
+review, `fsw-456` for a Jira task, or up to 32 characters from the first
+description line. Saved names are kept as entered.
 
 `Tab` changes fields:
 - **Worktree:** `Enter` opens Session Finder. `F2` or `Ctrl-P` also browses;
@@ -117,7 +118,7 @@ once to publish their identity for jumps and Active status.
 
 ### Completing a task with an agent
 
-`d` (or `td done <task-id>`) asks before completing an item with a running Pi in
+`s` → Done (or `td done <task-id>`) asks before completing an item with a running Pi in
 its current tmux server. Confirming closes its td-created window, including
 Diffview and every other pane. This interrupts Pi and can discard unsaved work.
 Without td's ownership tag, only the Pi pane closes. This includes older td
@@ -166,10 +167,12 @@ readable.
 
 ## TUI keys
 
+Press `?` on the dashboard, in Agent settings, or in a task form or Useful links list to see shortcuts. While typing in a task form or link input, press `F1` so `?` stays available as text. Press Esc to return to your draft.
+
 - Tab / Shift-Tab: toggle between Pending and Done within the current project view
 - `p` then project initial: switch project view (`i` improve, `w` work, `c` code,
   `n` note, `r` read, `o` opensource); `-` selects No project, `a` selects All projects
-- Esc in the project picker: cancel without changing the current view
+- In the project picker, use arrows or `j`/`k` to move, Enter to apply, or Esc to cancel. `✓` marks the applied project.
 - `j`/`k` or arrows: move
 - `gg` / `G`: first / last task in the current view
 - `zz`: center the selected task without changing the selection
@@ -185,22 +188,18 @@ readable.
 - `m`: mark/unmark the current pending task for merging; move and press `m` on
   each additional task. Enter opens the populated merge form; edit any field and
   use `:wq` to save. Esc cancels with a discard check; `:q!` discards immediately.
-- `d`: mark done
-- `u`: reopen the selected completed task (in either view)
 - `x`: delete
-- `s`: open the state picker; arrows or `j`/`k` move, Enter applies, `1`–`4` selects directly, Esc cancels
-- `S` (Shift+s): cycle No state → Next → In progress → Waiting → No state.
-  State controls do not change completed tasks.
-- `/`: filter tasks in the current view
-- Esc from a project view: return to All projects; Esc from All projects: quit
+- `s`: open the state picker in any project. Use arrows or `j`/`k` to move, Enter to apply, or Esc to cancel. Press the bracketed letter to choose a state. On a completed task, choosing a workflow state reopens it in that state.
+- `S` (Shift+s): advance No state → Next → In progress → Waiting → Done. Completion still asks before closing a linked running Pi agent. `S` does not reopen completed tasks.
+- `/`: preview matching tasks as you type. Enter applies the filter; Esc restores the previous filter.
+- Esc on the dashboard: clear an applied filter first. With no filter, return to All projects or quit if already there.
 - `q`: quit from any task list
 
-Merging joins descriptions with a blank line, in marking order. The first marked
-task supplies the ID and metadata; all fields remain editable. Saving soft-deletes
+Merge mode shows `[1]` for the task that keeps its ID and metadata, and `+2`, `+3`, … for tasks that join it. Merging joins descriptions with a single line break, in marking order. All fields remain editable in the preview. Saving soft-deletes
 the other tasks, preserving their original data in the event log. Completed tasks
 cannot be marked. Selection and preview do not write changes.
 
-The table title shows the current project view. Each project view matches the
+The dashboard header shows the current project view. Each project view matches the
 project field exactly, not words in the description. Pending/Done and `/` text
 filtering work within that view. Switching projects keeps the status and text
 filter. New tasks default to the current project; you can change it in the form.
@@ -214,21 +213,19 @@ quick-add templates keep their minimal fields and start with No state.
 
 | Picker key | State | Meaning | Background |
 |---|---|---|---|
-| `1` | No state | Tracked, but not a current focus | Gray |
-| `2` | Next | You intend to work on it next | Cyan |
-| `3` | In progress | You are working on it | Purple |
-| `4` | Waiting | Waiting on someone or something before continuing | Amber |
+| `s` | No state | Tracked, but not a current focus | Gray |
+| `n` | Next | You intend to work on it next | Cyan |
+| `i` | In progress | You are working on it | Purple |
+| `w` | Waiting | Waiting on someone or something before continuing | Amber |
+| `d` | Done | Complete the task (dashboard picker only) | Green |
 
-State is separate from Pending / Done. Waiting tasks stay Pending.
-Use `d` when the task is done and `u` to reopen it with its previous state.
-Done is not a picker choice: a green Done badge overrides the state badge while
-complete. Waiting rows are dimmed outside the state badge.
+Waiting tasks stay Pending. Choosing Done replaces the workflow badge with a green Done badge. Choose a workflow state to reopen a Done task. Waiting rows are dimmed outside the state badge.
 
 ### Quick-add templates
 
 Press `A` from a task list, then choose `p` (PR review), `i` (Improvement),
 `f` (Feature work), or `d` (Design doc review). The picker shows these letter hints.
-Numbers `1`–`4` or arrows and Enter also work. Each template shows only its required inputs:
+Numbers `1`–`4` or arrows and Enter also work. Each template shows its required input plus State and Category:
 
 | Template | Inputs | Presets |
 |---|---|---|
@@ -241,10 +238,9 @@ Templates start with No state. Bare PR numbers use FlightSystems; bare Jira numb
 Improve tasks default to Uncategorized.
 
 Templates use the same editing keys as ordinary add. Type or paste the input;
-multiline pasted descriptions stay intact. Enter and Tab advance fields without
-saving; Shift-Tab moves back. Enter on Useful links opens the editor; Tab
-accepts the current link and moves to State. Choose a state with `1`–`4` or arrows.
-Choose an Improve category with `1`–`6` or arrows. Text fields support the same Vim keys.
+multiline pasted descriptions stay intact. In Description insert mode, Enter adds a line. In single-line PR and Jira fields, Enter advances instead. Tab advances without saving; Shift-Tab moves back. Enter on Useful links opens the editor; Tab
+accepts the current link and moves to State. Choose a state with its bracketed letter or the arrows.
+Choose a category with the displayed number or the arrows. Text fields support the same Vim keys.
 Esc leaves insert mode, then `:wq` and Enter save. `:q!` and Enter discard.
 Esc in normal/select mode cancels, with confirmation for unsaved changes.
 Ctrl-S does not save.
@@ -262,11 +258,10 @@ new task is visible. Use ordinary `e` afterward to change any other field.
 
 ### Improve categories
 
-Use `p`, then `i` to open Improve. The table shows Category instead of Project.
+Use `p`, then `i` to open Improve. The tabs filter its categories.
 
 - `0` / `1` / `2` / `3` / `4` / `5` / `6`: All / td / nvim / agents / terminal / system / Uncategorized
 - Add or edit an Improve task to choose Category with `1`–`6` or arrows.
-- Category appears in the form only when Project is `improve`.
 - Tab switches Pending / Done within the selected category; `/` filters descriptions.
 
 New and existing tasks default to Uncategorized. Adding from a focused category
@@ -288,17 +283,14 @@ Use `p`, then `w` to open Work. Other project views keep the original table.
 - `/`: search descriptions and link references
 - Esc from the dashboard: All projects; `q`: quit
 
-For Work reviews, choosing Waiting records the review-round time. Move the review
-to Next when it needs attention.
-
 All shows one continuous list without category headers. Focused categories use
 the same ordering as other Pending views. Administrative covers Jira housekeeping,
-messages, and similar work. Task rows have no blank separators.
+messages, and similar work. Only the selected task has an outline.
 
-Column headers and **Useful links** use Octicons. Use a Nerd Font to see them.
+Dashboard columns, form labels, and related popup titles share Octicons. Project headings and the project switcher reuse the dashboard project icons. Use a Nerd Font to see them.
 Link icons distinguish PRs, PR chains, tickets, documents, spreadsheets, slides,
 forms, videos, threads, wikis, repositories, folders, and other web links.
-Each PR in a chain has its own URL. The table wraps descriptions and link titles.
+Each PR in a chain has its own URL. Each link uses one line; long titles end with an ellipsis.
 If there is no cached title, td uses readable text from supported URLs or a
 short label such as `#123` or `Google Doc 1`. It uses filenames for PDFs
 without downloading them. For arXiv links it fetches the abstract page title.
@@ -334,10 +326,9 @@ directory to keep test titles separate from your normal cache.
 
 ### Task fields
 
-Only Description is required. Work and Improve tasks default to Uncategorized,
+Add, Edit, Merge, and Quick Add open in centered panels that stay in place as you move between fields. Long descriptions scroll inside their field. Only Description is required. Work and Improve offer their own category choices. Other projects and tasks without a project show Uncategorized. Work and Improve tasks default to Uncategorized,
 even from a focused category view. Use arrows, `j` / `k`, or Space for category
-and state. For Work categories, use `f` / `r` / `d` / `a` / `u`. Use `1`–`4` for
-state. Tab moves between fields. Enter on **Useful links** opens the reference editor.
+and state. Use the displayed number for a category. Use `s` / `n` / `i` / `w` for state. Tab moves between fields. Enter on **Useful links** opens the reference editor.
 
 - Paste URLs, Jira keys such as `FSW-12345`, or PR numbers such as `#123`.
   A bare number means a FlightSystems PR. Spaces, commas, and newlines separate entries.
@@ -345,7 +336,7 @@ state. Tab moves between fields. Enter on **Useful links** opens the reference e
   Use `notes:path` for other file types, or start the path with `~/notes/`. Use paths without spaces.
   td stores relative paths and shows icons for docs, reviews, tables, and images.
   Opening local links depends on the terminal.
-- To add a PR chain, enter `#123 > #124`, with the base PR first.
+- Paste one or more links, then press Enter to add them. You can paste links one at a time or all at once. Multiple PRs in the same entry form a stack in input order; put the base PR first. `www.` links default to HTTPS.
 - Use arrows or `j`/`k` to select an entry. Enter edits it; `x` deletes it.
   `J`/`K` reorders entries of the same type. Esc cancels the current input.
 - Tab accepts the input and advances to the next field. Esc from the list returns
@@ -428,13 +419,11 @@ Agent icons: `●` Active and `○` Inactive; blank means no linked agent.
 
 Every Pending view keeps tasks completed within the last 24 hours and puts them
 first. Completed rows are dimmed, with strikethrough on the description only. Project colors stay unchanged. Dimming depends on your
-terminal; it does not change background transparency. Press `u` to reopen an
-accidental completion.
+terminal; it does not change background transparency. Use `s` and choose a workflow state to undo a completion.
 After 24 hours they disappear from Pending on the next interaction, but remain
 in Done. This uses a rolling 24-hour window, not the calendar day.
 
-The table border shows a bold colored view label: amber for Pending, green for
-Done, followed by the filter. The form header shows
+The dashboard header shows the project, active filter, and visible counts. Pending shows counts for Next (`→`), In progress (`▶`), Waiting (`Ⅱ`), and tasks done in the past 24 hours (`✓`). The form header shows
 `INSERT`, `NORMAL`, `SELECT`, or `COMMAND`.
 The active field has a `>` marker. Text editing shows the cursor. Colors use the
 dim borders and muted accents without reverse video. The palette suits the
@@ -444,9 +433,9 @@ Task rows have pale project backgrounds: improve sage, work blue, code lavender,
 note sand, read blush, and opensource mint. Wrapped continuation lines share the
 same background, except for state badges. Unset or custom projects keep the terminal background.
 
-All task views use **State | Project | Agent | Description | Links**.
+The table shows **State | Agent | Description | Links**. All projects adds the **Project** column after State.
 Project categories are filters, not columns.
-Descriptions wrap at word boundaries, including long words when needed.
+The first description line is bold. Continuation lines are indented. The full description wraps, including long words when needed.
 Ctrl-U/Ctrl-D move by screen lines so even descriptions taller than the popup can
 be read fully. `j`/`k` still move between tasks. The `>` marker identifies the
 selected line without changing category colors or intensity. Deleted tasks are
@@ -457,7 +446,10 @@ to keep the description cursor or selected metadata field visible.
 
 In the add/edit form:
 
-- Enter or Tab: move to the next field (wraps after the last field)
+- Tab: move to the next field (wraps after the last field)
+- Enter: insert a newline in Description insert mode; otherwise advance or open Useful links
+- Up / Down: move between description lines. In normal mode, `j` / `k` also move by line.
+- `o` / `O` in Description normal mode: open a line below / above and start typing
 - Shift-Tab: move to the previous field
 - `:wq` then Enter: save all fields and return to the task list
 - `:q!` then Enter: discard the form immediately, without confirmation
