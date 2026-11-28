@@ -154,7 +154,18 @@ press("]t")
 assert(panel.selected == "b" and text(buffer):find("Thread 2/2", 1, true))
 press("[t")
 assert(panel.selected == "a" and panel.detail_line)
-press("<Esc>")
+vim.o.hlsearch = true
+local function send(keys)
+  vim.api.nvim_feedkeys(vim.keycode(keys), "mtx", false)
+end
+send("/First question<CR>")
+assert(vim.v.hlsearch == 1, "search highlights are active")
+send("<Esc>")
+assert(
+  vim.v.hlsearch == 0 and panel.selected == "a" and panel.detail_line,
+  "Escape clears highlights before leaving the thread"
+)
+send("<Esc>")
 assert(not panel.detail_line and panel.rows[vim.api.nvim_win_get_cursor(window)[1]] == "a")
 for index, command in ipairs({ "write", "wq" }) do
   if index == 1 then
@@ -266,7 +277,7 @@ assert(not first_visit.selected and #read == read_before, "Tab switches views wi
 for _, mode in ipairs({ "threads", "guide" }) do
   assert(first_visit.mode == mode)
   local previous_search = vim.fn.getreg("/")
-  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("/Comment<Esc>", true, false, true), "mtx", false)
+  send("/Comment<Esc>")
   assert(vim.api.nvim_get_current_win() == first_visit.winid and vim.fn.getcmdtype() == "", "Escape cancels search")
   assert(vim.fn.getreg("/") == previous_search, "cancelling search keeps the previous pattern")
   press("<Tab>")

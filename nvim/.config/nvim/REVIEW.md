@@ -57,7 +57,8 @@ The diff winbar shows completed sections and viewed hunks across the pinned revi
 | --- | --- |
 | `↑` / `↓` | Browse without marking a conversation read |
 | Enter | Open the comment’s pinned source. Press Esc there to return to the same thread row. |
-| Space / Esc | Read the conversation / return to the list |
+| Space | Read the conversation |
+| Esc | Clear search highlights, or return to the list if none are active |
 | `]t` / `[t` | Read the next / previous thread in the current list |
 | `]a` / `[a` | Next / previous unread Pi answer or request for input |
 | `ga` | Show the full thread list and clear the filter |

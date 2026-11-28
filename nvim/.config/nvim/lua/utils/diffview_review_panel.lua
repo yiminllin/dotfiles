@@ -622,6 +622,7 @@ local function maps(panel)
     local lines = {
       "Tab / Shift-Tab   Switch Guide / Threads",
       "z                 Expand or dock the panel",
+      "Esc               Clear search highlights (in panel)",
       "q / Esc           Close this help",
       "",
     }
@@ -638,7 +639,7 @@ local function maps(panel)
       "Threads",
       "Enter       Jump to comment in diff",
       "Up / Down   Browse conversations",
-      "Space / Esc  Read conversation / return to list",
+      "Space / Esc  Read conversation / return to list if no search highlights",
       "]t / [t      Read next / previous thread",
       "]a / [a      Next / previous unread reply or Pi question",
       "ga           Show all threads",
@@ -687,7 +688,9 @@ local function maps(panel)
   end
   map("<CR>", jump, "Open exact source target")
   map("<Esc>", function()
-    if panel.mode == "threads" and panel.selected then
+    if vim.v.hlsearch == 1 then
+      vim.cmd.nohlsearch()
+    elseif panel.mode == "threads" and panel.selected then
       local id = panel.selected
       panel.selected = nil
       render(panel)
@@ -698,7 +701,7 @@ local function maps(panel)
         end
       end
     end
-  end, "Return to conversation list")
+  end, "Clear search highlights or return to conversation list")
   map("<Space>", function()
     if panel.mode == "threads" then
       local comment = current_comment(panel)
