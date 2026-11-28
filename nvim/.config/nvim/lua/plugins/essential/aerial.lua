@@ -14,7 +14,17 @@ return {
 		})
 
 		vim.keymap.set("n", "<leader>si", function()
-			require("aerial").snacks_picker()
+			local opts
+			if vim.bo.filetype == "markdown" then
+				local bufnr = vim.api.nvim_get_current_buf()
+				opts = {
+					-- Preview the same buffer that provides the heading ranges, including unsaved edits.
+					transform = function(item)
+						item.buf = bufnr
+					end,
+				}
+			end
+			require("aerial").snacks_picker(opts)
 		end, { desc = "[S]earch Sk[i]m" })
 	end,
 }

@@ -26,6 +26,7 @@
 | Editing | venn.nvim | ASCII diagram drawing | [venn.lua](nvim/.config/nvim/lua/plugins/editing/venn.lua) |
 | Editing | debugprint.nvim | Debug print statements | [debugprint.lua](nvim/.config/nvim/lua/plugins/editing/debugprint.lua) |
 | Editing | kitty-scrollback.nvim | Kitty terminal integration | [kitty-scrollback.lua](nvim/.config/nvim/lua/plugins/editing/kitty-scrollback.lua) |
+| Editing | render-markdown.nvim | Render Markdown in the editing buffer | [render-markdown.lua](nvim/.config/nvim/lua/plugins/editing/render-markdown.lua) |
 | Git | gitsigns.nvim | Git signs in gutter | [gitsigns.lua](nvim/.config/nvim/lua/plugins/git/gitsigns.lua) |
 | Git | diffview.nvim | Diff viewer with [code-centered guides and parallel Pi threads](nvim/.config/nvim/REVIEW.md) | [diffview.lua](nvim/.config/nvim/lua/plugins/git/diffview.lua) |
 | Git | gitlinker.nvim | Generate git links | [gitlinker.lua](nvim/.config/nvim/lua/plugins/git/gitlinker.lua) |
