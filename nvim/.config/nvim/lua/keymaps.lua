@@ -2,6 +2,11 @@
 -- Set highlight on search, but clear on pressing <Esc> in normal mode
 vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>")
 
+-- LSP inspection
+vim.keymap.set("n", "K", function()
+	require("utils.rust_hover").hover({ border = "rounded", max_width = 88, max_height = 16 })
+end, { desc = "Show type and documentation" })
+
 -- Diagnostic keymaps
 vim.keymap.set("n", "[d", vim.diagnostic.goto_prev, { desc = "Go to previous [D]iagnostic message" })
 vim.keymap.set("n", "]d", vim.diagnostic.goto_next, { desc = "Go to next [D]iagnostic message" })

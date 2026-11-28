@@ -1,5 +1,14 @@
 | Name | Description |
 |---|---|
+| [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) | Shows insert-mode completion from multiple sources. |
+| [LuaSnip](https://github.com/L3MON4D3/LuaSnip) | Expands snippets and moves between placeholders. |
+| [cmp_luasnip](https://github.com/saadparwaiz1/cmp_luasnip) | Adds LuaSnip snippets to nvim-cmp. |
+| [cmp-nvim-lsp](https://github.com/hrsh7th/cmp-nvim-lsp) | Adds LSP completion items to nvim-cmp. |
+| [cmp-path](https://github.com/hrsh7th/cmp-path) | Adds filesystem paths to nvim-cmp. |
+| [lspkind.nvim](https://github.com/onsails/lspkind.nvim) | Adds icons for completion item types. |
+| [mason-lspconfig.nvim](https://github.com/mason-org/mason-lspconfig.nvim) | Connects Mason packages to LSP server configs. |
+| [mason-tool-installer.nvim](https://github.com/WhoIsSethDaniel/mason-tool-installer.nvim) | Installs a configured list of Mason tools automatically. |
+| [fidget.nvim](https://github.com/j-hui/fidget.nvim) | Displays LSP progress notifications. |
 | [Pi Permission System](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-permission-system) | Permission gates; temporarily disabled because Bazel labels and API routes trigger false external-path prompts. |
 | [Black](https://github.com/psf/black) | Formats Python code with a consistent style. |
 | [isort](https://github.com/PyCQA/isort) | Sorts and groups Python import statements. |

@@ -1,103 +1,54 @@
 return {
-	-- LSP Configuration & Plugins
 	"neovim/nvim-lspconfig",
-	dependencies = {
-		-- Automatically install LSPs and related tools to stdpath for neovim
-		"williamboman/mason.nvim",
-		"williamboman/mason-lspconfig.nvim",
-		"WhoIsSethDaniel/mason-tool-installer.nvim",
-
-		-- Useful status updates for LSP.
-		-- NOTE: `opts = {}` is the same as calling `require('fidget').setup({})`
-		{ "j-hui/fidget.nvim", opts = {} },
-	},
+	dependencies = { "mason-org/mason.nvim" },
 	config = function()
-		vim.api.nvim_create_autocmd("LspAttach", {
-			group = vim.api.nvim_create_augroup("kickstart-lsp-attach", { clear = true }),
-			callback = function(event)
-				local client = vim.lsp.get_client_by_id(event.data.client_id)
-				local filetype = vim.bo[event.buf].filetype
-				local buffer_name = vim.api.nvim_buf_get_name(event.buf)
-				if
-					client
-					and client.name == "rust_analyzer"
-					and (
-						vim.startswith(buffer_name, "diffview://")
-						or filetype == "DiffviewFiles"
-						or filetype == "DiffviewFileHistory"
-					)
-				then
-					vim.lsp.buf_detach_client(event.buf, client.id)
-					return
-				end
+		require("mason").setup()
 
-				if client and client.server_capabilities.documentHighlightProvider then
-					vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
-						buffer = event.buf,
-						callback = vim.lsp.buf.document_highlight,
-					})
-
-					vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-						buffer = event.buf,
-						callback = vim.lsp.buf.clear_references,
-					})
-				end
-			end,
+		vim.lsp.config("clangd", {
+			cmd = { "clangd", "--offset-encoding=utf-16" },
 		})
-
-		local capabilities = vim.lsp.protocol.make_client_capabilities()
-		capabilities = vim.tbl_deep_extend("force", capabilities, require("cmp_nvim_lsp").default_capabilities())
-
-		-- -- If Clangd failed to install with Mason due to unsupported platform, use below line and comment out clangd in servers
-		-- require("lspconfig").clangd.setup({ cmd = { "clangd" } })
-		local servers = {
-			clangd = {
-				cmd = {
-					"clangd",
-					"--offset-encoding=utf-16",
-				},
-			},
-			lua_ls = {
-				settings = {
-					Lua = {
-						runtime = { version = "LuaJIT" },
-						workspace = {
-							checkThirdParty = false,
-							library = {
-								"${3rd}/luv/library",
-								unpack(vim.api.nvim_get_runtime_file("", true)),
-							},
-						},
-						completion = {
-							callSnippet = "Replace",
+		vim.lsp.config("lua_ls", {
+			settings = {
+				Lua = {
+					runtime = { version = "LuaJIT" },
+					workspace = {
+						checkThirdParty = false,
+						library = {
+							"${3rd}/luv/library",
+							unpack(vim.api.nvim_get_runtime_file("", true)),
 						},
 					},
 				},
 			},
-			julials = {},
-			rust_analyzer = {},
-			pyright = {},
-			marksman = {},
-		}
-
-		require("mason").setup()
-
-		local ensure_installed = vim.tbl_keys(servers or {})
-		vim.list_extend(ensure_installed, {
-			"stylua",
-			"prettier",
-			"ruff",
 		})
-		require("mason-tool-installer").setup({ ensure_installed = ensure_installed })
 
-		require("mason-lspconfig").setup({
+		vim.lsp.config("rust_analyzer", {
+			settings = { ["rust-analyzer"] = { hover = { show = { fields = 25 } } } },
 			handlers = {
-				function(server_name)
-					local server = servers[server_name] or {}
-					server.capabilities = vim.tbl_deep_extend("force", {}, capabilities, server.capabilities or {})
-					require("lspconfig")[server_name].setup(server)
+				["experimental/serverStatus"] = function(err, status, ctx)
+					local client = vim.lsp.get_client_by_id(ctx.client_id)
+					if not err and client and type(status) == "table" then
+						client.rust_analyzer_status = status
+					end
 				end,
 			},
 		})
+
+		vim.api.nvim_create_user_command("RustAnalyzerStatus", function()
+			local clients = vim.lsp.get_clients({ bufnr = 0, name = "rust_analyzer" })
+			if #clients == 0 then
+				vim.notify("Rust Analyzer is not attached to this buffer")
+			end
+			for _, client in ipairs(clients) do
+				local status = client.rust_analyzer_status
+				local text = status and status.health or "no health report received"
+				if status and type(status.message) == "string" and status.message ~= "" then
+					text = text .. ": " .. status.message
+				end
+				vim.notify("Rust Analyzer: " .. text)
+			end
+		end, { desc = "Show Rust Analyzer health and details" })
+
+		vim.lsp.enable({ "clangd", "lua_ls", "julials", "rust_analyzer", "pyright", "marksman" })
 	end,
 }

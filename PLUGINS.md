@@ -7,15 +7,6 @@
 | Essential/Core | lazy.nvim | Plugin manager | [init.lua](nvim/.config/nvim/init.lua) |
 | Essential/Core | nvim-lspconfig | LSP configuration | [lsp-config.lua](nvim/.config/nvim/lua/plugins/essential/lsp-config.lua) |
 | Essential/Core | mason.nvim | LSP/tool installer | [lsp-config.lua](nvim/.config/nvim/lua/plugins/essential/lsp-config.lua) |
-| Essential/Core | mason-lspconfig.nvim | Mason-LSP bridge | [lsp-config.lua](nvim/.config/nvim/lua/plugins/essential/lsp-config.lua) |
-| Essential/Core | mason-tool-installer.nvim | Auto-install tools | [lsp-config.lua](nvim/.config/nvim/lua/plugins/essential/lsp-config.lua) |
-| Essential/Core | fidget.nvim | LSP status notifications | [lsp-config.lua](nvim/.config/nvim/lua/plugins/essential/lsp-config.lua) |
-| Essential/Core | nvim-cmp | Autocompletion engine | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
-| Essential/Core | LuaSnip | Snippet engine | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
-| Essential/Core | cmp_luasnip | Snippet completion source | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
-| Essential/Core | cmp-nvim-lsp | LSP completion source | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
-| Essential/Core | cmp-path | Path completion source | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
-| Essential/Core | lspkind.nvim | Completion icons | [nvim-cmp.lua](nvim/.config/nvim/lua/plugins/essential/nvim-cmp.lua) |
 | Essential/Core | mini.hipatterns | Highlight patterns in text | [debugprint.lua](nvim/.config/nvim/lua/plugins/editing/debugprint.lua) |
 | Essential/Core | nvim-treesitter | Syntax highlighting & parsing | [treesitter.lua](nvim/.config/nvim/lua/plugins/essential/treesitter.lua) |
 | Essential/Core | nvim-treesitter-context | Show code context | [treesitter-context.lua](nvim/.config/nvim/lua/plugins/essential/treesitter-context.lua) |
@@ -109,7 +100,19 @@
 | Python | uv | [install.sh](install.sh) |
 | Python | python@3.12 | [Brewfile](Brewfile) |
 
-### Language Servers (via Mason)
+### Language Servers
+
+On a fresh setup, run this in Neovim. Omit tools you already provide on `PATH`:
+
+```vim
+:MasonInstall clangd lua-language-server rust-analyzer pyright marksman stylua prettier ruff
+```
+
+For Julia, use the upstream `julials` recipe. It loads `LanguageServer.jl` from the `nvim-lspconfig` Julia environment or the regular load path. To install it in that environment, run this in a shell:
+
+```sh
+julia --project=@nvim-lspconfig -e 'using Pkg; Pkg.add("LanguageServer")'
+```
 
 | Language | LSP | Purpose |
 | ---------- | ----- | --------- |
