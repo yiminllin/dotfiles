@@ -44,7 +44,11 @@ async function fixture() {
       setWidget(_key, content) { this.widget = content; },
       notify() {},
     };
-    return { mode, hasUI: mode === "tui", ui, branch, sessionManager: { getBranch: () => branch } };
+    const otherEntries = [];
+    return { mode, hasUI: mode === "tui", ui, branch, otherEntries, sessionManager: {
+      getBranch: () => branch,
+      getEntries: () => [...branch, ...otherEntries],
+    } };
   };
   let active;
   loaded.runtime.appendEntry = (customType, data) => {
@@ -55,10 +59,10 @@ async function fixture() {
     active = ctx;
     return tool.execute("test", params, undefined, undefined, ctx);
   };
-  const event = async (name, ctx) => {
+  const event = async (name, ctx, payload = {}) => {
     active = ctx;
     let result;
-    for (const handler of extension.handlers.get(name) || []) result = await handler({}, ctx);
+    for (const handler of extension.handlers.get(name) || []) result = await handler(payload, ctx);
     return result;
   };
   const toggle = async (ctx) => {
@@ -69,19 +73,55 @@ async function fixture() {
   return { tool, makeContext, call, event, toggle, lines, extension };
 }
 
+test("bookmarks inform an existing pin without changing or persisting it", async () => {
+  const f = await fixture();
+  const ctx = f.makeContext();
+  const message = (id, role, text) => ({ id, type: "message", message: {
+    role, content: [{ type: "text", text }],
+  } });
+  const mark = (id, marked = true) => ({ type: "custom", customType: "transcript-reply-mark", data: { id, marked } });
+  ctx.branch.push(message("plan", "assistant", "Keep cancellation visible"), mark("plan"),
+    message("prompt", "user", "Preserve the startup limit"), mark("prompt"));
+  ctx.otherEntries.push(message("other", "assistant", "Different branch"), mark("other"));
+  const payload = { messages: [ctx.branch[2].message] };
+  assert.equal(await f.event("context", ctx, payload), undefined);
+
+  await f.call(ctx, plan);
+  const snapshot = await f.call(ctx, { action: "get" });
+  const count = ctx.branch.length;
+  const context = async () => (await f.event("context", ctx, payload))?.messages.at(-1);
+  const injected = await context();
+  assert.equal(injected.display, false);
+  assert.match(injected.content, /Preserve the startup limit.*Keep cancellation visible/);
+  assert.doesNotMatch(injected.content, /Different branch/);
+  assert.equal(ctx.branch.length, count);
+  assert.deepEqual(await f.call(ctx, { action: "get" }), snapshot);
+
+  ctx.otherEntries.push(mark("prompt", false), mark("plan", false));
+  assert.equal(await context(), undefined);
+
+  await f.call(ctx, { ...plan, milestones: [{ label: "Check bookmarks", status: "pending", tasks: [
+    { label: "Mark the plan", status: "done" },
+    { label: "Check the update", status: "pending" },
+    { label: "Unmark the plan", status: "pending" },
+  ] }] });
+  assert.match(f.lines(ctx).join("\n"), /○ Check bookmarks[^\n]*\n│   ✓ Mark the plan[^\n]*\n│   ○ Check the update[^\n]*\n│   ○ Unmark the plan/);
+});
+
 test("compact hierarchy preserves goals, colors, and nested tasks through replay", async () => {
   const f = await fixture();
   const ctx = f.makeContext();
   const { now, ...snapshot } = plan;
   snapshot.milestones = plan.milestones.map((m, i) => ({
     ...m,
-    tasks: [{ label: `Detail ${i}`, status: "current" }],
+    tasks: [{ label: `Detail ${i}`, status: m.status }],
   }));
   await f.call(ctx, snapshot);
   const output = f.lines(ctx).join("\n");
   assert.match(output, /╭─ Make startup reliable/);
   assert.match(output, /│   ▶ Detail 1/);
-  assert.doesNotMatch(output, /Detail [02]|Now|Block None|Progress ·/);
+  assert.match(output, /│   ○ Detail 2/);
+  assert.doesNotMatch(output, /Detail 0|Now|Block None|Progress ·/);
   const colors = [];
   const bold = [];
   f.lines(ctx, 80, {

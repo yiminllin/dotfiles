@@ -44,9 +44,9 @@ engineering step visibly only when the user explicitly asks to follow it.
 
 Omit `tasks` by default. When nesting is essential to understand progress, show
 only one or two short user-relevant sub-outcomes or decisions, without emoji.
-The schema still accepts up to five tasks; only the current milestone's tasks
-appear. Completed milestones hide their nested tasks. Keep procedures in hidden `now` context
-and explain them in conversation only when useful or requested.
+When the user asks to track a bookmarked plan, keep up to three short steps in
+order under its pending or current milestone. Completed milestones hide tasks.
+Keep other procedures in hidden `now` context unless explicitly requested.
 
 Use `blocker` only for an actual obstacle to the current work, such as missing API
 issue details. State it briefly. Planning-only scope and unauthorized future
@@ -91,7 +91,10 @@ Each `progress set` supplies a complete snapshot; identical snapshots are ignore
 State lives in branch-local custom session entries, including updates made through
 Codemode. Reload, session resume, and compaction restore the latest snapshot on
 the selected branch. A hidden context message reminds the model of the current
-plan at the start of each run. No separate data file or model call is used.
+plan at the start of each run. Recent transcript bookmarks on the selected branch
+inform the existing pin on the next agent turn. Pi uses relevant details without
+copying the reply, replacing the pin, or changing status because of a bookmark.
+Unmarking removes the extra context. No separate data file or model call is used.
 
 ## Activation
 

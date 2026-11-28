@@ -127,10 +127,10 @@ class GridTests(unittest.TestCase):
         plan = {"goal": "Full plan", "milestones": [
             {"label": "One", "status": "done", "tasks": [{"label": "Hidden", "status": "done"}]},
             {"label": "Two", "status": "current", "tasks": [{"label": "Visible", "status": "current"}]},
-            {"label": "Three", "status": "pending"},
+            {"label": "Three", "status": "pending", "tasks": [{"label": "Preview", "status": "pending"}]},
         ], "blocker": "A decision"}
         lines = board.pin_lines(json.dumps({"pid": os.getpid(), "plan": plan}))
-        self.assertEqual(lines, ["Full plan", "✓ One", "▶ Two", "  ▶ Visible", "○ Three", "! Blocked: A decision"])
+        self.assertEqual(lines, ["Full plan", "✓ One", "▶ Two", "  ▶ Visible", "○ Three", "  ○ Preview", "! Blocked: A decision"])
 
     def test_arrow_sequence_does_not_consume_the_next_key(self):
         read_fd, write_fd = os.pipe()

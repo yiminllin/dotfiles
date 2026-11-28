@@ -202,7 +202,7 @@ def pin_lines(raw):
         for item in plan["milestones"]:
             glyph = {"done": "✓", "current": "▶", "pending": "○"}[item["status"]]
             lines.append(f"{glyph} {clean(item['label'])}")
-            if item["status"] == "current":
+            if item["status"] != "done":
                 for task in item.get("tasks", []):
                     glyph = {"done": "✓", "current": "▶", "pending": "○"}[task["status"]]
                     lines.append(f"  {glyph} {clean(task['label'])}")
