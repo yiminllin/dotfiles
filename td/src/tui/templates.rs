@@ -8,15 +8,28 @@ pub(super) enum Template {
     Improvement,
     Feature,
     DocumentReview,
+    CodeIdea,
+    Reading,
 }
 
 impl Template {
-    const ALL: [Self; 4] = [
+    const ALL: [Self; 6] = [
         Self::PrReview,
         Self::Improvement,
         Self::Feature,
         Self::DocumentReview,
+        Self::CodeIdea,
+        Self::Reading,
     ];
+
+    fn project(self) -> &'static str {
+        match self {
+            Self::PrReview | Self::Feature | Self::DocumentReview => "work",
+            Self::Improvement => "improve",
+            Self::CodeIdea => "code",
+            Self::Reading => "read",
+        }
+    }
 
     fn label(self) -> &'static str {
         match self {
@@ -24,13 +37,15 @@ impl Template {
             Self::Improvement => "Improvement",
             Self::Feature => "Feature work",
             Self::DocumentReview => "Design doc review",
+            Self::CodeIdea => "Code idea",
+            Self::Reading => "Reading",
         }
     }
 
     fn icon(self) -> &'static str {
         match self {
             Self::PrReview => "",
-            Self::Improvement => project_entry("improve"),
+            Self::Improvement | Self::CodeIdea | Self::Reading => project_entry(self.project()),
             Self::Feature => "",
             Self::DocumentReview => "",
         }
@@ -39,7 +54,8 @@ impl Template {
     fn input_hint(self) -> &'static str {
         match self {
             Self::PrReview => "PR link",
-            Self::Improvement => "Description",
+            Self::Improvement | Self::CodeIdea => "Description",
+            Self::Reading => "Web link",
             Self::Feature => "Jira key",
             Self::DocumentReview => "Description + doc link",
         }
@@ -51,14 +67,16 @@ impl Template {
             Self::Improvement => 'i',
             Self::Feature => 'f',
             Self::DocumentReview => 'd',
+            Self::CodeIdea => 'c',
+            Self::Reading => 'r',
         }
     }
 
     fn lookup_source(self) -> Option<title_lookup::Source> {
         match self {
             Self::PrReview => Some(title_lookup::Source::Pr),
-            Self::Improvement | Self::DocumentReview => None,
             Self::Feature => Some(title_lookup::Source::Jira),
+            _ => None,
         }
     }
 
@@ -66,8 +84,18 @@ impl Template {
         match self {
             Self::PrReview => "PR",
             Self::Feature => "Jira",
-            Self::Improvement | Self::DocumentReview => UiField::Description.label(),
+            Self::Reading => "Link",
+            Self::Improvement | Self::DocumentReview | Self::CodeIdea => {
+                UiField::Description.label()
+            }
         }
+    }
+
+    fn multiline(self) -> bool {
+        matches!(
+            self,
+            Self::Improvement | Self::DocumentReview | Self::CodeIdea
+        )
     }
 }
 
@@ -90,17 +118,14 @@ struct PendingSave {
 impl QuickAdd {
     fn new(template: Template) -> Self {
         let mut form = Form::default();
-        form.values[1] = if template == Template::Improvement {
-            "improve"
-        } else {
-            "work"
+        form.values[PROJECT_FIELD] = template.project().into();
+        if template.project() == "work" {
+            form.work.category = if template == Template::Feature {
+                WorkCategory::Feature
+            } else {
+                WorkCategory::Review
+            };
         }
-        .into();
-        form.work.category = if template == Template::Feature {
-            WorkCategory::Feature
-        } else {
-            WorkCategory::Review
-        };
         form.insert = true;
         Self {
             template,
@@ -123,10 +148,10 @@ impl QuickAdd {
     }
 
     fn fields(&self) -> &[usize] {
-        if self.template == Template::DocumentReview {
-            &[0, LINKS_FIELD, STATE_FIELD, CATEGORY_FIELD]
-        } else {
-            &[0, STATE_FIELD, CATEGORY_FIELD]
+        match self.template {
+            Template::DocumentReview => &[0, LINKS_FIELD, STATE_FIELD, CATEGORY_FIELD],
+            Template::CodeIdea | Template::Reading => &[0, STATE_FIELD],
+            _ => &[0, STATE_FIELD, CATEGORY_FIELD],
         }
     }
 
@@ -142,36 +167,37 @@ impl QuickAdd {
             return Err("Enter the required text or reference.");
         }
         let reference = match self.template {
-            Template::Improvement => {
-                form.values[0] = input;
-                return Ok((form, String::new()));
-            }
             Template::PrReview => {
-                single_reference(&input, true).ok_or("Enter one PR link or number.")?
-            }
-            Template::Feature => {
-                single_reference(&input, false).ok_or("Enter one Jira ticket link or key.")?
-            }
-            Template::DocumentReview => {
-                if !references::has_document_link(&form.work) {
-                    return Err("Add at least one design document link.");
-                }
-                form.values[0] = input;
-                return Ok((form, String::new()));
-            }
-        };
-        match self.template {
-            Template::PrReview => {
+                let reference =
+                    single_reference(&input, true).ok_or("Enter one PR link or number.")?;
                 form.work.prs = reference.url.clone();
                 form.values[0] = format!("Review {}", reference.label);
+                reference.url
             }
             Template::Feature => {
+                let reference =
+                    single_reference(&input, false).ok_or("Enter one Jira ticket link or key.")?;
                 form.work.jira = reference.url.clone();
                 form.values[0] = reference.label;
+                reference.url
             }
-            Template::Improvement | Template::DocumentReview => unreachable!(),
-        }
-        Ok((form, reference.url))
+            template => {
+                if template == Template::DocumentReview
+                    && !references::has_document_link(&form.work)
+                {
+                    return Err("Add at least one design document link.");
+                }
+                if template == Template::Reading {
+                    if !web_url(&input) {
+                        return Err("Enter one HTTP or HTTPS link.");
+                    }
+                    form.work.design_docs = input.clone();
+                }
+                form.values[0] = input;
+                String::new()
+            }
+        };
+        Ok((form, reference))
     }
 }
 
@@ -336,17 +362,13 @@ pub(super) fn handle_key(app: &mut App, key: KeyCode) -> Result<()> {
         }
         KeyCode::Esc => quick.confirm_discard = true,
         KeyCode::Enter
-            if quick.form.is_text()
-                && quick.form.insert
-                && quick.template.lookup_source().is_none() =>
+            if quick.form.is_text() && quick.form.insert && quick.template.multiline() =>
         {
             quick.form.edit_description(key);
             quick.error.clear();
         }
         KeyCode::Char('o' | 'O')
-            if quick.form.is_text()
-                && !quick.form.insert
-                && quick.template.lookup_source().is_some() => {}
+            if quick.form.is_text() && !quick.form.insert && !quick.template.multiline() => {}
         KeyCode::Tab | KeyCode::Enter | KeyCode::BackTab => {
             let count = quick.fields().len();
             let step = if key == KeyCode::BackTab {
@@ -431,16 +453,13 @@ fn finish(app: &mut App, template: Template, mut form: Form, title: Option<Strin
             format!("Review {title}")
         };
     }
-    app.select_project(Some(if template == Template::Improvement {
-        "improve"
-    } else {
-        "work"
-    }));
+    let project = template.project();
+    app.select_project(Some(project));
     app.filter.clear();
-    if template == Template::Improvement {
-        app.improve_category = Some(form.improve_category);
-    } else {
-        app.work_category = Some(form.work.category);
+    match project {
+        "improve" => app.improve_category = Some(form.improve_category),
+        "work" => app.work_category = Some(form.work.category),
+        _ => {}
     }
     app.form = form;
     save_form(app, None)?;
@@ -451,13 +470,15 @@ fn finish(app: &mut App, template: Template, mut form: Form, title: Option<Strin
 fn draw_picker(frame: &mut Frame, selected: usize) {
     const WIDTH: u16 = 56;
     let grid = frame.area().width >= WIDTH;
-    let body = sized_popup_panel(frame, " Quick add ", WIDTH, if grid { 7 } else { 10 });
     let columns = if grid { 2 } else { 1 };
+    let row_height = if grid { 3 } else { 2 };
+    let height = Template::ALL.len().div_ceil(columns) * row_height + if grid { 1 } else { 2 };
+    let body = sized_popup_panel(frame, " Quick add ", WIDTH, height as u16);
     let cell_width = body.width / columns as u16;
-    let focus = selected / columns * if grid { 3 } else { 2 };
+    let focus = selected / columns * row_height;
     let scroll = focus.saturating_sub(body.height.saturating_sub(2) as usize);
     for (index, template) in Template::ALL.into_iter().enumerate() {
-        let row = index / columns * if grid { 3 } else { 2 };
+        let row = index / columns * row_height;
         let x = body.x + (index % columns) as u16 * cell_width;
         let style = if index == selected {
             Style::default()
@@ -665,6 +686,8 @@ mod tests {
                 Template::Improvement => "[I]mprovement",
                 Template::Feature => "[F]eature work",
                 Template::DocumentReview => "[D]esign doc review",
+                Template::CodeIdea => "[C]ode idea",
+                Template::Reading => "[R]eading",
             };
             assert!(text.contains(&format!("{} {label}", template.icon())));
             assert!(text.contains(template.input_hint()));
@@ -712,6 +735,12 @@ mod tests {
             (Template::Feature, "not-a-ticket"),
             (Template::DocumentReview, "file:///etc/passwd"),
             (Template::DocumentReview, "https://"),
+            (Template::Reading, "example.com"),
+            (Template::Reading, "file:///tmp/article"),
+            (
+                Template::Reading,
+                "https://example.com/a https://example.com/b",
+            ),
         ] {
             let mut quick = QuickAdd::new(template);
             quick.form.values[0] = input.into();
@@ -731,7 +760,10 @@ mod tests {
         handle_key(&mut app, KeyCode::Tab).unwrap();
         assert_eq!(app.quick_add.as_ref().unwrap().form.active, LINKS_FIELD);
         handle_key(&mut app, KeyCode::Enter).unwrap();
-        paste(&mut app, "https://example.com/design\nhttps://example.com/review#notes\nhttps://example.com/design");
+        paste(
+            &mut app,
+            "https://example.com/design\nhttps://example.com/review#notes\nhttps://example.com/design",
+        );
         handle_key(&mut app, KeyCode::Tab).unwrap();
         assert_eq!(app.quick_add.as_ref().unwrap().form.active, STATE_FIELD);
         assert!(app.quick_add.as_ref().unwrap().form.references.is_none());
@@ -756,6 +788,36 @@ mod tests {
         );
         assert_eq!(task.state, TaskState::Next);
         assert!(task.work.notes.is_empty());
+    }
+
+    #[test]
+    fn code_and_reading_templates_save_to_their_projects() {
+        let dir = tempdir().unwrap();
+        let mut app = App::new(dir.path().join("events.jsonl")).unwrap();
+        let url = "https://example.com/article?q=1#notes";
+        for (shortcut, project, input, link) in [
+            (
+                'c',
+                "code",
+                "Build a small Markdown editor\nTry it on mobile",
+                "",
+            ),
+            ('r', "read", url, url),
+        ] {
+            enter(&mut app, shortcut, input);
+            handle_key(&mut app, KeyCode::Tab).unwrap();
+            assert_eq!(app.quick_add.as_ref().unwrap().form.active, STATE_FIELD);
+            run_command(&mut app, ":wq");
+            assert!(app.quick_add.is_none());
+            assert_eq!(app.project, Some(project));
+            let tasks = load_tasks(&app.path).unwrap();
+            let task = tasks
+                .values()
+                .find(|task| task.project.as_deref() == Some(project))
+                .unwrap();
+            assert_eq!(task.description, input);
+            assert_eq!(task.work.design_docs, link);
+        }
     }
 
     #[test]

@@ -223,22 +223,23 @@ Waiting tasks stay Pending. Choosing Done replaces the workflow badge with a gre
 
 ### Quick-add templates
 
-Press `A` from a task list, then choose `p` (PR review), `i` (Improvement),
-`f` (Feature work), or `d` (Design doc review). The picker shows these letter hints.
-Numbers `1`–`4` or arrows and Enter also work. Each template shows its required input plus State and Category:
+Press `A` from a task list, then use a shortcut below, a number from `1` to `6`,
+or arrows and Enter. Each template offers State and, when available, Category.
 
-| Template | Inputs | Presets |
-|---|---|---|
-| PR review | One PR link or number | Work / Reviews |
-| Improvement | Description, category | Improve |
-| Feature work | One Jira ticket link or key | Work / Features |
-| Design doc review | Description, document list | Work / Reviews |
+| Key | Template | Inputs | Presets |
+|---|---|---|---|
+| `p` | PR review | One PR link or number | Work / Reviews |
+| `i` | Improvement | Description | Improve |
+| `f` | Feature work | One Jira ticket link or key | Work / Features |
+| `d` | Design doc review | Description, document list | Work / Reviews |
+| `c` | Code idea | Description | Code |
+| `r` | Reading | One HTTP or HTTPS link | Read |
 
 Templates start with No state. Bare PR numbers use FlightSystems; bare Jira numbers use `FSW`.
 Improve tasks default to Uncategorized.
 
 Templates use the same editing keys as ordinary add. Type or paste the input;
-multiline pasted descriptions stay intact. In Description insert mode, Enter adds a line. In single-line PR and Jira fields, Enter advances instead. Tab advances without saving; Shift-Tab moves back. Enter on Useful links opens the editor; Tab
+multiline pasted descriptions stay intact. In Description insert mode, Enter adds a line. In single-line PR, Jira, and Reading link fields, Enter advances instead. Tab advances without saving; Shift-Tab moves back. Enter on Useful links opens the editor; Tab
 accepts the current link and moves to State. Choose a state with its bracketed letter or the arrows.
 Choose a category with the displayed number or the arrows. Text fields support the same Vim keys.
 Esc leaves insert mode, then `:wq` and Enter save. `:q!` and Enter discard.
@@ -251,7 +252,9 @@ missing tools, or a five-second timeout uses the reference as the task descripti
 Existing authentication is used; quick-add does not log in. Esc during lookup
 returns to the draft without saving.
 
-Design doc review keeps your Description and requires a document link in **Useful links**. Saving does not wait for title lookup.
+Design doc review keeps your Description and requires a document link in **Useful links**.
+Reading uses the URL as the Description and saves it in **Useful links**.
+Neither waits for title lookup.
 
 Saving opens the template's project/category and clears the text filter so the
 new task is visible. Use ordinary `e` afterward to change any other field.
