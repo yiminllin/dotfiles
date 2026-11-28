@@ -15,7 +15,6 @@
 | Essential/Core | aerial.nvim | Code outline/symbol navigator | [aerial.lua](nvim/.config/nvim/lua/plugins/essential/aerial.lua) |
 | Essential/Core | plenary.nvim | Lua utility library | [gitlinker.lua](nvim/.config/nvim/lua/plugins/git/gitlinker.lua), [todo-comments.lua](nvim/.config/nvim/lua/plugins/editing/todo-comments.lua) |
 | Essential/Core | nvim-web-devicons | File icons | Multiple plugins |
-| Essential/Core | wilder.nvim | Enhanced command/search UI | [wilder.lua](nvim/.config/nvim/lua/plugins/essential/wilder.lua) |
 | Essential/Core | vim-tmux-navigator | Seamless tmux/vim navigation | [vim-tmux-navigator.lua](nvim/.config/nvim/lua/plugins/essential/vim-tmux-navigator.lua) |
 | Essential/Core | persistence.nvim | Session management | [persistence.lua](nvim/.config/nvim/lua/plugins/essential/persistence.lua) |
 | Editing | conform.nvim | Code formatter | [conform.lua](nvim/.config/nvim/lua/plugins/editing/conform.lua) |

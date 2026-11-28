@@ -1,3 +1,36 @@
+-- Automatically show native command-line completion on Neovim 0.12+.
+if vim.fn.exists("*wildtrigger") == 1 then
+	vim.opt.wildmode = "noselect:lastused,full"
+	vim.opt.wildoptions = { "pum", "fuzzy" }
+	local group = vim.api.nvim_create_augroup("cmdline_completion", { clear = true })
+	local modes = { ":", "/", [[\?]] }
+	local popup_options = {}
+	vim.api.nvim_create_autocmd({ "CmdlineEnter", "CmdlineLeave" }, {
+		group = group,
+		pattern = modes,
+		callback = function(event)
+			local level = vim.v.event.cmdlevel
+			local previous = popup_options[level]
+			if event.event == "CmdlineEnter" then
+				popup_options[level] = { height = vim.o.pumheight, border = vim.o.pumborder }
+				vim.o.pumheight = 8
+				vim.o.pumborder = "rounded"
+			elseif previous then
+				vim.o.pumheight = previous.height
+				vim.o.pumborder = previous.border
+				popup_options[level] = nil
+			end
+		end,
+	})
+	vim.api.nvim_create_autocmd("CmdlineChanged", {
+		group = group,
+		pattern = modes,
+		callback = function()
+			vim.fn.wildtrigger()
+		end,
+	})
+end
+
 -- Highlight when yanking (copying) text
 vim.api.nvim_create_autocmd("TextYankPost", {
 	desc = "Highlight when yanking (copying) text",

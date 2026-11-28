@@ -1,5 +1,6 @@
 | Name | Description |
 |---|---|
+| [wilder.nvim](https://github.com/gelguy/wilder.nvim) | Shows command-line suggestions; replaced by native completion in Neovim 0.12. |
 | [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) | Shows insert-mode completion from multiple sources. |
 | [LuaSnip](https://github.com/L3MON4D3/LuaSnip) | Expands snippets and moves between placeholders. |
 | [cmp_luasnip](https://github.com/saadparwaiz1/cmp_luasnip) | Adds LuaSnip snippets to nvim-cmp. |
