@@ -30,10 +30,49 @@ discover_repos() {
 discover_workspaces() {
     local repo
     while IFS= read -r repo; do
-        printf '%s\n' "$repo"
-        git -C "$repo" worktree list --porcelain 2>/dev/null |
-            awk '/^worktree / { sub(/^worktree /, ""); print }' || true
-    done < <(discover_repos)
+        printf '\nrepo\n'
+        git -C "$repo" worktree list --porcelain 2>/dev/null || true
+    done < <(discover_repos) | awk -v home="$HOME" '
+        /^repo$/ { main = "" }
+        /^worktree / {
+            path = substr($0, 10)
+            if (main == "") main = path
+            # Linked checkouts can be discovered too. Keep each path once.
+            row = 0
+            if (path in seen) next
+            seen[path] = 1
+            row = ++total
+            paths[row] = path
+            groups[row] = main
+        }
+        row && /^HEAD / { heads[row] = substr($0, 6, 8) }
+        row && /^branch refs\/heads\// { branches[row] = substr($0, 19) }
+        row && /^detached$/ { branches[row] = "detached @ " heads[row] }
+        row && /^bare$/ { branches[row] = "bare" }
+        END {
+            path_width = length("Path")
+            repo_width = length("Repo")
+            for (i = 1; i <= total; i++) {
+                path = paths[i]
+                location = index(path, home "/") == 1 ? "~" substr(path, length(home) + 1) : path
+                if (path != groups[i]) location = "  " location
+                locations[i] = location
+                if (length(location) > path_width) path_width = length(location)
+
+                repo = path == groups[i] ? groups[i] : ""
+                sub(/^.*\//, "", repo)
+                repos[i] = repo
+                if (length(repo) > repo_width) repo_width = length(repo)
+            }
+
+            format = "%s\t%-*s │ %-*s │%s\n"
+            printf format, "", path_width, "Path", repo_width, "Repo", " Branch"
+            printf format, home, path_width, "~", repo_width, "Home", ""
+            for (i = 1; i <= total; i++) {
+                printf format, paths[i], path_width, locations[i], repo_width, repos[i], " " branches[i]
+            }
+        }
+    '
 }
 
 main() {
@@ -45,22 +84,24 @@ main() {
     local workspaces workspace
     local -a fzf_args=(
         --cycle
+        --layout=reverse
+        --no-sort
+        --delimiter=$'\t'
+        --with-nth=2..
+        --header-lines=1
         --border=bold
         --border-label ' Session Finder '
         --color 'light,bg:#fdf6e3,fg:#2e3440,bg+:#eee8d5,fg+:#2e3440,border:#ffd7af,label:#9c5f2d:bold,hl:#9c5f2d,hl+:#9c5f2d:bold,prompt:#9c5f2d,pointer:#9c5f2d,info:#657b83,footer:#657b83'
         --footer 'Enter: select · Esc: cancel'
     )
 
-    workspaces=$(
-        printf '%s\n' '~'
-        discover_workspaces | sort -u
-    )
+    workspaces=$(discover_workspaces)
 
     if [[ $print_only == --print ]]; then
         # td can already run in a popup; keep the picker in its current terminal.
         fzf_args+=(--no-tmux --no-height)
     elif supports_fzf_tmux; then
-        fzf_args+=(--tmux=center,70%,65%)
+        fzf_args+=(--tmux=center,60%,45%)
     fi
 
     local status=0
@@ -71,9 +112,7 @@ main() {
     fi
     [[ -n $workspace ]] || exit 0
 
-    if [[ $workspace == '~' ]]; then
-        workspace=$HOME
-    fi
+    workspace=${workspace%%$'\t'*}
 
     if [[ $print_only == --print ]]; then
         printf '%s\n' "$workspace"
